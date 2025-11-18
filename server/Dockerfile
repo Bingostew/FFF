@@ -1,20 +1,19 @@
-# below is copy and pasted from gemini for testing
-
-FROM node:18-alpine
+# Use the standard Node image (larger, but better network compatibility than Alpine)
+FROM node:18
 
 WORKDIR /app
 
-# Copy package definitions first (better caching)
 COPY package.json ./
 
-# Install dependencies inside the container
+# CONFIG: Tell npm to not worry about valid SSL certificates
+# (Crucial for school networks that inspect traffic)
+RUN npm config set strict-ssl false
+
+# Install dependencies
 RUN npm install
 
-# Copy the rest of the code
 COPY . .
 
-# Expose the port
 EXPOSE 3000
 
-# Start the server using nodemon (for auto-reloading)
 CMD ["npm", "run", "dev"]
