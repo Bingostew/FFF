@@ -12,6 +12,40 @@ The endstate of this project is publicize a completely digitized version of Find
 - Map randomization
 - Single-player reinforcement learning agent
 
+## Setup
+The following instructions install npm and svelte with TLS bypass. This is necessary for hosts behind a proxy network.
+### Installation
+1. First, create a new folder at the directory `~/.local/bin`
+2. Install n, the Node.js package manager
+   
+   `curl -fsSL -o ~/.local/bin/n https://raw.githubusercontent.com/tj/n/master/bin/n`
+
+3. Change permissions:
+
+    `chmod 0755 ~/.local/bin/n`
+
+4. Setup environmental variables:
+
+   `export N_PREFIX="$HOME/.local"`
+   
+   `export PATH="$N_PREFIX/bin:$PATH"`
+5. Install npm:
+
+    `n install lts`
+
+6. Bypass TLS certification check:
+
+   `export NODE_TLS_REJECT_UNAUTHORIZED=0`
+
+   `npm config set strict-ssl false`
+
+7. Install Svelte:
+
+    `npm install svelte vite @sveltejs/vite-plugin-svelte`
+
+### Build and Run
+Run `npm run dev`. Copy and paste the output link in the browser to visualize app.
+
 ## Tools and Frameworks
 <img width="150" height="168" alt="image" src="https://github.com/user-attachments/assets/a8e74586-a23d-43a2-a342-3e09b26ee75c" />
 <img width="150" height="141" alt="image" src="https://github.com/user-attachments/assets/1d32a06b-9a23-42c9-803f-39bc0ef0d110" />
