@@ -22,9 +22,9 @@ jobs:
 
       - name: Start Dev Server
         run: |
-          npm run dev -- --host
+          npm run dev &
           echo "Waiting for server..."
-          npx wait-on http://10.1.83.73:5174/
+          npx wait-on http://localhost:5174/
 
       - name: Run Tests
         run: npm test
