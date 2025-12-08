@@ -24,7 +24,7 @@ jobs:
         run: |
           npm run dev &
           echo "Waiting for server..."
-          npx wait-on http://localhost:5174/
+          npx wait-on http://localhost:5173/
 
       - name: Run Tests
         run: npm test
