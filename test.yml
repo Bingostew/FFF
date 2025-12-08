@@ -1,0 +1,31 @@
+name: Run Vitest Tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install Dependencies
+        run: npm install
+
+      - name: Start Dev Server
+        run: |
+          npm run dev -- --host
+          echo "Waiting for server..."
+          npx wait-on http://10.1.83.73:5174/
+
+      - name: Run Tests
+        run: npm test
+
