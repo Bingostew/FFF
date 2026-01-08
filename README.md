@@ -15,6 +15,9 @@ The endstate of this project is publicize a completely digitized version of Find
 ## Setup
 The following instructions install npm and svelte with TLS bypass. This is necessary for hosts behind a proxy network.
 ### Installation
+Simply install all required tools by running `./setup.sh`
+#### Manual Installation
+Or, mannually install singular requirements:
 1. First, create a new folder at the directory `~/.local/bin`
 2. Install n, the Node.js package manager
    
