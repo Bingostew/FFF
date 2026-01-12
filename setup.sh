@@ -7,7 +7,7 @@ export PATH="$N_PREFIX/bin:$PATH"
 echo "n successfully installed!"
 echo "Downloading lts"
 n install lts
-Bypass TLS certification check:
+echo "Setting TLS Permissions"
 export NODE_TLS_REJECT_UNAUTHORIZED=0
 npm config set strict-ssl false
 echo "Downloading svelte"
