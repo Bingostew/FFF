@@ -1,9 +1,18 @@
 const express = require('express');
 const app = express();
+const path = require('path');
 const port = 3000;
 
-app.get('/', (req, res) => {
-  res.send('Server is running inside Docker!');
+// automatic way for server to retrieve and send files based on url
+// if filename exists in public directory, it will send it
+app.use(express.json());
+app.use(express.static('public'));
+
+app.post('/api/names', (req, res) => {
+  const received = req.body.name;
+  console.log('Server Received:', received);
+
+  res.json({message: "msg was recieved!"});
 });
 
 app.listen(port, () => {
