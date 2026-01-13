@@ -1,34 +1,3 @@
-// const express = require('express');
-// const http = require('http');
-// const { Server } = require('socket.io');
-
-// const app = express();
-// const server = http.createServer(app);
-// const io = new Server(server, { cors: {origin: "*"}});
-
-// app.use(express.json());
-
-// // automatic way for server to retrieve and send files based on url
-// // if filename exists in public directory, it will send it
-// app.use(express.json());
-// app.use(express.static('public'));
-
-// app.post('/api/names', (req, res) => {
-//   const received = req.body.name;
-//   console.log('Server Received:', received);
-
-//   res.json({message: "msg was recieved!"});
-// });
-
-// app.listen(port, () => {
-//   console.log(`Game server listening on port ${port}`);
-// });
-
-// /** Testing Socket.io Server Capabilities */
-// io.on('connection', (socket) => {
-//   console.log('test complete!');
-// })
-
 // the below is straight copy and pasted from gemini. need to 
 // go through and see what works and how it works
 const express = require('express');
