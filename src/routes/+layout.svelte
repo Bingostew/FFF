@@ -128,7 +128,7 @@
   top: 60%;            /* Move down 50% of screen */
   left: 45%;           /* Move right 50% of screen */
   transform: translate(-50%, -50%); /* Centers it perfectly */
-  width: 1800px;        /* Resize as needed */
+  width: 1500px;        /* Resize as needed */
   height: auto;        /* Maintains aspect ratio */
   z-index: 1;          /* 1 = Above background, but below text */
   opacity: 0.35;        /* Fade it out slightly so text is readable */
@@ -143,9 +143,9 @@
     align-items: flex-start;
     padding: 1rem 2rem;
     background-color: #000;
-	background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='56' height='100'%3E%3Cpath fill='none' stroke='%232a2a2a' stroke-width='1' d='M28 66L0 50L0 16L28 0L56 16L56 50L28 66L28 100'/%3E%3Cpath fill='none' stroke='%232a2a2a' stroke-width='1' d='M28 0L28 34L0 50L0 84L28 100L56 84L56 50L28 34'/%3E%3C/svg%3E");
-	background-repeat: repeat;
-	background-size: 84px 150px;
+	  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='56' height='100'%3E%3Cpath fill='none' stroke='%232a2a2a' stroke-width='1' d='M28 66L0 50L0 16L28 0L56 16L56 50L28 66L28 100'/%3E%3Cpath fill='none' stroke='%232a2a2a' stroke-width='1' d='M28 0L28 34L0 50L0 84L28 100L56 84L56 50L28 34'/%3E%3C/svg%3E");
+	  background-repeat: repeat;
+	  background-size: 84px 150px;
     font-family: Arial, Helvetica, sans-serif;
     color: #fff;
     min-height: 75vh;
