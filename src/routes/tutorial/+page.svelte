@@ -1,5 +1,5 @@
 <div class="page-content">
-  <h1 class="section-header">MISSION BRIEFING</h1>
+  <h1 class="section-header">HOW TO PLAY</h1>
   
   <div class="briefing-container">
     <div class="step">
