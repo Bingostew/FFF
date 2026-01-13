@@ -1,119 +1,121 @@
-// const express = require('express');
-// const http = require('http');
-// const { Server } = require('socket.io');
-
-// const app = express();
-// const server = http.createServer(app);
-// const io = new Server(server, { cors: {origin: "*"}});
-
-// app.use(express.json());
-
-// // automatic way for server to retrieve and send files based on url
-// // if filename exists in public directory, it will send it
-// app.use(express.json());
-// app.use(express.static('public'));
-
-// app.post('/api/names', (req, res) => {
-//   const received = req.body.name;
-//   console.log('Server Received:', received);
-
-//   res.json({message: "msg was recieved!"});
-// });
-
-// app.listen(port, () => {
-//   console.log(`Game server listening on port ${port}`);
-// });
-
-// /** Testing Socket.io Server Capabilities */
-// io.on('connection', (socket) => {
-//   console.log('test complete!');
-// })
-
-// the below is straight copy and pasted from gemini. need to 
-// go through and see what works and how it works
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
-const { v4: uuidv4 } = require('uuid'); // Library to generate unique IDs
+const { v4: uuidv4 } = require('uuid');
 
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: "*" } });
 
 app.use(express.static('public'));
-
 app.use(express.json());
 
 // --- DATABASE MOCKUP ---
-// In production, use Redis or a real DB
+// Each room now tracks specific game data
 const lobbies = {}; 
 
-// --- 1. HTTP: LOBBY MANAGEMENT ---
+// --- HTTP: LOBBY MANAGEMENT ---
 
-// Create a Lobby
 app.post('/create-lobby', (req, res) => {
-    const gameId = uuidv4(); // Generate unique ID like '9b1deb4d...'
+    const gameId = uuidv4().substring(0, 6); // Shorter ID for easier sharing
     lobbies[gameId] = { 
-        players: [], 
-        status: 'waiting' // waiting -> active
+        players: {}, // Using object keyed by socket.id
+        status: 'waiting', 
+        turn: 1,
+        fleets: {}, // Secret fleet positions { socketId: { alpha: {q,r}, beta: {q,r} } }
+        history: []
     };
-    res.json({ gameId, message: 'Lobby created. Share this ID!' });
+    res.json({ gameId, message: 'Lobby created!' });
 });
 
-// Join Check (Just checks if valid, doesn't connect socket yet)
-app.post('/join-lobby', (req, res) => {
-    const { gameId, userId } = req.body;
-    
-    if (!lobbies[gameId]) {
-        return res.status(404).json({ error: 'Lobby not found' });
-    }
-    
-    // Add logic here to store player info if needed
-    res.json({ success: true, gameId });
-});
-
-// Start Game Trigger
-app.post('/start-game', (req, res) => {
-    const { gameId } = req.body;
-    if (lobbies[gameId]) {
-        lobbies[gameId].status = 'active';
-        // Notify everyone to connect to sockets now!
-        res.json({ success: true, message: 'Game starting!' });
-    } else {
-        res.status(404).json({ error: 'Lobby not found' });
-    }
-});
-
-// --- 2. SOCKET.IO: GAME LOGIC ---
+// --- SOCKET.IO: GAME LOGIC ---
 
 io.on('connection', (socket) => {
-    console.log(`Client connected: ${socket.id}`);
+    console.log(`User connected: ${socket.id}`);
 
-    // Client sends: socket.emit('join_game', { gameId: '...' })
-    socket.on('join_game', ({ gameId }) => {
+    socket.on('join_game', ({ gameId, playerName }) => {
+        const lobby = lobbies[gameId];
         
-        // Security: Only allow joining if the lobby exists in HTTP state
-        if (!lobbies[gameId]) {
+        if (!lobby) {
             socket.emit('error', 'Game does not exist');
             return;
         }
 
-        // MAGIC HAPPENS HERE: Join the "Room"
+        if (Object.keys(lobby.players).length >= 2) {
+            socket.emit('error', 'Lobby is full');
+            return;
+        }
+
         socket.join(gameId);
-        console.log(`Socket ${socket.id} joined room ${gameId}`);
         
-        // Notify others in ONLY this room
-        io.to(gameId).emit('player_joined', { playerId: socket.id });
+        // Add player to lobby state
+        lobby.players[socket.id] = {
+            name: playerName || 'Unknown Commander',
+            ready: false,
+            color: Object.keys(lobby.players).length === 0 ? 'Red' : 'Blue'
+        };
+
+        console.log(`${playerName} joined room ${gameId}`);
+        
+        // Broadcast updated player list to the room
+        io.to(gameId).emit('room_update', {
+            players: lobby.players,
+            status: lobby.status
+        });
     });
 
-    // Handle Game Moves
-    socket.on('game_move', (data) => {
-        const { gameId, move } = data;
-        // Broadcast move to everyone in the room EXCEPT the sender
-        socket.to(gameId).emit('update_game_state', move);
+    // Handle Secret Fleet Placement
+    socket.on('place_fleets', ({ gameId, fleetPositions }) => {
+        const lobby = lobbies[gameId];
+        if (!lobby) return;
+
+        // Store positions privately on server
+        lobby.fleets[socket.id] = fleetPositions;
+        lobby.players[socket.id].ready = true;
+
+        // Check if both players are ready
+        const allReady = Object.values(lobby.players).every(p => p.ready);
+        if (allReady && Object.keys(lobby.players).length === 2) {
+            lobby.status = 'active';
+            io.to(gameId).emit('game_start', { activePlayer: Object.keys(lobby.players)[0] });
+        } else {
+            // Tell the other player someone is ready (without showing where they placed ships)
+            socket.to(gameId).emit('opponent_ready');
+        }
+    });
+
+    // Handle the "Finish" - Strike Logic
+    socket.on('execute_strike', ({ gameId, targetHex }) => {
+        const lobby = lobbies[gameId];
+        const opponentId = Object.keys(lobby.players).find(id => id !== socket.id);
+        const opponentFleets = lobby.fleets[opponentId];
+
+        // SERVER-SIDE VALIDATION
+        // Check if opponent has a fleet at targetHex
+        let hit = false;
+        let fleetKey = null;
+
+        for (const key in opponentFleets) {
+            if (opponentFleets[key].q === targetHex.q && opponentFleets[key].r === targetHex.r) {
+                hit = true;
+                fleetKey = key;
+                break;
+            }
+        }
+
+        // Broadcast ONLY the result, not the full map
+        io.to(gameId).emit('strike_result', {
+            attacker: socket.id,
+            hit: hit,
+            targetHex: targetHex,
+            fleetKey: fleetKey // null if miss
+        });
+    });
+
+    socket.on('disconnect', () => {
+        // Optional: Cleanup empty lobbies
+        console.log('User disconnected');
     });
 });
 
-server.listen(3000, () => {
-    console.log('Server running on port 3000');
-});
+server.listen(3000, () => console.log('Server running on port 3000'));
