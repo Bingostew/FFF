@@ -5,6 +5,7 @@ module.exports = (io, lobbies) => {
     io.on('connection', (socket) => {
         console.log(`Player connected: ${socket.id}`);
 
+        // test 
         socket.on('join_game', ({gameId}) => {   // listen
             // Security: Only allow joining if the lobby exists in HTTP state
             if (!lobbies[gameId]) {
@@ -23,6 +24,7 @@ module.exports = (io, lobbies) => {
             io.to(gameId).emit('player_joined', { playerId: socket.id });
         });
 
+        // test
         socket.on('game_move', (data) => {
             // do something like update gameState
 
@@ -30,5 +32,15 @@ module.exports = (io, lobbies) => {
             // Broadcast move to everyone in the room EXCEPT the sender
             socket.to(gameId).emit('update_game_state', move);
         });
+
+        /**************************************************************/
+        // server to client interactions 
+
+        // init_game
+        socket.on('init_game', (data) => {
+            // TODO: send initialized game information back 
+        })
+
+        // 
     });
 };
