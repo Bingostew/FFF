@@ -1,33 +1,26 @@
-<div class="page-content">
-  <h1 class="glitch-text">OPERATIONAL AREA</h1>
-  <p class="status-blink">WAITING FOR DEPLOYMENT...</p>
-  
-  <div class="game-placeholder">
-    [ GAME CANVAS LOADING ]
-  </div>
-</div>
+<script>
+// @ts-nocheck
 
-<style>
-  .page-content {
-    position: relative;
-    z-index: 10;
-    padding: 100px 50px;
-    color: #fff;
-    text-align: center;
-  }
+    import { defineHex, Grid, rectangle } from 'honeycomb-grid'
 
-  .glitch-text {
-    font-family: 'Black Ops One', cursive;
-    font-size: 4rem;
-    color: #3b82f6;
-    text-shadow: 2px 2px 0px #ff3e3e;
-  }
+    // 1. Create a hex class:
+    const Tile = defineHex({ dimensions: 50 })
 
-  .status-blink {
-    font-family: 'Chakra Petch', sans-serif;
-    animation: blink 1s infinite;
-    color: #00ff00;
-  }
+    // 2. Create a grid by passing the class and a "traverser" for a rectangular-shaped grid:
+    const grid = new Grid(Tile, rectangle({ width: 10, height: 10 }))
 
-  @keyframes blink { 50% { opacity: 0; } }
-</style>
+</script>
+<svg width="1000" height="1000">
+  <g transform="translate(50, 50)">
+    
+    {#each grid as hex}
+      <polygon
+        points={hex.corners.map(({ x, y }) => `${x},${y}`).join(' ')}
+        fill="blue"
+        stroke="white"
+        stroke-width="2"
+      />
+    {/each}
+
+  </g>
+</svg>

@@ -13,7 +13,7 @@
     <li><a href="/singleplayer" onmouseenter={() => $isHovering = true} onmouseleave={() => $isHovering = false}>SINGLEPLAYER</a></li>
     <li><a href="/multiplayer" onmouseenter={() => $isHovering = true} onmouseleave={() => $isHovering = false}>MULTIPLAYER</a></li>
     <li><a href="/tutorial" onmouseenter={() => $isHovering = true} onmouseleave={() => $isHovering = false}>TUTORIAL</a></li>
-    <li><a href="/about" onmouseenter={() => $isHovering = true} onmouseleave={() => $isHovering = false}>ABOUT</a></li>
+    <li><a href="/credits" onmouseenter={() => $isHovering = true} onmouseleave={() => $isHovering = false}>CREDITS</a></li>
   </ul>
 
   <img src="/cna.png" alt="cna" class="cna-img" />
