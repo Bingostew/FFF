@@ -12,3 +12,7 @@ export NODE_TLS_REJECT_UNAUTHORIZED=0
 npm config set strict-ssl false
 echo "Downloading svelte"
 npm install svelte vite @sveltejs/vite-plugin-svelte
+echo "Downloading honeycomb.js"
+npm i honeycomb-grid
+
+echo "Task Completed!------------------------------"
