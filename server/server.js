@@ -1,39 +1,9 @@
-// const express = require('express');
-// const http = require('http');
-// const { Server } = require('socket.io');
-
-// const app = express();
-// const server = http.createServer(app);
-// const io = new Server(server, { cors: {origin: "*"}});
-
-// app.use(express.json());
-
-// // automatic way for server to retrieve and send files based on url
-// // if filename exists in public directory, it will send it
-// app.use(express.json());
-// app.use(express.static('public'));
-
-// app.post('/api/names', (req, res) => {
-//   const received = req.body.name;
-//   console.log('Server Received:', received);
-
-//   res.json({message: "msg was recieved!"});
-// });
-
-// app.listen(port, () => {
-//   console.log(`Game server listening on port ${port}`);
-// });
-
-// /** Testing Socket.io Server Capabilities */
-// io.on('connection', (socket) => {
-//   console.log('test complete!');
-// })
-
 // the below is straight copy and pasted from gemini. need to 
 // go through and see what works and how it works
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
+const gameLogic = require('./socketHandler.js');
 const { v4: uuidv4 } = require('uuid'); // Library to generate unique IDs
 
 const app = express();
@@ -86,33 +56,8 @@ app.post('/start-game', (req, res) => {
 
 // --- 2. SOCKET.IO: GAME LOGIC ---
 
-io.on('connection', (socket) => {
-    console.log(`Client connected: ${socket.id}`);
-
-    // Client sends: socket.emit('join_game', { gameId: '...' })
-    socket.on('join_game', ({ gameId }) => {
-        
-        // Security: Only allow joining if the lobby exists in HTTP state
-        if (!lobbies[gameId]) {
-            socket.emit('error', 'Game does not exist');
-            return;
-        }
-
-        // MAGIC HAPPENS HERE: Join the "Room"
-        socket.join(gameId);
-        console.log(`Socket ${socket.id} joined room ${gameId}`);
-        
-        // Notify others in ONLY this room
-        io.to(gameId).emit('player_joined', { playerId: socket.id });
-    });
-
-    // Handle Game Moves
-    socket.on('game_move', (data) => {
-        const { gameId, move } = data;
-        // Broadcast move to everyone in the room EXCEPT the sender
-        socket.to(gameId).emit('update_game_state', move);
-    });
-});
+// socketHandler.js file has functions for game logic
+gameLogic(io, lobbies);
 
 server.listen(3000, () => {
     console.log('Server running on port 3000');
