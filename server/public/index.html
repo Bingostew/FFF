@@ -1,0 +1,31 @@
+<!-- index html file for testing -->
+<!DOCTYPE html>
+<html>
+    <head>
+
+    </head>
+    <body>
+        <h1>Hello World!</h1>
+        <button id="testButton">Click Me!</button>
+
+        <script type="text/javascript">
+            const btn = document.getElementById("testButton");
+            btn.addEventListener('click', async() => {
+                try {
+                    const response = await fetch('/api/names', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({name: "test"})
+                    })
+
+                    const data = await response.json();
+                    document.write(JSON.stringify(data));
+                } catch (error) {
+                    console.error('Error', error);
+                }
+            });
+        </script>
+    </body>
+</html>
