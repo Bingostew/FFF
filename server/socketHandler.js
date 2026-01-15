@@ -78,17 +78,32 @@ module.exports = (io, lobbies) => {
             const lobby = lobbies[gameId];
             if (!lobby) return;
 
-            // Store positions privately on server
-            lobby.fleets[socket.id] = fleetPositions;
+            // We restructure the incoming data to add server-side HP
+            // This prevents players from trying to start with extra health
+            lobby.fleets[socket.id] = {
+                alpha: { 
+                    q: fleetPositions.alpha.q, 
+                    r: fleetPositions.alpha.r, 
+                    hp: 2  //Health Initialized here
+                },
+                beta: { 
+                    q: fleetPositions.beta.q, 
+                    r: fleetPositions.beta.r, 
+                    hp: 2  // Initialized here
+                }
+            };
+
             lobby.players[socket.id].ready = true;
 
-            // Check if both players are ready
             const allReady = Object.values(lobby.players).every(p => p.ready);
+            
             if (allReady && Object.keys(lobby.players).length === 2) {
                 lobby.status = 'active';
-                io.to(gameId).emit('game_start', { activePlayer: Object.keys(lobby.players)[0] });
+                // Red is usually the first player in the lobby
+                io.to(gameId).emit('game_start', { 
+                    activePlayer: Object.keys(lobby.players)[0] 
+                });
             } else {
-                // Tell the other player someone is ready (without showing where they placed ships)
                 socket.to(gameId).emit('opponent_ready');
             }
         });
@@ -96,29 +111,52 @@ module.exports = (io, lobbies) => {
         // Handle the "Finish" - Strike Logic
         socket.on('execute_strike', ({ gameId, targetHex }) => {
             const lobby = lobbies[gameId];
+            if (!lobby || lobby.status !== 'active') return;
+
+            // Find the opponent
             const opponentId = Object.keys(lobby.players).find(id => id !== socket.id);
             const opponentFleets = lobby.fleets[opponentId];
 
-            // SERVER-SIDE VALIDATION
-            // Check if opponent has a fleet at targetHex
             let hit = false;
             let fleetKey = null;
+            let destroyed = false;
 
+            // 1. Check for Hit & Subtract HP
             for (const key in opponentFleets) {
-                if (opponentFleets[key].q === targetHex.q && opponentFleets[key].r === targetHex.r) {
+                const fleet = opponentFleets[key];
+                // Ensure we only hit a fleet that is still "alive" (hp > 0)
+                if (fleet.q === targetHex.q && fleet.r === targetHex.r && fleet.hp > 0) {
                     hit = true;
                     fleetKey = key;
-                    break;
+                    fleet.hp -= 1; // Persistent HP deduction on server
+                    
+                    if (fleet.hp <= 0) {
+                        destroyed = true;
+                    }
+                    break; 
                 }
             }
 
-            // Broadcast ONLY the result, not the full map
+            // 2. Broadcast result to the room
             io.to(gameId).emit('strike_result', {
                 attacker: socket.id,
                 hit: hit,
                 targetHex: targetHex,
-                fleetKey: fleetKey // null if miss
+                fleetKey: fleetKey,
+                hpRemaining: hit ? opponentFleets[fleetKey].hp : null,
+                isDestroyed: destroyed
             });
+
+            // 3. Check for Total Victory
+            // If all fleets for the opponent have 0 HP, the attacker wins
+            const allDestroyed = Object.values(opponentFleets).every(f => f.hp <= 0);
+            if (allDestroyed) {
+                lobby.status = 'game_over';
+                io.to(gameId).emit('game_over', { 
+                    winner: lobby.players[socket.id].name,
+                    winnerId: socket.id 
+                });
+            }
         });
 
         socket.on('disconnect', () => {
