@@ -1,26 +1,48 @@
 <script>
-// @ts-nocheck
-
-    import { defineHex, Grid, rectangle } from 'honeycomb-grid'
-
-    // 1. Create a hex class:
-    const Tile = defineHex({ dimensions: 50 })
-
-    // 2. Create a grid by passing the class and a "traverser" for a rectangular-shaped grid:
-    const grid = new Grid(Tile, rectangle({ width: 10, height: 10 }))
-
+    // Import the component you just made
+    import HexMap from '$lib/+map.svelte';
 </script>
-<svg width="1000" height="1000">
-  <g transform="translate(50, 50)">
-    
-    {#each grid as hex}
-      <polygon
-        points={hex.corners.map(({ x, y }) => `${x},${y}`).join(' ')}
-        fill="blue"
-        stroke="white"
-        stroke-width="2"
-      />
-    {/each}
 
-  </g>
-</svg>
+<div class="page-content">
+  <h1 class="glitch-text">FIND, FIX, & FINISH</h1>
+  
+  <div class="map-container">
+    <HexMap />
+  </div>
+
+  <div class="mission-log">
+     <p>SEARCHING FOR CONTACTS</p>
+  </div>
+</div>
+
+<style>
+  .page-content {
+    /* Use flexbox to center everything */
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding-top: 2vh;
+    width: 100%;
+    height: 100%;
+  }
+
+  .map-container {
+    width: 70vw;   
+    height: 80vh;  
+    border: 1px solid #333;
+    background: rgba(0, 0, 0, 0.5); 
+  }
+
+  .glitch-text {
+    font-family: 'Chakra Petch', sans-serif;
+    font-size: 7vh;
+    color: #3b82f6;
+    margin-bottom: 2vh;
+  }
+  
+  .mission-log {
+      margin-top: 2vh;
+      font-family: 'Chakra Petch', sans-serif;
+      color: #00ff00;
+  }
+</style>
