@@ -28,12 +28,25 @@ app.post('/create-lobby', (req, res) => {
         fleets: {}, // Secret fleet positions { socketId: { alpha: {q,r}, beta: {q,r} } }
         history: [] // Stores a log of all moves/strikes for replay or reconnection
     };
+
+    res.status(200);
     res.json({ gameId, message: 'Lobby created!' });
 });
+
+app.post('/join-lobby', (req, res) => {
+    res.status(200);
+    res.json({ message: 'Lobby joined!' });
+})
 
 // --- SOCKET.IO: GAME LOGIC ---
 
 // socketHandler.js file has functions for game logic
 gameLogic(io, lobbies);
 
-server.listen(3000, () => console.log('Server running on port 3000'));
+if (require.main === module) {
+    server.listen(3000, () => {
+        console.log('Server running on port 3000');
+    });
+}
+
+module.exports = server;    // for testing
