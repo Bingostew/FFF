@@ -1,0 +1,131 @@
+<!-- temporary testing file: copy and pasted from gemini -->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Game Test Client</title>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <style>
+        body { font-family: sans-serif; padding: 20px; }
+        .box { border: 1px solid #ccc; padding: 15px; margin-bottom: 20px; border-radius: 8px; }
+        button { cursor: pointer; padding: 8px 12px; }
+        #logs { background: #f4f4f4; padding: 10px; height: 200px; overflow-y: scroll; border: 1px solid #ddd; }
+        .highlight { color: green; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <h2>🎮 Multiplayer Test Client</h2>
+
+    <div class="box">
+        <h3>1. Lobby Actions (HTTP)</h3>
+        <button onclick="createLobby()">Create New Lobby</button>
+        <br><br>
+        <input type="text" id="gameIdInput" placeholder="Enter Game ID to Join">
+        <button onclick="joinLobby()">Join Lobby</button>
+        <button onclick="startGame()">Start Game (Host Only)</button>
+    </div>
+
+    <div class="box">
+        <h3>2. Game Actions (Socket.io)</h3>
+        <p>Status: <span id="connectionStatus" style="color:red">Disconnected</span></p>
+        <input type="text" id="moveInput" placeholder="e.g., Moved to E4">
+        <button onclick="sendMove()">Send Move</button>
+    </div>
+
+    <div id="logs"></div>
+
+    <script>
+        let socket;
+        let myGameId = '';
+        const API_URL = ''; // Change if deploying
+
+        // Helper to print logs to screen
+        function log(message, type = 'info') {
+            const logs = document.getElementById('logs');
+            logs.innerHTML += `<div class="${type === 'success' ? 'highlight' : ''}">> ${message}</div>`;
+            logs.scrollTop = logs.scrollHeight;
+        }
+
+        // --- HTTP FUNCTIONS ---
+
+        async function createLobby() {
+            const res = await fetch(`${API_URL}/create-lobby`, { method: 'POST' });
+            const data = await res.json();
+            myGameId = data.gameId;
+            document.getElementById('gameIdInput').value = myGameId;
+            log(`Lobby Created! ID: ${myGameId}`, 'success');
+        }
+
+        async function joinLobby() {
+            const gameId = document.getElementById('gameIdInput').value;
+            const res = await fetch(`${API_URL}/join-lobby`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ gameId, userId: 'test-user' })
+            });
+            const data = await res.json();
+            
+            if (data.success) {
+                log(`Joined Lobby HTTP check passed. Waiting for game to start...`, 'success');
+                myGameId = gameId;
+                // In a real app, we might wait here or connect socket immediately depending on design
+                connectSocket(); 
+            } else {
+                log(`Error: ${data.error}`);
+            }
+        }
+
+        async function startGame() {
+            const gameId = document.getElementById('gameIdInput').value;
+            const res = await fetch(`${API_URL}/start-game`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ gameId })
+            });
+            const data = await res.json();
+            if(data.success) log('Game Started! Socket events are now live.', 'success');
+        }
+
+        // --- SOCKET FUNCTIONS ---
+
+        function connectSocket() {
+            if (socket) return; // Already connected
+
+            socket = io(API_URL);
+
+            socket.on('connect', () => {
+                document.getElementById('connectionStatus').innerText = 'Connected';
+                document.getElementById('connectionStatus').style.color = 'green';
+                log('Socket connected to server.');
+                
+                // Immediately ask to join the room
+                socket.emit('join_game', { gameId: myGameId });
+            });
+
+            socket.on('player_joined', (data) => {
+                log(`New player joined the game! ID: ${data.playerId}`, 'success');
+            });
+
+            socket.on('update_game_state', (move) => {
+                log(`OPPONENT MOVED: ${move}`, 'success');
+            });
+            
+            socket.on('error', (err) => {
+                log(`Socket Error: ${err}`);
+            });
+        }
+
+        function sendMove() {
+            const move = document.getElementById('moveInput').value;
+            if (socket && myGameId) {
+                socket.emit('game_move', { gameId: myGameId, move });
+                log(`You sent: ${move}`);
+            } else {
+                log('Error: Not connected to a game.');
+            }
+        }
+    </script>
+</body>
+</html>
