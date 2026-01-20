@@ -36,6 +36,13 @@
             <input type="number" id="targetQ" placeholder="Q" style="width:40px">
             <input type="number" id="targetR" placeholder="R" style="width:40px">
             <button onclick="executeStrike()">Execute Strike</button>
+            <br>
+            <button onclick="readyCheck()">Ready Up</button>
+            <!-- Future feature: Move Fleet -->
+            <!-- <br>
+            <input type="text" id="fleetName" placeholder="Fleet Name">
+            <input type="text" id="newPosition" placeholder="New Position (q,r)">
+            <button onclick="move_fleet(document.getElementById('fleetName').value, document.getElementById('newPosition').value)">Move Fleet</button> -->    
         </div>
     </div>
 
@@ -84,6 +91,11 @@
             const r = parseInt(document.getElementById('targetR').value);
             socket.emit('execute_strike', { gameId: currentRoom, targetHex: { q, r } });
             log(`Striking hex: ${q},${r}`);
+        }
+
+        function readyCheck() {
+            socket.emit('ready_check', { gameId: currentRoom});
+            log("Player marked as ready.");
         }
 
         // function move_fleet(fleetName, newPosition) {

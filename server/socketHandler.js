@@ -96,22 +96,50 @@ module.exports = (io, lobbies) => {
                 }
             };
 
+            socket.emit('fleets_placed_confirmation');
+
+            // If both players are ready, start the game
+            
+            // if (allReady && Object.keys(lobby.players).length === 2) {
+            //     lobby.status = 'active';
+            //     lobby.assests[socket.id] = {
+            //         fuel: 3, // Fuel
+            //         fleetCube: 2 // cleet cubes
+            //     };
+            //     // Red is usually the first player in the lobby
+            //     io.to(gameId).emit('game_start', { 
+            //         activePlayer: Object.keys(lobby.players)[0] 
+            //     });
+            // } else {
+            //     socket.to(gameId).emit('opponent_ready');
+            // }
+        });
+
+        // Handle Ready Check to Start Game
+        socket.on('ready_check', ({gameId}) =>{
+            const lobby = lobbies[gameId];
+            if (!lobby) {
+                socket.emit('error', 'Game does not exist');
+                return;
+            }
+
             lobby.players[socket.id].ready = true;
 
             const allReady = Object.values(lobby.players).every(p => p.ready);//checks if all players are ready
 
-            // If both players are ready, start the game
-            
             if (allReady && Object.keys(lobby.players).length === 2) {
                 lobby.status = 'active';
+                lobby.assests[socket.id] = {
+                    fuel: 3, // Fuel
+                    fleetCube: 2 // cleet cubes
+                };
                 // Red is usually the first player in the lobby
                 io.to(gameId).emit('game_start', { 
                     activePlayer: Object.keys(lobby.players)[0] 
                 });
-            } else {
-                socket.to(gameId).emit('opponent_ready');
             }
         });
+
 
         // Handle the "Finish" - Strike Logic
         socket.on('execute_strike', ({ gameId, targetHex }) => {
@@ -215,6 +243,7 @@ module.exports = (io, lobbies) => {
                 }
             });
             console.log('User disconnected');
+            
         });
 
 
