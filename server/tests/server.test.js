@@ -1,7 +1,6 @@
 /**
  * server.test.js
- * Description: will be used to test different express server APIs
- * Author: MIDN Tristen Alvis
+ * Description: will be used to test different express server http APIs
  */
 
 const request = require('supertest');   // supertest lib is used for testing http apis
@@ -32,4 +31,14 @@ describe('API Endpoints', () => {   // label tests as 'API Endpoints'
         // checks data
         expect(res.body.message).toBe('Lobby joined!');
     })
+
+    // testing 'place-fleets'
+
+    // execute_strike
+
+    // leave_game
+
+    // move_fleet
+
+    // 
 });
