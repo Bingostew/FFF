@@ -24,9 +24,9 @@ app.post('/create-lobby', (req, res) => {
     lobbies[gameId] = { 
         players: {}, // Using object keyed by socket.id
         status: 'waiting', 
-        turn: 1,
+        turn: 1, // Tracks the current round number (starts at 1)
         fleets: {}, // Secret fleet positions { socketId: { alpha: {q,r}, beta: {q,r} } }
-        history: []
+        history: [] // Stores a log of all moves/strikes for replay or reconnection
     };
     res.json({ gameId, message: 'Lobby created!' });
 });

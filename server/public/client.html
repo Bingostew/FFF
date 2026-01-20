@@ -72,8 +72,8 @@
 
         function placeFleets() {
             const fleetPositions = {
-                alpha: { q: 0, r: 0 },
-                beta: { q: 1, r: 1 }
+                alpha: { q: 0, r: 0 }, // Example positions it will change in the future when the hexes are selectable
+                beta: { q: 1, r: 1 } // Example positions it will change in the future when the hexes are selectable
             };
             socket.emit('place_fleets', { gameId: currentRoom, fleetPositions });
             log("Fleets sent to server.");
@@ -86,14 +86,28 @@
             log(`Striking hex: ${q},${r}`);
         }
 
+        // function move_fleet(fleetName, newPosition) {
+            
+        //     log(`Moving fleet ${fleetName} to ${newPosition}`);
+
+        //     socket.emit('move_fleet', { gameId: currentRoom, fleetName, newPosition });
+        // }
+
         // --- Listeners ---
         socket.on('room_update', (data) => log("Room Update:", data));
         socket.on('opponent_ready', () => log("Alert: Opponent has placed ships!"));
         socket.on('game_start', (data) => log("GAME START! Active Player:", data));
         socket.on('strike_result', (data) => {
             const color = data.hit ? 'red' : 'green';
-            log(`<span style="color:${color}">${data.hit ? '💥 HIT!' : '🌊 MISS!'}</span>`, data);
+            if(data.isdestroyed){
+                log(`<span style="color:${orange}">💥 FLEET DESTROYED!</span>`, data);
+            }else{
+                log(`<span style="color:${color}">${data.hit ? '💥 HIT!' : '🌊 MISS!'}</span>`, data);
+            }
+            
         });
+        socket.on('game_over', (data) => log("GAME OVER!", data));
+        socket.on('move_fleet', (data) => log("Fleet Moved:", data));
         socket.on('error', (msg) => log("ERROR:", msg));
     </script>
 </body>

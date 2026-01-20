@@ -76,18 +76,21 @@ module.exports = (io, lobbies) => {
         // Handle Secret Fleet Placement
         socket.on('place_fleets', ({ gameId, fleetPositions }) => {
             const lobby = lobbies[gameId];
-            if (!lobby) return;
+            if (!lobby) {
+                socket.emit('error', 'Game does not exist');
+                return;
+            }
 
             // We restructure the incoming data to add server-side HP
             // This prevents players from trying to start with extra health
             lobby.fleets[socket.id] = {
                 alpha: { 
-                    q: fleetPositions.alpha.q, 
+                    q: fleetPositions.alpha.q, // Position data. It will be automatically set when the player places their fleets in the future
                     r: fleetPositions.alpha.r, 
                     hp: 2  //Health Initialized here
                 },
                 beta: { 
-                    q: fleetPositions.beta.q, 
+                    q: fleetPositions.beta.q, // Position data. It will be automatically set when the player places their fleets in the future
                     r: fleetPositions.beta.r, 
                     hp: 2  // Initialized here
                 }
@@ -95,7 +98,9 @@ module.exports = (io, lobbies) => {
 
             lobby.players[socket.id].ready = true;
 
-            const allReady = Object.values(lobby.players).every(p => p.ready);
+            const allReady = Object.values(lobby.players).every(p => p.ready);//checks if all players are ready
+
+            // If both players are ready, start the game
             
             if (allReady && Object.keys(lobby.players).length === 2) {
                 lobby.status = 'active';
@@ -159,8 +164,56 @@ module.exports = (io, lobbies) => {
             }
         });
 
+        // Handle player leaving the game
+
+        socket.on('leave_game', ({ gameId }) => {
+            const lobby = lobbies[gameId];
+            if (lobby && lobby.players[socket.id]) {
+                delete lobby.players[socket.id];
+                delete lobby.fleets[socket.id];
+                socket.leave(gameId);
+                
+                // Notify remaining players
+                io.to(gameId).emit('room_update', {
+                    players: lobby.players,
+                    status: lobby.status
+                });
+            }
+        });
+
+        //Handle player move a single fleet
+        socket.on('move_fleet', ({ gameId, fleetKey, newPosition }) => {
+            const lobby = lobbies[gameId];
+            if (!lobby) {
+                socket.emit('error', 'Game does not exist');
+                return;
+            }
+
+            const playerFleets = lobby.fleets[socket.id];
+            if (playerFleets && playerFleets[fleetKey]) {
+                // Update fleet position
+                playerFleets[fleetKey].q = newPosition.q;
+                playerFleets[fleetKey].r = newPosition.r;
+
+                // Notify all players in the room about the move
+                io.to(gameId).emit('fleet_moved', {
+                    playerId: socket.id,
+                    fleetKey: fleetKey,
+                    newPosition: newPosition
+                });
+            } else {
+                socket.emit('error', 'Invalid fleet move');
+            }
+        });
+        // Handle disconnection
+
         socket.on('disconnect', () => {
-            // Optional: Cleanup empty lobbies
+            //Cleanup empty lobbies
+            Object.entries(lobbies).forEach(([gameId, lobby]) => {
+                if (Object.keys(lobby.players).length === 0) {
+                    delete lobbies[gameId];
+                }
+            });
             console.log('User disconnected');
         });
 
