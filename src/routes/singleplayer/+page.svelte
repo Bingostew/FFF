@@ -9,10 +9,6 @@
   <div class="map-container">
     <HexMap />
   </div>
-
-  <div class="mission-log">
-     <p>SEARCHING FOR CONTACTS</p>
-  </div>
 </div>
 
 <style>
@@ -38,11 +34,5 @@
     font-size: 7vh;
     color: #3b82f6;
     margin-bottom: 2vh;
-  }
-  
-  .mission-log {
-      margin-top: 2vh;
-      font-family: 'Chakra Petch', sans-serif;
-      color: #00ff00;
   }
 </style>
