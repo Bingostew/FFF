@@ -5,12 +5,14 @@
 
   let nickname = '';
   let lobbyCode = '';
+  let socket = '';
 
   // 0 = Name Input, 1 = Selection, 2 = Create Lobby, 3 = Join Lobby
   let modalStep = 0;
 
   function toggleModal() {
     showMultiplayerModal = !showMultiplayerModal;
+    socket = io();
 
     if (!showMultiplayerModal) {
       setTimeout(() => {
@@ -30,18 +32,22 @@
     if (nickname.trim().length > 0) modalStep = 1;
   }
 
-  function goToCreate() {
+  async function goToCreate() {
+    const res = await fetch('/create-lobby', {method: 'POST'});
+    const data = await res.json();
+    lobbyCode = data.gameId;
     modalStep = 2;
   }
 
   function goToJoin() {
+    socket.emit('join_game', {lobbyCode, nickname});
     modalStep = 3;
   }
   
   function goBack() {
     // If in Create/Join, go back to Selection (1). If in Selection, go back to Name (0).
     if (modalStep > 1) modalStep = 1;
-    else modalStep = 0;z
+    else modalStep = 0;
   }
 </script>
 
@@ -99,7 +105,7 @@
         
         {:else if modalStep === 2}
           <h2>LOBBY CREATED</h2>
-          <p class="status-text">HELLO WORLD</p>
+          <p class="status-text">{lobbyCode}</p>
           
           <div class="button-group">
             <button class="close-btn" onclick={toggleModal}>CLOSE</button>
