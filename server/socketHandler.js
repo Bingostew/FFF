@@ -262,6 +262,15 @@ module.exports = (io, lobbies) => {
 
             const playerFleets = lobby.fleets[socket.id];
             if (playerFleets && playerFleets[fleetKey]) {
+                // Check for collision with own fleets
+                for (const key in playerFleets) {
+                    const fleet = playerFleets[key];
+                    if (key !== fleetKey && fleet.hp > 0 && fleet.q === newPosition.q && fleet.r === newPosition.r) {
+                        socket.emit('error', 'Cannot move to a hex occupied by another friendly fleet.');
+                        return;
+                    }
+                }
+
                 playerAssets.fuel -= 1; // Consume fuel
                 // Update fleet position
                 playerFleets[fleetKey].q = newPosition.q;

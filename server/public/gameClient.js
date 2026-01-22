@@ -46,12 +46,11 @@ function readyCheck() {
     log("Player marked as ready.");
 }
 
-// function move_fleet(fleetName, newPosition) {
-    
-//     log(`Moving fleet ${fleetName} to ${newPosition}`);
-
-//     socket.emit('move_fleet', { gameId: currentRoom, fleetName, newPosition });
-// }
+// Example function to move a fleet (to be expanded with UI later) fleetKey is 'alpha' or 'beta'
+function moveFleet(fleetKey, q, r) {
+    log(`Moving fleet ${fleetKey} to ${q},${r}`);
+    socket.emit('move_fleet', { gameId: currentRoom, fleetKey, newPosition: { q, r } });
+}
 
 // --- Listeners ---
 socket.on('room_update', (data) => log("Room Update:", data));
@@ -75,7 +74,7 @@ socket.on('strike_result', (data) => {
     
 });
 socket.on('game_over', (data) => log("GAME OVER!", data));
-socket.on('move_fleet', (data) => log("Fleet Moved:", data));
+socket.on('fleet_moved', (data) => log("Fleet Moved:", data));
 socket.on('error', (msg) => log("ERROR:", msg));
 socket.on('turn_change', ({ activePlayer }) => {
     const statusDiv = document.getElementById('connStatus');
