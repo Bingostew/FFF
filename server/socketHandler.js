@@ -2,6 +2,17 @@
 
 // game 'brain': will handle socket.io messages
 module.exports = (io, lobbies) => {
+    //function to ensure that each player can perform an action only when it is its turn
+    const switchTurn = (gameId) => {
+        const lobby = lobbies[gameId];
+        if (!lobby) return;
+        const playerIds = Object.keys(lobby.players);
+        const currentIndex = playerIds.indexOf(lobby.activePlayer);
+        const nextIndex = (currentIndex + 1) % playerIds.length;
+        lobby.activePlayer = playerIds[nextIndex];
+        io.to(gameId).emit('turn_change', { activePlayer: lobby.activePlayer });
+    };
+
     io.on('connection', (socket) => {
         console.log(`Player connected: ${socket.id}`);
 
@@ -97,22 +108,6 @@ module.exports = (io, lobbies) => {
             };
 
             socket.emit('fleets_placed_confirmation');
-
-            // If both players are ready, start the game
-            
-            // if (allReady && Object.keys(lobby.players).length === 2) {
-            //     lobby.status = 'active';
-            //     lobby.assests[socket.id] = {
-            //         fuel: 3, // Fuel
-            //         fleetCube: 2 // cleet cubes
-            //     };
-            //     // Red is usually the first player in the lobby
-            //     io.to(gameId).emit('game_start', { 
-            //         activePlayer: Object.keys(lobby.players)[0] 
-            //     });
-            // } else {
-            //     socket.to(gameId).emit('opponent_ready');
-            // }
         });
 
         // Handle Ready Check to Start Game
@@ -129,13 +124,20 @@ module.exports = (io, lobbies) => {
 
             if (allReady && Object.keys(lobby.players).length === 2) {
                 lobby.status = 'active';
-                lobby.assests[socket.id] = {
-                    fuel: 3, // Fuel
-                    fleetCube: 2 // cleet cubes
-                };
-                // Red is usually the first player in the lobby
+                lobby.assets = {};
+                Object.keys(lobby.players).forEach(id => {
+                    lobby.assets[id] = {
+                        fuel: 3,
+                        fleetCube: 2
+                    };
+                });
+                // Determine the first player. The 'Red' player is designated to go first.
+                const redPlayer = Object.entries(lobby.players).find(([, player]) => player.color === 'Red');
+                // Fallback to the first player in the list if 'Red' player isn't found for some reason.
+                const firstPlayerId = redPlayer ? redPlayer[0] : Object.keys(lobby.players)[0];
+                lobby.activePlayer = firstPlayerId;
                 io.to(gameId).emit('game_start', { 
-                    activePlayer: Object.keys(lobby.players)[0] 
+                    activePlayer: firstPlayerId 
                 });
             }
         });
@@ -146,8 +148,18 @@ module.exports = (io, lobbies) => {
             const lobby = lobbies[gameId];
             if (!lobby || lobby.status !== 'active') return;
 
+            if (lobby.activePlayer !== socket.id) {
+                socket.emit('error', 'It is not your turn.');
+                return;
+            }
+
             // Find the opponent
             const opponentId = Object.keys(lobby.players).find(id => id !== socket.id);
+            if (!opponentId) {
+                // This can happen if the opponent disconnects at the exact moment of a strike.
+                console.log(`Strike by ${socket.id} in game ${gameId} has no opponent.`);
+                return;
+            }
             const opponentFleets = lobby.fleets[opponentId];
 
             let hit = false;
@@ -189,6 +201,8 @@ module.exports = (io, lobbies) => {
                     winner: lobby.players[socket.id].name,
                     winnerId: socket.id 
                 });
+            } else {
+                switchTurn(gameId);
             }
         });
 
@@ -197,28 +211,58 @@ module.exports = (io, lobbies) => {
         socket.on('leave_game', ({ gameId }) => {
             const lobby = lobbies[gameId];
             if (lobby && lobby.players[socket.id]) {
+                const playerName = lobby.players[socket.id].name || 'A player';
                 delete lobby.players[socket.id];
                 delete lobby.fleets[socket.id];
+                if (lobby.assets) delete lobby.assets[socket.id];
                 socket.leave(gameId);
                 
-                // Notify remaining players
-                io.to(gameId).emit('room_update', {
-                    players: lobby.players,
-                    status: lobby.status
-                });
+                // If game was in progress, the other player wins.
+                if (lobby.status === 'active' && Object.keys(lobby.players).length > 0) {
+                    const winnerId = Object.keys(lobby.players)[0];
+                    lobby.status = 'game_over';
+                    io.to(gameId).emit('game_over', {
+                        winner: lobby.players[winnerId].name,
+                        winnerId: winnerId,
+                        reason: `${playerName} left the game.`
+                    });
+                } else {
+                    // Otherwise, just update the waiting room
+                    io.to(gameId).emit('room_update', {
+                        players: lobby.players,
+                        status: lobby.status
+                    });
+                }
+
+                if (Object.keys(lobby.players).length === 0) {
+                    console.log(`Deleting empty lobby: ${gameId}`);
+                    delete lobbies[gameId];
+                }
             }
         });
 
         //Handle player move a single fleet
         socket.on('move_fleet', ({ gameId, fleetKey, newPosition }) => {
             const lobby = lobbies[gameId];
-            if (!lobby) {
+            if (!lobby || lobby.status !== 'active') {
                 socket.emit('error', 'Game does not exist');
+                return;
+            }
+
+            if (lobby.activePlayer !== socket.id) {
+                socket.emit('error', 'It is not your turn.');
+                return;
+            }
+
+            const playerAssets = lobby.assets[socket.id];
+            if (playerAssets.fuel < 1) {
+                socket.emit('error', 'Not enough fuel to move.');
                 return;
             }
 
             const playerFleets = lobby.fleets[socket.id];
             if (playerFleets && playerFleets[fleetKey]) {
+                playerAssets.fuel -= 1; // Consume fuel
                 // Update fleet position
                 playerFleets[fleetKey].q = newPosition.q;
                 playerFleets[fleetKey].r = newPosition.r;
@@ -229,6 +273,8 @@ module.exports = (io, lobbies) => {
                     fleetKey: fleetKey,
                     newPosition: newPosition
                 });
+                socket.emit('update_assets', playerAssets); // Notify client of new fuel amount
+                switchTurn(gameId);
             } else {
                 socket.emit('error', 'Invalid fleet move');
             }
@@ -236,18 +282,46 @@ module.exports = (io, lobbies) => {
         // Handle disconnection
 
         socket.on('disconnect', () => {
-            //Cleanup empty lobbies
-            Object.entries(lobbies).forEach(([gameId, lobby]) => {
+            console.log(`Player disconnected: ${socket.id}`);
+            // Find which game the player was in and handle their departure.
+            const gameId = Object.keys(lobbies).find(id => lobbies[id].players[socket.id]);
+
+            if (gameId) {
+                const lobby = lobbies[gameId];
+                const playerName = lobby.players[socket.id]?.name || 'A player';
+                console.log(`${playerName} from game ${gameId} disconnected.`);
+
+                // Remove player from the lobby state
+                delete lobby.players[socket.id];
+                delete lobby.fleets[socket.id];
+                if (lobby.assets) delete lobby.assets[socket.id];
+
+                // If the game was in progress, end it and declare the other player the winner.
+                if (lobby.status === 'active' && Object.keys(lobby.players).length > 0) {
+                    const winnerId = Object.keys(lobby.players)[0];
+                    lobby.status = 'game_over';
+                    io.to(gameId).emit('game_over', {
+                        winner: lobby.players[winnerId].name,
+                        winnerId: winnerId,
+                        reason: `${playerName} has disconnected.`
+                    });
+                } else {
+                    // If game wasn't active, just update the lobby for any remaining player.
+                    io.to(gameId).emit('room_update', {
+                        players: lobby.players,
+                        status: lobby.status
+                    });
+                }
+
+                // If the lobby is now empty, delete it.
                 if (Object.keys(lobby.players).length === 0) {
+                    console.log(`Deleting empty lobby: ${gameId}`);
                     delete lobbies[gameId];
                 }
-            });
-            console.log('User disconnected');
-            
+            }
         });
 
 
     });
 
-    
 };
