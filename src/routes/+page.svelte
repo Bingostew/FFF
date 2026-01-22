@@ -5,7 +5,6 @@
 
   let nickname = '';
   let lobbyCode = '';
-  let isNicknameConfirmed = false;
 
   // 0 = Name Input, 1 = Selection, 2 = Create Lobby, 3 = Join Lobby
   let modalStep = 0;
@@ -42,7 +41,7 @@
   function goBack() {
     // If in Create/Join, go back to Selection (1). If in Selection, go back to Name (0).
     if (modalStep > 1) modalStep = 1;
-    else modalStep = 0;
+    else modalStep = 0;z
   }
 </script>
 
