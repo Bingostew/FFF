@@ -39,11 +39,14 @@
             <button onclick="executeStrike()">Execute Strike</button>
             <br>
             <button onclick="readyCheck()">Ready Up</button>
-            <!-- Future feature: Move Fleet -->
-            <!-- <br>
-            <input type="text" id="fleetName" placeholder="Fleet Name">
-            <input type="text" id="newPosition" placeholder="New Position (q,r)">
-            <button onclick="move_fleet(document.getElementById('fleetName').value, document.getElementById('newPosition').value)">Move Fleet</button> -->    
+            <br>
+            <select id="fleetSelector" style="background: #333; color: #fff; border: 1px solid #555; padding: 5px;">
+                <option value="alpha">Alpha</option>
+                <option value="beta">Beta</option>
+            </select>
+            <input type="number" id="moveQ" placeholder="Q" style="width:40px">
+            <input type="number" id="moveR" placeholder="R" style="width:40px">
+            <button onclick="submitMoveFleet()">Move Fleet</button>
         </div>
     </div>
 

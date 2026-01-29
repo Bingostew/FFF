@@ -13,6 +13,10 @@ module.exports = (io, lobbies) => {
         io.to(gameId).emit('turn_change', { activePlayer: lobby.activePlayer });
     };
 
+    const comparePositions = (pos1, pos2) => {
+        return pos1.q === pos2.q && pos1.r === pos2.r;
+    };
+
     io.on('connection', (socket) => {
         console.log(`Player connected: ${socket.id}`);
 
@@ -63,6 +67,11 @@ module.exports = (io, lobbies) => {
 
             if (Object.keys(lobby.players).length >= 2) {
                 socket.emit('error', 'Lobby is full');
+                return;
+            }
+
+            if (lobby.status !== 'waiting') {
+                socket.emit('error', 'Game has already started');
                 return;
             }
 
@@ -118,6 +127,11 @@ module.exports = (io, lobbies) => {
                 return;
             }
 
+            if (!lobby.fleets[socket.id]) {
+                socket.emit('error', 'You must place your fleets before readying up.');
+                return;
+            }
+
             lobby.players[socket.id].ready = true;
 
             const allReady = Object.values(lobby.players).every(p => p.ready);//checks if all players are ready
@@ -146,7 +160,15 @@ module.exports = (io, lobbies) => {
         // Handle the "Finish" - Strike Logic
         socket.on('execute_strike', ({ gameId, targetHex }) => {
             const lobby = lobbies[gameId];
-            if (!lobby || lobby.status !== 'active') return;
+            if (!lobby ) {
+                socket.emit('error', 'Game does not exist');
+                return;
+            }
+
+            if (lobby.status !== 'active') {
+                socket.emit('error', 'Game is not active');
+                return;
+            }
 
             if (lobby.activePlayer !== socket.id) {
                 socket.emit('error', 'It is not your turn.');
@@ -190,6 +212,15 @@ module.exports = (io, lobbies) => {
                 fleetKey: fleetKey,
                 hpRemaining: hit ? opponentFleets[fleetKey].hp : null,
                 isDestroyed: destroyed
+            });
+
+            lobby.history.push({
+                action: 'strike',
+                playerId: socket.id,
+                targetHex: targetHex,
+                hit: hit,
+                fleetKey: fleetKey,
+                timestamp: Date.now()
             });
 
             // 3. Check for Total Victory
@@ -241,11 +272,22 @@ module.exports = (io, lobbies) => {
             }
         });
 
-        //Handle player move a single fleet
+        /**
+         * move fleet handles client request to move one or both fleets. It takes 
+         * gameId which should be defined at the client side, fleetkey which is the name of the fleet
+         * you want to move, eg. alpha or beta. new position is also set by the client.
+         * I recommend that a user can only make a move after they are ready and the game has started.
+         * This sh
+         */
         socket.on('move_fleet', ({ gameId, fleetKey, newPosition }) => {
             const lobby = lobbies[gameId];
-            if (!lobby || lobby.status !== 'active') {
+            if (!lobby ) {
                 socket.emit('error', 'Game does not exist');
+                return;
+            }
+
+            if (lobby.status !== 'active') {
+                socket.emit('error', 'Game is not active');
                 return;
             }
 
@@ -271,10 +313,21 @@ module.exports = (io, lobbies) => {
                     }
                 }
 
+                const oldPosition = { q: playerFleets[fleetKey].q, r: playerFleets[fleetKey].r };
+
                 playerAssets.fuel -= 1; // Consume fuel
                 // Update fleet position
                 playerFleets[fleetKey].q = newPosition.q;
                 playerFleets[fleetKey].r = newPosition.r;
+
+                lobby.history.push({
+                    action: 'move',
+                    playerId: socket.id,
+                    fleetKey: fleetKey,
+                    from: oldPosition,
+                    to: newPosition,
+                    timestamp: Date.now()
+                });
 
                 // Notify all players in the room about the move
                 io.to(gameId).emit('fleet_moved', {
@@ -330,7 +383,16 @@ module.exports = (io, lobbies) => {
             }
         });
 
-
+        // socket.on('focus', (gameId,Postions, dieResult) => {
+        //     const lobby = lobbies[gameId];
+        //     const playerFleets = lobby.fleets[socket.id];
+        //     for (const key in playerFleets) {
+        //             const fleet = playerFleets[key];
+        //             if (fleet.q === newPosition.q && fleet.r === newPosition.r) {
+        //                 io.to(gameId).emit('focus_result', {
+        //             }
+        //         }
+        // })
     });
 
 };

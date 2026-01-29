@@ -2,6 +2,7 @@
 // go through and see what works and how it works
 const express = require('express');
 const http = require('http');
+const path = require('path');
 const { Server } = require('socket.io');
 const gameLogic = require('./socketHandler.js');
 const { v4: uuidv4 } = require('uuid'); // Library to generate unique IDs
@@ -10,7 +11,7 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: "*" } });
 
-app.use(express.static('public'));
+app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.json());
 
 // --- DATABASE MOCKUP ---

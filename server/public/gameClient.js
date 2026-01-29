@@ -46,6 +46,13 @@ function readyCheck() {
     log("Player marked as ready.");
 }
 
+function submitMoveFleet() {
+    const fleetKey = document.getElementById('fleetSelector').value;
+    const q = parseInt(document.getElementById('moveQ').value);
+    const r = parseInt(document.getElementById('moveR').value);
+    moveFleet(fleetKey, q, r);
+}
+
 // Example function to move a fleet (to be expanded with UI later) fleetKey is 'alpha' or 'beta'
 function moveFleet(fleetKey, q, r) {
     log(`Moving fleet ${fleetKey} to ${q},${r}`);
