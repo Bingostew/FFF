@@ -16,6 +16,9 @@
     let selectedGroup = $state([]);
     let targetingMode = $state('focus'); // Options: 'focus', 'directional', 'area'
 
+    let warning = $state({ show: false, x: 0, y: 0, text: '' });
+    let warningTimer; // To handle the fading timeout
+
     // Rotation enables us to make directional focus more dynamic. getS is a helper function.
     let rotation = $state(0);
     const getS = (h) => -h.q - h.r;
@@ -52,7 +55,7 @@
         if (!centerHex) return [];
         
         // Focus (Single Cell)
-        if (mode === 'focus') return [centerHex];
+        if (mode === 'focus' || mode === 'area') return [centerHex];
 
         // Directional (3 in a line)
         if (mode === 'directional') {
@@ -93,49 +96,163 @@
                 startIndex = Math.max(0, lineHexes.length - 3);
             }
 
-            // Return the 3 hexes
-            return lineHexes.slice(startIndex, startIndex + 3);
-        }
-        
-        if (mode === 'area') {
-            // Get all immediate neighbors
-            const neighbors = gridHexes.filter((/** @type {any} */ h) => {
-                if (h === centerHex) return false;
-                const dist = (Math.abs(h.q - centerHex.q) 
-                            + Math.abs(h.r - centerHex.r) 
-                            + Math.abs(getS(h) - getS(centerHex))) / 2;
-                return dist === 1; 
-            });
-
-            // This ensures the selected hexes are always touching each other
-            neighbors.sort((a, b) => {
-                const angA = Math.atan2(a.y - centerHex.y, a.x - centerHex.x);
-                const angB = Math.atan2(b.y - centerHex.y, b.x - centerHex.x);
-                return angA - angB;
-            });
-
-            // 3. Slice the first 3 (Edge Safety)
-            return [centerHex, ...neighbors.slice(0, 3)];
+            const selection = lineHexes.slice(startIndex, startIndex + 3);
+            
+            // Only highlight if we have a full line of 3. 
+            // If we have 1 or 2 (edge of map), return empty to show no target.
+            return selection.length === 3 ? selection : [];
         }
     }
 
     // Automatically update list as user cursors over hex cells. 
     let highlightedHexes = $derived(getTargetHexes(hoveredHex, targetingMode, rotation));
 
-    // Updates selection status if a hex is clicked. 
-    function HandleHexClick(hex){
-        if (selectedGroup.includes(hex)) {
-            selectedGroup = [];
-        } else {
-            selectedGroup = [...highlightedHexes];
+    function isGroupConnected(group) {
+        if (group.length <= 1) return true;
+
+        // Start flood fill from the first hex
+        const start = group[0];
+        const visited = new Set([start]);
+        const queue = [start];
+
+        while (queue.length > 0) {
+            const current = queue.shift();
+            
+            // Find neighbors of 'current' that are also in the 'group'
+            const neighbors = group.filter(h => {
+                if (visited.has(h)) return false;
+                const dist = (Math.abs(h.q - current.q) 
+                            + Math.abs(h.r - current.r) 
+                            + Math.abs(getS(h) - getS(current))) / 2;
+                return dist === 1;
+            });
+
+            // Add unvisited neighbors to queue
+            for (const neighbor of neighbors) {
+                visited.add(neighbor);
+                queue.push(neighbor);
+            }
         }
+
+        // If we visited every node in the group, it's fully connected
+        return visited.size === group.length;
+    }
+
+    // Updates selection status if a hex is clicked. 
+    function HandleHexClick(event, hex){
+
+        if (targetingMode === 'directional'){
+            if (selectedGroup.some(h => highlightedHexes.includes(h))) {
+                selectedGroup = [];
+            } else {
+                selectedGroup = [...highlightedHexes];
+            }
+            return;
+        }
+
+        const index = selectedGroup.indexOf(hex);
+        
+        // Toggle Off
+        if (index > -1) {
+
+            // Prevent splitting the group in Area mode
+            if (targetingMode === 'area') {
+                // Create a temporary group excluding the hex we want to remove
+                const potentialGroup = [...selectedGroup];
+                potentialGroup.splice(index, 1);
+
+                // Check if the remaining hexes are still one continuous shape
+                if (!isGroupConnected(potentialGroup)) {
+                    showWarning(event.clientX, event.clientY, "Cannot split: diselection will cause disconnecting hexes");
+                    return; // Stop the deselection
+                }
+            }
+
+            selectedGroup.splice(index, 1);
+            selectedGroup = [...selectedGroup];
+            return;
+        }
+
+        if(targetingMode === 'focus'){
+            // 1. Check Limit
+            if (selectedGroup.length >= 3) {
+                showWarning(event.clientX, event.clientY, "Can not select more than 3 hexes");
+                return;
+            }
+
+            // 2. Check Adjacency
+            // We compare the clicked 'hex' against every 's' in selectedGroup
+            const isAdjacent = selectedGroup.some(s => {
+                const dist = (Math.abs(s.q - hex.q) 
+                            + Math.abs(s.r - hex.r) 
+                            + Math.abs(getS(s) - getS(hex))) / 2;
+                return dist === 1; // Distance 1 means they are touching
+            });
+
+            if (isAdjacent) {
+                showWarning(event.clientX, event.clientY, "Can not select an adjacent hex");
+            } else {
+                // Valid selection
+                selectedGroup = [...selectedGroup, hex];
+            }
+        }
+        
+        else if (targetingMode === 'area'){
+            if (selectedGroup.length >= 4) {
+                showWarning(event.clientX, event.clientY, "Can not select more than 4 hexes");
+                return;
+            }
+            
+            // Check Connectivity 
+            // If group is empty, the first click is always valid.
+            if (selectedGroup.length > 0) {
+                const isTouching = selectedGroup.some(s => {
+                    const dist = (Math.abs(s.q - hex.q) + Math.abs(s.r - hex.r) + Math.abs(getS(s) - getS(hex))) / 2;
+                    return dist === 1;
+                });
+                
+                if (!isTouching) {
+                    showWarning(event.clientX, event.clientY, "Hexes must be adjacent");
+                    return;
+                }
+            }
+            selectedGroup = [...selectedGroup, hex];
+        }
+        
+    }
+
+    // Helper to show temporary warning
+    function showWarning(x, y, text) {
+        warning = { show: true, x, y, text, id: Date.now() };
+        if (warningTimer) clearTimeout(warningTimer);
+        warningTimer = setTimeout(() => {
+            warning.show = false;
+        }, 1500); // Fades out after 1.5 seconds
     }
 
     //On right-click with directional scan, selected area will rotate.
     function cycleRotation(e) {
         //Prevents the rightclick menu from popping up.
         if (e) e.preventDefault();
-        rotation += 1;
+
+        // If not in directional mode or no hex is hovered, just rotate normally
+        if (targetingMode !== 'directional' || !hoveredHex) {
+            rotation += 1;
+            return;
+        }
+
+        // Look ahead at the next 3 possible rotations (1, 2, 3 steps ahead)
+        for (let i = 1; i <= 3; i++) {
+            const nextRot = rotation + i;
+            const predictedHexes = getTargetHexes(hoveredHex, targetingMode, nextRot);
+            
+            // If this rotation yields a full line (3 hexes) OR we've tried all 3 options, apply it.
+            // This effectively skips any rotation that would result in < 3 hexes.
+            if (predictedHexes.length === 3 || i === 3) {
+                rotation = nextRot;
+                break;
+            }
+        }
     }
 </script>
 
@@ -228,11 +345,11 @@
                     class="hex-cell"
                     role="button" 
                     tabindex="0"
-                    onclick={() => HandleHexClick(hex)}
+                    onclick={(e) => HandleHexClick(e, hex)}
                     oncontextmenu={(e) => { e.stopPropagation(); cycleRotation(e); }}
                     onmouseenter={() => { hoveredHex = hex; $isHovering = true; }}
                     onmouseleave={() => { hoveredHex = null; $isHovering = false; }}
-                    onkeydown={(e) => e.key === 'Enter' && HandleHexClick(hex)}
+                    onkeydown={(e) => e.key === 'Enter' && HandleHexClick(e, hex)}
                 >
                     <polygon
                         points={hex.corners.map(({ x, y }) => `${x},${y}`).join(' ')}
@@ -275,7 +392,20 @@
         </g>
 
         </svg>
+
+      
+
+        {#if warning.show}
+            {#key warning.id} <div 
+                    class="cursor-warning" 
+                    style="top: {warning.y}px; left: {warning.x}px;"
+                >
+                    {warning.text}
+                </div>
+            {/key}
+        {/if}
     </div>
+    
 </div>
 
 <style>
@@ -377,5 +507,53 @@
         user-select: none;
         /* Slight drop shadow to separate map from global background */
         filter: drop-shadow(0 0 20px rgba(0,0,0,0.5)); 
+    }
+
+    .cursor-warning {
+        position: fixed; /* Fixed to screen coordinates */
+        pointer-events: none; /* Let clicks pass through */
+        background: transparent; 
+        color: #e45c5c;
+        font-family: 'Chakra Petch', sans-serif;
+        font-size: 25px; /* Slightly bigger */
+        font-weight: 600;
+        white-space: nowrap; /* Keep on one line */
+        opacity: 0;
+        transform: translate(15px, -20px);
+        z-index: 1000;
+        animation: popAndFade 1.5s forwards;
+        text-shadow: 0px 0px 10px rgba(255, 51, 51, 0.6);
+        -webkit-text-stroke: 1px black;
+    }
+
+@keyframes popAndFade {
+        /* 0%: Start small and slightly below cursor */
+        0% {
+            opacity: 0;
+            transform: translate(15px, 0px) scale(0.5);
+        }
+        
+        /* 15%: POP! Snap up and scale up to 120% size */
+        15% {
+            opacity: 1;
+            transform: translate(15px, -25px) scale(1.2);
+        }
+        
+        /* 25%: Settle down to normal size (100%) */
+        25% {
+            transform: translate(15px, -20px) scale(1);
+        }
+        
+        /* 70%: Hold position (Text is readable here) */
+        70% {
+            opacity: 1;
+            transform: translate(15px, -20px) scale(1);
+        }
+        
+        /* 100%: Fade out and drift upward */
+        100% {
+            opacity: 0;
+            transform: translate(15px, -40px) scale(1);
+        }
     }
 </style>
