@@ -1,18 +1,18 @@
 <script>
   import { isHovering } from '$lib/store'; // Import shared state
+  import { io } from "socket.io-client";
 
   let showMultiplayerModal = false;
 
   let nickname = '';
   let lobbyCode = '';
-  let socket = '';
+  const socket = io();
 
   // 0 = Name Input, 1 = Selection, 2 = Create Lobby, 3 = Join Lobby
   let modalStep = 0;
 
   function toggleModal() {
     showMultiplayerModal = !showMultiplayerModal;
-    socket = io();
 
     if (!showMultiplayerModal) {
       setTimeout(() => {
@@ -94,7 +94,6 @@
 
         {:else if modalStep === 1}
           <h2>WELCOME, <span class="highlight">{nickname}</span></h2>
-          <p class="status-text">SELECT OPERATION MODE</p>
           
           <div class="vertical-stack">
             <button class="action-btn wide" onclick={goToCreate}>CREATE LOBBY</button>

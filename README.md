@@ -42,13 +42,13 @@ Or, mannually install singular requirements:
 
    `npm config set strict-ssl false`
 
-7. Install Svelte:
+7. Install required npm packages
 
     `npm install svelte vite @sveltejs/vite-plugin-svelte`
-
-8. Install honeycomb.js:
-
+    
     `npm i honeycomb-grid`
+
+    `npm i socket.io-client`
 
 ### Build and Run
 Run `npm run dev -- --host`. Copy and paste the output link in the browser to visualize app.
