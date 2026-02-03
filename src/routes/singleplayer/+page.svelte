@@ -1,5 +1,4 @@
 <script>
-    // Import the component you just made
     import HexMap from '$lib/+map.svelte';
 </script>
 
@@ -13,7 +12,6 @@
 
 <style>
   .page-content {
-    /* Use flexbox to center everything */
     display: flex;
     flex-direction: column;
     align-items: center;
