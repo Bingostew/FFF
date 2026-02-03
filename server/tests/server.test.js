@@ -32,13 +32,13 @@ describe('API Endpoints', () => {   // label tests as 'API Endpoints'
         expect(res.body.message).toBe('Lobby joined!');
     })
 
-    // testing 'place-fleets'
+    // testing 'place-fleets' socket.io thing
 
-    // execute_strike
+    // execute_strike socket.io thing
 
-    // leave_game
+    // leave_game   ?
 
-    // move_fleet
+    // move_fleet   socket.io thing
 
     // 
 });
