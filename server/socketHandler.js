@@ -17,46 +17,49 @@ module.exports = (io, lobbies) => {
         return pos1.q === pos2.q && pos1.r === pos2.r;
     };
 
+
+    function dieRoll() {
+        return Math.floor(Math.random() * 6) + 1;
+    }
+
+    function dieResult(die1, die2) {
+        return die1 + die2;
+    }
+
+    function checkForActionConditions(lobby){
+        result = true;
+
+        if (!lobby ) {
+            socket.emit('error', 'Game does not exist');
+            result = false;
+        }
+
+        else if (lobby.status !== 'active') {
+            socket.emit('error', 'Game is not active');
+            result = false;
+        }
+
+        else if (lobby.activePlayer !== socket.id) {
+            socket.emit('error', 'It is not your turn.');
+            result = false;
+        }
+
+        return result;
+    }
+
+    function calculateHexDistance(hex1, hex2) {
+
+        const dx = Math.abs(hex1.q - hex2.q);
+        const dy = Math.abs(hex1.r - hex2.r);
+        const dz = Math.abs(hex1.q + hex1.r - (hex2.q + hex2.r));
+    
+        return Math.max(dx, dy, dz);
+    }
+
     io.on('connection', (socket) => {
         console.log(`Player connected: ${socket.id}`);
 
-    //     // test 
-    //     socket.on('join_game', ({gameId}) => {   // listen
-    //         // Security: Only allow joining if the lobby exists in HTTP state
-    //         if (!lobbies[gameId]) {
-    //             socket.emit('error', 'Game does not exist');
-    //             console.log('failure');
-    //             return;
-    //         }
-    //         else
-    //             console.log('success');
-
-    //         // MAGIC HAPPENS HERE: Join the "Room"
-    //         socket.join(gameId);
-    //         console.log(`Socket ${socket.id} joined room ${gameId}`);
-            
-    //         // Notify others in ONLY this room
-    //         io.to(gameId).emit('player_joined', { playerId: socket.id });
-    //     });
-
-    //     // test
-    //     socket.on('game_move', (data) => {
-    //         // do something like update gameState
-
-    //         const { gameId, move } = data;
-    //         // Broadcast move to everyone in the room EXCEPT the sender
-    //         socket.to(gameId).emit('update_game_state', move);
-    //     });
-
-    //     /**************************************************************/
-    //     // server to client interactions 
-
-    //     // init_game
-    //     socket.on('init_game', (data) => {
-    //         // TODO: send initialized game information back 
-    //     })
-
-    //     // 
+    
         socket.on('join_game', ({ gameId, playerName }) => {
             const lobby = lobbies[gameId];
             
@@ -160,20 +163,21 @@ module.exports = (io, lobbies) => {
         // Handle the "Finish" - Strike Logic
         socket.on('execute_strike', ({ gameId, targetHex }) => {
             const lobby = lobbies[gameId];
-            if (!lobby ) {
-                socket.emit('error', 'Game does not exist');
+            if (checkForActionConditions(lobby) === false) {
                 return;
             }
 
-            if (lobby.status !== 'active') {
-                socket.emit('error', 'Game is not active');
-                return;
+            // Calculate the shortest distance from a living friendly fleet to the target hex
+            const attackerFleets = lobby.fleets[socket.id];
+            const distances = [];
+            if (attackerFleets.alpha && attackerFleets.alpha.hp > 0) {
+                distances.push(calculateHexDistance(attackerFleets.alpha, targetHex));
+            }
+            if (attackerFleets.beta && attackerFleets.beta.hp > 0) {
+                distances.push(calculateHexDistance(attackerFleets.beta, targetHex));
             }
 
-            if (lobby.activePlayer !== socket.id) {
-                socket.emit('error', 'It is not your turn.');
-                return;
-            }
+            const shortestDistance = distances.length > 0 ? Math.min(...distances) : Infinity;
 
             // Find the opponent
             const opponentId = Object.keys(lobby.players).find(id => id !== socket.id);
@@ -211,7 +215,8 @@ module.exports = (io, lobbies) => {
                 targetHex: targetHex,
                 fleetKey: fleetKey,
                 hpRemaining: hit ? opponentFleets[fleetKey].hp : null,
-                isDestroyed: destroyed
+                isDestroyed: destroyed,
+                distance: shortestDistance
             });
 
             lobby.history.push({
@@ -220,6 +225,7 @@ module.exports = (io, lobbies) => {
                 targetHex: targetHex,
                 hit: hit,
                 fleetKey: fleetKey,
+                distance: shortestDistance,
                 timestamp: Date.now()
             });
 
@@ -281,18 +287,7 @@ module.exports = (io, lobbies) => {
          */
         socket.on('move_fleet', ({ gameId, fleetKey, newPosition }) => {
             const lobby = lobbies[gameId];
-            if (!lobby ) {
-                socket.emit('error', 'Game does not exist');
-                return;
-            }
-
-            if (lobby.status !== 'active') {
-                socket.emit('error', 'Game is not active');
-                return;
-            }
-
-            if (lobby.activePlayer !== socket.id) {
-                socket.emit('error', 'It is not your turn.');
+            if (checkForActionConditions(lobby) === false) {
                 return;
             }
 
@@ -393,6 +388,22 @@ module.exports = (io, lobbies) => {
         //             }
         //         }
         // })
+
+        socket.on('die_roll', ({gameId}) => {
+            const lobby = lobbies[gameId];
+            if (checkForActionConditions(lobby) === false) {
+                return;
+            }
+
+            const die = dieRoll();
+            
+            io.to(gameId).emit('die_result', {
+                playerId: socket.id,
+                die: die
+            });
+        });
+
+
     });
 
 };

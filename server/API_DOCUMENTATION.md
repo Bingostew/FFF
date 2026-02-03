@@ -104,7 +104,8 @@ Executes a strike attack on a target hex (opponent's turn-based action).
   targetHex: { q, r },         // Target coordinates
   fleetKey: string | null,     // "alpha" or "beta" if hit, null if miss
   hpRemaining: number | null,   // Remaining HP of hit fleet
-  isDestroyed: boolean         // Whether fleet was destroyed
+  isDestroyed: boolean,        // Whether fleet was destroyed
+  distance: number             // Shortest distance from an attacking fleet to the target hex
 }
 ```
 
