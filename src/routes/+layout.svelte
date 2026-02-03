@@ -16,7 +16,6 @@
   }
 
   // React to the shared 'isHovering' store
-  // We subscribe to the store value
   $effect(() => {
     size.target = $isHovering ? 8 : 4;
   });
@@ -43,7 +42,7 @@
      onmouseenter={() => $isHovering = true} 
      onmouseleave={() => $isHovering = false}
   >
-    [ RETURN TO BASE ]
+    [ MAIN MENU ]
   </a>
 {/if}
 
@@ -90,6 +89,7 @@
   font-size: 2.5vh;
   color: #abbbd1;
   text-decoration: none;
+  cursor: none;
   
   border: 1px solid rgba(59, 130, 246, 0.3);
   padding: 10px 20px;
