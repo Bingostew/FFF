@@ -26,8 +26,8 @@ module.exports = (io, lobbies) => {
         return die1 + die2;
     }
 
-    function checkForActionConditions(lobby){
-        result = true;
+    function checkForActionConditions(lobby, socket){
+        let result = true;
 
         if (!lobby ) {
             socket.emit('error', 'Game does not exist');
@@ -110,12 +110,14 @@ module.exports = (io, lobbies) => {
                 alpha: { 
                     q: fleetPositions.alpha.q, // Position data. It will be automatically set when the player places their fleets in the future
                     r: fleetPositions.alpha.r, 
-                    hp: 2  //Health Initialized here
+                    hp: 2,  //Health Initialized here
+                    isDestroyed: false
                 },
                 beta: { 
                     q: fleetPositions.beta.q, // Position data. It will be automatically set when the player places their fleets in the future
                     r: fleetPositions.beta.r, 
-                    hp: 2  // Initialized here
+                    hp: 2,  // Initialized here
+                    isDestroyed: false
                 }
             };
 
@@ -163,7 +165,7 @@ module.exports = (io, lobbies) => {
         // Handle the "Finish" - Strike Logic
         socket.on('execute_strike', ({ gameId, targetHex }) => {
             const lobby = lobbies[gameId];
-            if (checkForActionConditions(lobby) === false) {
+            if (checkForActionConditions(lobby, socket) === false) {
                 return;
             }
 
@@ -203,6 +205,7 @@ module.exports = (io, lobbies) => {
                     
                     if (fleet.hp <= 0) {
                         destroyed = true;
+                        fleet.isDestroyed = true;
                     }
                     break; 
                 }
@@ -287,7 +290,7 @@ module.exports = (io, lobbies) => {
          */
         socket.on('move_fleet', ({ gameId, fleetKey, newPosition }) => {
             const lobby = lobbies[gameId];
-            if (checkForActionConditions(lobby) === false) {
+            if (checkForActionConditions(lobby, socket) === false) {
                 return;
             }
 
@@ -378,20 +381,138 @@ module.exports = (io, lobbies) => {
             }
         });
 
-        // socket.on('focus', (gameId,Postions, dieResult) => {
-        //     const lobby = lobbies[gameId];
-        //     const playerFleets = lobby.fleets[socket.id];
-        //     for (const key in playerFleets) {
-        //             const fleet = playerFleets[key];
-        //             if (fleet.q === newPosition.q && fleet.r === newPosition.r) {
-        //                 io.to(gameId).emit('focus_result', {
-        //             }
-        //         }
-        // })
+        socket.on('focus', (gameId,Positions, dieResult) => {
+            const lobby = lobbies[gameId];
+            let revealPos = [];
+            const opponentId = Object.keys(lobby.players).find(id => id !== socket.id);
+            const opponentFleets = lobby.fleets[opponentId];
+            const player = lobby.players[opponentId];
+
+            if (checkForActionConditions(lobby, socket) === false) {
+                return;
+            }
+
+            
+
+            for (const key in opponentFleets) {
+                const fleet = opponentFleets[key];
+                if (!fleet.isDestroyed) {
+                    if (comparePositions(Positions[0],fleet)){
+                        revealPos.push(fleet);
+                    }
+                    else if (comparePositions(Positions[1],fleet)){
+                        revealPos.push(fleet);
+                    }
+                    else if (comparePositions(Positions[2],fleet)){
+                        revealPos.push(fleet);
+                    }
+                }
+            }
+
+            if (revealPos.length > 0) {
+                io.to(gameId).emit('focus_result', {
+                    playerName: player.name,
+                    revealPos: revealPos
+                });
+            }
+            else {
+                io.to(gameId).emit('focus_result', {
+                    playerName: player.name,
+                    revealPos: null
+                });
+            }
+        });
+
+        socket.on('directional',gameId, Positions, dieResult => {
+            const lobby = lobbies[gameId];
+            const playerFleets = lobby.fleets[socket.id];
+            const player = lobby.players[socket.id];
+            let revealPos = [];
+
+            if (checkForActionConditions(lobby, socket) === false) {
+                return;
+            }
+
+            for (const key in playerFleets) {
+                const fleet = playerFleets[key];
+                if (!fleet.isDestroyed) {
+                    if (comparePositions(Positions[0],fleet)){
+                        revealPos.push(fleet);
+                    }
+                    else if (comparePositions(Positions[1],fleet)){
+                        revealPos.push(fleet);
+                    }
+                    else if (comparePositions(Positions[2],fleet)){
+                        revealPos.push(fleet);
+                    }
+                }
+            }
+
+            if ((revealPos.length > 0) && (dieResult <= 4)) {
+                io.emit('directional_result', {
+                    playerName: player.playerName,
+                    revealPos: revealPos
+                })
+            }
+            else {
+                io.emit('directional_result', {
+                    playerName: player.playerName,
+                    revealPos: null
+                })
+            }
+
+
+        });
+
+        socket.on('area',gameId, Positions, dieResult => {
+            const lobby = lobbies[gameId];
+            const playerFleets = lobby.fleets[socket.id];
+            const player = lobby.players[socket.id];
+            let revealPos = [];
+
+            if (checkForActionConditions(lobby, socket) === false) {
+                return;
+            }
+
+            for (const key in playerFleets) {
+                const fleet = playerFleets[key];
+                if (!fleet.isDestroyed) {
+                    if (comparePositions(Positions[0],fleet)){
+                        revealPos.push(fleet);
+                    }
+                    else if (comparePositions(Positions[1],fleet)){
+                        revealPos.push(fleet);
+                    }
+                    else if (comparePositions(Positions[2],fleet)){
+                        revealPos.push(fleet);
+                    }
+                    else if (comparePositions(Positions[3],fleet)){
+                        revealPos.push(fleet);
+                    }
+
+                }
+            }
+
+            if ((revealPos.length > 0) && (dieResult <= 3)) {
+                io.emit('area_result', {
+                    playerName: player.playerName,
+                    revealPos: revealPos
+                })
+            }
+            else {
+                io.emit('area_result', {
+                    playerName: player.playerName,
+                    revealPos: null
+                })
+            }
+
+
+        });
+
 
         socket.on('die_roll', ({gameId}) => {
             const lobby = lobbies[gameId];
-            if (checkForActionConditions(lobby) === false) {
+            if (checkForActionConditions(lobby, socket) === false) {
                 return;
             }
 

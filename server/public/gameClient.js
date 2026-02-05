@@ -59,6 +59,24 @@ function moveFleet(fleetKey, q, r) {
     socket.emit('move_fleet', { gameId: currentRoom, fleetKey, newPosition: { q, r } });
 }
 
+function rollDie() {
+    socket.emit('die_roll', { gameId: currentRoom });
+}
+
+function submitFocus() {
+    const q1 = parseInt(document.getElementById('focusQ1').value);
+    const r1 = parseInt(document.getElementById('focusR1').value);
+    const q2 = parseInt(document.getElementById('focusQ2').value);
+    const r2 = parseInt(document.getElementById('focusR2').value);
+    const q3 = parseInt(document.getElementById('focusQ3').value);
+    const r3 = parseInt(document.getElementById('focusR3').value);
+
+    const positions = [{ q: q1, r: r1 }, { q: q2, r: r2 }, { q: q3, r: r3 }];
+    
+    log("Sending Focus:", positions);
+    socket.emit('focus', currentRoom, positions);
+}
+
 // --- Listeners ---
 socket.on('room_update', (data) => log("Room Update:", data));
 socket.on('opponent_ready', () => log("Alert: Opponent has placed ships!"));
@@ -82,6 +100,14 @@ socket.on('strike_result', (data) => {
 });
 socket.on('game_over', (data) => log("GAME OVER!", data));
 socket.on('fleet_moved', (data) => log("Fleet Moved:", data));
+socket.on('die_result', (data) => log("Die Result:", data));
+socket.on('focus_result', (data) => {
+    if (data.revealPos && data.revealPos.length > 0) {
+        log('Focus Result: Revealed fleet positions.', data.revealPos);
+    } else {
+        log('Focus Result: No fleets found at the specified locations.');
+    }
+});
 socket.on('error', (msg) => log("ERROR:", msg));
 socket.on('turn_change', ({ activePlayer }) => {
     const statusDiv = document.getElementById('connStatus');
