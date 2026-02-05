@@ -5,43 +5,30 @@ module.exports = (io, lobbies) => {
     io.on('connection', (socket) => {
         console.log(`Player connected: ${socket.id}`);
 
-    //     // test 
-    //     socket.on('join_game', ({gameId}) => {   // listen
-    //         // Security: Only allow joining if the lobby exists in HTTP state
-    //         if (!lobbies[gameId]) {
-    //             socket.emit('error', 'Game does not exist');
-    //             console.log('failure');
-    //             return;
-    //         }
-    //         else
-    //             console.log('success');
+        // temporary data structure for game
+        gameState: {
+            players: {
+                p1_id: null 
+                p2_id: null
+            }
+            ships: {
+                ship0: {
 
-    //         // MAGIC HAPPENS HERE: Join the "Room"
-    //         socket.join(gameId);
-    //         console.log(`Socket ${socket.id} joined room ${gameId}`);
-            
-    //         // Notify others in ONLY this room
-    //         io.to(gameId).emit('player_joined', { playerId: socket.id });
-    //     });
+                }
+                ship1: {
 
-    //     // test
-    //     socket.on('game_move', (data) => {
-    //         // do something like update gameState
+                }
+                ship2: {
 
-    //         const { gameId, move } = data;
-    //         // Broadcast move to everyone in the room EXCEPT the sender
-    //         socket.to(gameId).emit('update_game_state', move);
-    //     });
+                }
+                ship3: {
+                    
+                }
+            }    
+        }
 
-    //     /**************************************************************/
-    //     // server to client interactions 
 
-    //     // init_game
-    //     socket.on('init_game', (data) => {
-    //         // TODO: send initialized game information back 
-    //     })
-
-    //     // 
+        // join game API
         socket.on('join_game', ({ gameId, playerName }) => {
             const lobby = lobbies[gameId];
             

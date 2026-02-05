@@ -17,6 +17,8 @@ app.use(express.json());
 // Each room now tracks specific game data
 const lobbies = {}; 
 
+const games = {}
+
 // --- HTTP: LOBBY MANAGEMENT ---
 
 app.post('/create-lobby', (req, res) => {

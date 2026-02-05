@@ -7,38 +7,24 @@ const GameEngine = {
     initShips: (gameState, playerId, shipName, hex) => {
         
     },
-    // move a player's ships
-    processMove: (gameState, playerId, shipName, fromHex, toHex) => {
-        // verify player is able to move
-        player = gameState.playerId;
-        ship = player.shipName;
+    // validate player's move
+    validateMove: (gameState, shipId, toHex) => {
+        const ship = gameState.ships[shipId];
+        const map = gameState.map;
 
-        // check to make sure ship has enough fuel to move
-        if(ship.fuel > 0) {
-            // check to verify ship's current position matches fromHex
-            if(ship.location == fromHex) {
-                // check to verify ship is moving to legal hex
-                board = gameState.board;
-                // does hex exist in map?
-                board.tiles;
-                // is toHex within 1 hex of the fromHex?
-                // is the toHex not blocked?
-                
-                if() {
-                    // TODO
-                }
-                else {
-                    // ERROR: 
-                }
-            }
-            else {
-                // TODO: LOCATION MISMATCH
-            }
-        }
-        else {
-            // TODO: ERROR NO FUEL
-        }
-        
+        // Rule: Move ONE adjacent hex
+        if (GameEngine.getDistance(ship.location, toHex) !== 1) 
+            return { valid: false, msg: "Must move 1 hex" };
+
+        // Rule: Fuel bubbles
+        if (ship.fuel <= 0) 
+            return { valid: false, msg: "Out of fuel" };
+
+        // Rule: land hexes are impassable
+        if (map.landHexes.includes(toHex)) 
+            return { valid: false, msg: "Cannot enter Land" };
+
+        return { valid: true };
     },
     // conduct an ISR search
     processISR: (gameState, playerId, hexes, capability) => {
