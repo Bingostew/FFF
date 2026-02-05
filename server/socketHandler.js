@@ -423,7 +423,7 @@ module.exports = (io, lobbies) => {
             }
         });
 
-        socket.on('directional',gameId, Positions, dieResult => {
+        socket.on('directional', (gameId, Positions, dieResult) => {
             const lobby = lobbies[gameId];
             const playerFleets = lobby.fleets[socket.id];
             const player = lobby.players[socket.id];
@@ -449,22 +449,22 @@ module.exports = (io, lobbies) => {
             }
 
             if ((revealPos.length > 0) && (dieResult <= 4)) {
-                io.emit('directional_result', {
-                    playerName: player.playerName,
+                io.to(gameId).emit('directional_result', {
+                    playerName: player.name,
                     revealPos: revealPos
-                })
+                });
             }
             else {
-                io.emit('directional_result', {
-                    playerName: player.playerName,
+                io.to(gameId).emit('directional_result', {
+                    playerName: player.name,
                     revealPos: null
-                })
+                });
             }
 
 
         });
 
-        socket.on('area',gameId, Positions, dieResult => {
+        socket.on('area', (gameId, Positions, dieResult) => {
             const lobby = lobbies[gameId];
             const playerFleets = lobby.fleets[socket.id];
             const player = lobby.players[socket.id];
@@ -494,16 +494,16 @@ module.exports = (io, lobbies) => {
             }
 
             if ((revealPos.length > 0) && (dieResult <= 3)) {
-                io.emit('area_result', {
-                    playerName: player.playerName,
+                io.to(gameId).emit('area_result', {
+                    playerName: player.name,
                     revealPos: revealPos
-                })
+                });
             }
             else {
-                io.emit('area_result', {
-                    playerName: player.playerName,
+                io.to(gameId).emit('area_result', {
+                    playerName: player.name,
                     revealPos: null
-                })
+                });
             }
 
 
