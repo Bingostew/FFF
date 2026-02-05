@@ -1,6 +1,7 @@
 <script>
   import { isHovering } from '$lib/store'; // Import shared state
   import { io } from "socket.io-client";
+  import { goto } from '$app/navigation'; // <--- 1. Add this import
 
   let showMultiplayerModal = false;
 
@@ -33,10 +34,12 @@
   }
 
   async function goToCreate() {
-    const res = await fetch('/create-lobby', {method: 'POST'});
-    const data = await res.json();
-    lobbyCode = data.gameId;
-    modalStep = 2;
+    //const res = await fetch('/create-lobby', {method: 'POST'});
+    //const data = await res.json();
+    //lobbyCode = data.gameId;
+    
+    goto(`/multiplayer?gameId=${lobbyCode}&nickname=${nickname}`);
+    //modalStep = 2;
   }
 
   function goToJoin() {
