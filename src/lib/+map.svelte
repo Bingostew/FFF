@@ -15,13 +15,13 @@
     let hoveredHex = $state(null);
     let selectedGroup = $state([]);
     let targetingMode = $state('focus'); // Options: 'focus', 'directional', 'area'
-
-    let warning = $state({ show: false, x: 0, y: 0, text: '' });
-    let warningTimer; // To handle the fading timeout
-
+    
     // Rotation enables us to make directional focus more dynamic. getS is a helper function.
     let rotation = $state(0);
     const getS = (h) => -h.q - h.r;
+    
+    let warning = $state({ show: false, x: 0, y: 0, text: '' });
+    let warningTimer; // To handle the fading timeout
 
     // Configuration: Map coordinates to specific image files,by default all tiles
     // appear as water tiles. This adds land objects. 
@@ -102,6 +102,7 @@
             // If we have 1 or 2 (edge of map), return empty to show no target.
             return selection.length === 3 ? selection : [];
         }
+        return [];
     }
 
     // Automatically update list as user cursors over hex cells. 
@@ -121,6 +122,7 @@
             // Find neighbors of 'current' that are also in the 'group'
             const neighbors = group.filter(h => {
                 if (visited.has(h)) return false;
+                if (h === current) return false; //Skip self
                 const dist = (Math.abs(h.q - current.q) 
                             + Math.abs(h.r - current.r) 
                             + Math.abs(getS(h) - getS(current))) / 2;
@@ -421,12 +423,12 @@
 
     /* --- sidebar_targeting --- */
     .sidebar_targeting {
-        width: 13vw; 
-        height: 13vh;
-        padding: 1vw;
+        width: clamp(200px, 20vw, 300px);        
+        height: 100vh;
+        padding: 0rem;
         display: flex;
         flex-direction: column;
-        gap: 2vh;
+        gap: 2rem;
         z-index: 10;
     }
 
