@@ -59,7 +59,11 @@ module.exports = (io, lobbies) => {
     io.on('connection', (socket) => {
         console.log(`Player connected: ${socket.id}`);
 
+<<<<<<< HEAD
     
+=======
+        // join game API
+>>>>>>> feature/gameEngine.js
         socket.on('join_game', ({ gameId, playerName }) => {
             const lobby = lobbies[gameId];
             
