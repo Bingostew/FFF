@@ -167,6 +167,56 @@ Automatic event when a player disconnects from the server.
 
 ---
 
+### 8. `die_roll`
+Rolls a 6-sided die.
+
+**Payload:**
+```javascript
+{
+  gameId: string
+}
+```
+
+**Server Response:** `die_result` event to all players.
+
+---
+
+### 9. `focus`
+Performs a "Focus" ISR action (select 3 hexes).
+
+**Payload (Arguments):**
+1. `gameId`: string
+2. `positions`: Array<{ q: number, r: number }> (Length 3)
+3. `dieResult`: number (unused for focus)
+
+**Server Response:** `focus_result` event to all players.
+
+---
+
+### 10. `directional`
+Performs a "Directional" ISR action (select 3 hexes). Requires die roll <= 4.
+
+**Payload (Arguments):**
+1. `gameId`: string
+2. `positions`: Array<{ q: number, r: number }> (Length 3)
+3. `dieResult`: number
+
+**Server Response:** `directional_result` event to all players.
+
+---
+
+### 11. `area`
+Performs an "Area" ISR action (select 4 hexes). Requires die roll <= 3.
+
+**Payload (Arguments):**
+1. `gameId`: string
+2. `positions`: Array<{ q: number, r: number }> (Length 4)
+3. `dieResult`: number
+
+**Server Response:** `area_result` event to all players.
+
+---
+
 ## Socket Events (Server → Client)
 
 ### 1. `room_update`
@@ -271,6 +321,46 @@ Sent when the game ends.
 Sent when an error occurs.
 
 **Payload:** `string` (error message)
+
+---
+
+### 10. `die_result`
+Broadcasts the result of a die roll.
+
+**Payload:**
+```javascript
+{
+  playerId: string,
+  die: number
+}
+```
+
+---
+
+### 11. `focus_result`
+Result of a Focus ISR action.
+
+**Payload:**
+```javascript
+{
+  playerName: string,
+  revealPos: Array<{ q: number, r: number, hp: number, isDestroyed: boolean }> | null
+}
+```
+
+---
+
+### 12. `directional_result`
+Result of a Directional ISR action.
+
+**Payload:** Same as `focus_result`.
+
+---
+
+### 13. `area_result`
+Result of an Area ISR action.
+
+**Payload:** Same as `focus_result`.
 
 ---
 
@@ -413,6 +503,34 @@ sequenceDiagram
     S->>B: strike_result {hit: true/false, ...}
     S->>A: turn_change {activePlayer: A}
     S->>B: turn_change {activePlayer: A}
+
+    %% Turn 3: ISR Action
+    Note over A: Player A's Turn (ISR)
+    A->>S: die_roll {gameId}
+    S->>A: die_result {die: 3, ...}
+    S->>B: die_result {die: 3, ...}
+    A->>S: focus {positions}
+    S->>A: focus_result {revealPos: [...]}
+    S->>B: focus_result {revealPos: [...]}
+
+    %% Turn 4: ISR Action (Directional)
+    Note over B: Player B's Turn (ISR - Directional)
+    B->>S: die_roll {gameId}
+    S->>A: die_result {die: 3, ...}
+    S->>B: die_result {die: 3, ...}
+    B->>S: directional {positions, dieResult}
+    S->>A: directional_result {revealPos: [...]}
+    S->>B: directional_result {revealPos: [...]}
+
+    %% Turn 5: ISR Action (Area)
+    Note over A: Player A's Turn (ISR - Area)
+    A->>S: die_roll {gameId}
+    S->>A: die_result {die: 2, ...}
+    S->>B: die_result {die: 2, ...}
+    A->>S: area {positions, dieResult}
+    S->>A: area_result {revealPos: [...]}
+    S->>B: area_result {revealPos: [...]}
+    
 
     %% Game Over Condition
     Note over A: Player A destroys last fleet

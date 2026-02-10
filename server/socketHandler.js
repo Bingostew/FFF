@@ -390,7 +390,7 @@ module.exports = (io, lobbies) => {
             let revealPos = [];
             const opponentId = Object.keys(lobby.players).find(id => id !== socket.id);
             const opponentFleets = lobby.fleets[opponentId];
-            const player = lobby.players[opponentId];
+            const player = lobby.players[socket.id];
 
             if (checkForActionConditions(lobby, socket) === false) {
                 return;
@@ -425,20 +425,21 @@ module.exports = (io, lobbies) => {
                     revealPos: null
                 });
             }
+            switchTurn(gameId);
         });
 
         socket.on('directional', (gameId, Positions, dieResult) => {
             const lobby = lobbies[gameId];
-            const playerFleets = lobby.fleets[socket.id];
             const player = lobby.players[socket.id];
             let revealPos = [];
+            const opponentId = Object.keys(lobby.players).find(id => id !== socket.id);
+            const opponentFleets = lobby.fleets[opponentId];
 
             if (checkForActionConditions(lobby, socket) === false) {
                 return;
             }
-
-            for (const key in playerFleets) {
-                const fleet = playerFleets[key];
+            for (const key in opponentFleets) {
+                const fleet = opponentFleets[key];
                 if (!fleet.isDestroyed) {
                     if (comparePositions(Positions[0],fleet)){
                         revealPos.push(fleet);
@@ -464,22 +465,21 @@ module.exports = (io, lobbies) => {
                     revealPos: null
                 });
             }
-
-
+            switchTurn(gameId);
         });
 
         socket.on('area', (gameId, Positions, dieResult) => {
             const lobby = lobbies[gameId];
-            const playerFleets = lobby.fleets[socket.id];
             const player = lobby.players[socket.id];
             let revealPos = [];
+            const opponentId = Object.keys(lobby.players).find(id => id !== socket.id);
+            const opponentFleets = lobby.fleets[opponentId];
 
             if (checkForActionConditions(lobby, socket) === false) {
                 return;
             }
-
-            for (const key in playerFleets) {
-                const fleet = playerFleets[key];
+            for (const key in opponentFleets) {
+                const fleet = opponentFleets[key];
                 if (!fleet.isDestroyed) {
                     if (comparePositions(Positions[0],fleet)){
                         revealPos.push(fleet);
@@ -509,8 +509,7 @@ module.exports = (io, lobbies) => {
                     revealPos: null
                 });
             }
-
-
+            switchTurn(gameId);
         });
 
 
