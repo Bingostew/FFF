@@ -4,7 +4,7 @@
     import { isHovering } from '$lib/store';
     import { getTargetHexes, isGroupConnected, getS } from './gridUtils.js';
     import Sidebar from './Sidebar.svelte';
-
+    import StatusBar from './StatusBar.svelte';
     // 1. Grid Config
     const Tile = defineHex({ dimensions: 50, origin: 'topLeft', orientation: Orientation.FLAT, offset: 1 });
     const grid = new Grid(Tile, rectangle({ width: 7, height: 6 }));
@@ -18,6 +18,8 @@
     let fleetSelections = $state([]);
     let rotation = $state(0);
     let warning = $state({ show: false, x: 0, y: 0, text: '', id: 0 });
+    let health = $state(2);
+    let fuel = $state(3);
 
     const specialTiles = [
         { col: 1, row: 2, img: 'single_palm.jpg' },
@@ -34,6 +36,13 @@
     // Interaction Handlers
     function handleHexClick(event, hex) {
         if (!isConfirmed) {
+            const isSpecial = specialTiles.some(t => t.col === hex.col && t.row === hex.row);
+
+            if (isSpecial){
+                showWarning(event.clientX, event.clientY, "Cannot place fleet on land");
+                return;
+            }
+
             const index = fleetSelections.findIndex(h => h.q === hex.q && h.r === hex.r);
             if (index > -1) {
                 fleetSelections = fleetSelections.filter(h => h !== fleetSelections[index]);
@@ -84,9 +93,11 @@
         }
     }
 
+    let warningTimeout;
     function showWarning(x, y, text) {
+        clearTimeout(warningTimeout);
         warning = { show: true, x, y, text, id: Date.now() };
-        setTimeout(() => { if (warning.id === warning.id) warning.show = false; }, 1500);
+        warningTimeout = setTimeout(() => { if (warning.id === warning.id) warning.show = false; }, 1500);
     }
 
     function confirmFleets() {
@@ -104,40 +115,68 @@
     <Sidebar 
         bind:targetingMode 
         bind:isConfirmed 
+        bind:rotation
         {fleetSelections} 
-        {rotation}
         onConfirm={confirmFleets}
-        onCycleRotation={(e) => { e.preventDefault(); rotation++; }}
     />
 
-    <div class="map-area">
+    <div class="map-area"
+        role="application"
+        oncontextmenu={(e) => {
+            if (targetingMode === 'directional') {e.preventDefault();rotation++;}
+        }}>
+        <StatusBar {health} {fuel} />
+
         <svg viewBox="0 0 1000 600" class="tactical-grid">
             <defs>
                 <pattern id="water-pattern" x="0" y="0" width="200" height="200" patternUnits="userSpaceOnUse">
-                    <image href="water2.jpg" x="0" y="0" width="200" height="200" preserveAspectRatio="xMidYMid slice"/>
+                    <image href="/water2.jpg" x="0" y="0" width="200" height="200" preserveAspectRatio="xMidYMid slice"/>
                 </pattern>
+                
+                <pattern id="ship-pattern" patternUnits="objectBoundingBox" width="1" height="1">
+                    <image 
+                        href="ship.png" 
+                        x="0.1" y="0.1" 
+                        width="10%" height="10%" 
+                        preserveAspectRatio="xMidYMid meet"
+                    />
+                </pattern>
+
                 {#each specialTiles as tile}
                     <pattern id={`pattern-${tile.col}-${tile.row}`} patternUnits="objectBoundingBox" width="1" height="1">
-                        <image href={tile.img} x="-0.1" y="-0.1" width="1.2" height="1.2" preserveAspectRatio="xMidYMid slice"/>
+                        <image href={`/${tile.img}`} x="0" y="0" width="10%" height="15%" preserveAspectRatio="xMidYMid slice"/>
                     </pattern>
-                {/each}
+            {/each}
             </defs>
 
             <g transform="translate(55, 10)"> 
                 {#each grid as hex}
                     {@const config = specialTiles.find(t => t.col === hex.col && t.row === hex.row)}
-                    {@const isFleet = fleetSelections.includes(hex)}
+                    {@const isFleet = fleetSelections.some(f => f.q === hex.q && f.r === hex.r)}
+                    {@const pointsStr = hex.corners.map(({ x, y }) => `${x},${y}`).join(' ')}
+
                     <g 
                         class="hex-cell"
+                        role="button"
+                        tabindex="0"
                         onclick={(e) => handleHexClick(e, hex)}
                         onmouseenter={() => { hoveredHex = hex; $isHovering = true; }}
                         onmouseleave={() => { hoveredHex = null; $isHovering = false; }}
+                        onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && handleHexClick(e, hex)}
+                        style="cursor: pointer; outline: none;"
                     >
                         <polygon
-                            points={hex.corners.map(({ x, y }) => `${x},${y}`).join(' ')}
-                            fill={isFleet ? 'rgba(34, 197, 94, 0.4)' : (config ? `url(#pattern-${hex.col}-${hex.row})` : "url(#water-pattern)")}
-                            stroke={isFleet ? "#22c55e" : "black"}
-                            stroke-width={isFleet ? 3 : 0.5}
+                            points={pointsStr}
+                            fill={config ? `url(#pattern-${hex.col}-${hex.row})` : "url(#water-pattern)"}
+                            stroke={isFleet ? "#4ade80" : "black"} 
+                            stroke-width={isFleet ? 2 : 0.5}
+                        />
+
+                        <polygon
+                            points={pointsStr}
+                            fill="url(#ship-pattern)"
+                            style="opacity: {isFleet ? 1 : 0}; transition: opacity 0.2s;"
+                            pointer-events="none"
                         />
                     </g>
                 {/each}
@@ -178,6 +217,8 @@
         position: fixed; pointer-events: none; color: #e45c5c; font-family: 'Chakra Petch', sans-serif;
         font-size: 24px; font-weight: 600; text-shadow: 0 0 10px black; animation: popAndFade 1.5s forwards;
     }
+    
+
     @keyframes popAndFade {
         0% { opacity: 0; transform: translate(15px, 0) scale(0.5); }
         15% { opacity: 1; transform: translate(15px, -25px) scale(1.1); }

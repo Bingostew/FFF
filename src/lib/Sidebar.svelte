@@ -1,21 +1,19 @@
 <script>
     import { isHovering } from '$lib/store';
     
+    let isSubmitted = $state(false);
+
     // Props using Svelte 5 syntax
     let { 
         targetingMode = $bindable(), 
         isConfirmed = $bindable(), 
+        rotation = $bindable(),
         fleetSelections, 
-        rotation, 
-        onConfirm, 
-        onCycleRotation 
+        onConfirm
     } = $props();
-
-    function setMode(mode) {
-        targetingMode = mode;
-    }
 </script>
 
+{#if !isSubmitted}
 <div class="sidebar_targeting">
     
     {#if !isConfirmed}
@@ -55,9 +53,6 @@
             <button 
                 class:active={targetingMode === 'directional'} 
                 onclick={() => targetingMode = 'directional'}
-                oncontextmenu={onCycleRotation}
-                onmouseenter={() => $isHovering = true} 
-                onmouseleave={() => $isHovering = false}
             >
                 <span class="btn-text">DIRECTIONAL</span>
                 <span class="btn-sub">
@@ -78,9 +73,22 @@
                 <span class="btn-text">AREA</span>
                 <span class="btn-sub">4 ADJACENT CELLS</span>
             </button>
+
+            <div class="button-group">
+                <button 
+                    style="margin-top: 20px; border-color: #e24a4a; color: #e24a4a;"
+                    onclick={() => isSubmitted = true}
+                    onmouseenter={() => $isHovering = true} 
+                    onmouseleave={() => $isHovering = false}
+                >
+                <span class="btn-text">ACTIVATE</span>
+                    <span class="btn-sub">CONFIRM SELECTION</span>
+                </button>
+            </div>
         </div>
     {/if}
 </div>
+{/if}
 
 <style>
     .sidebar_targeting {
