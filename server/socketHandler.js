@@ -5,29 +5,6 @@ module.exports = (io, lobbies) => {
     io.on('connection', (socket) => {
         console.log(`Player connected: ${socket.id}`);
 
-        // temporary data structure for game
-        gameState: {
-            players: {
-                p1_id: null 
-                p2_id: null
-            }
-            ships: {
-                ship0: {
-
-                }
-                ship1: {
-
-                }
-                ship2: {
-
-                }
-                ship3: {
-                    
-                }
-            }    
-        }
-
-
         // join game API
         socket.on('join_game', ({ gameId, playerName }) => {
             const lobby = lobbies[gameId];
