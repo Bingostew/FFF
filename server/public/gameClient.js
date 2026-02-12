@@ -37,7 +37,7 @@ function placeFleets() {
 function executeStrike() {
     const q = parseInt(document.getElementById('targetQ').value);
     const r = parseInt(document.getElementById('targetR').value);
-    socket.emit('execute_strike', { gameId: currentRoom, targetHex: { q, r } });
+    socket.emit('execute_strike', { gameId: currentRoom, targetHex: { q, r }, dieResult: 7});
     log(`Striking hex: ${q},${r}`);
 }
 
