@@ -18,6 +18,24 @@ module.exports = (io, lobbies) => {
         return pos1.q === pos2.q && pos1.r === pos2.r;
     };
 
+    function resolveStrikeHit(targetHex, opponentFleets) {
+        let fleetKey = null;
+        if (comparePositions(targetHex, opponentFleets.alpha) && !opponentFleets.alpha.isDestroyed) {
+            fleetKey = 'alpha';
+        } else if (comparePositions(targetHex, opponentFleets.beta) && !opponentFleets.beta.isDestroyed) {
+            fleetKey = 'beta';
+        }
+
+        if (fleetKey) {
+            const fleet = opponentFleets[fleetKey];
+            fleet.hp -= 1;
+            if (fleet.hp <= 0) {
+                fleet.isDestroyed = true;
+            }
+            return fleetKey;
+        }
+        return null;
+    }
 
     function dieRoll() {
         return Math.floor(Math.random() * 6) + 1;
@@ -104,6 +122,12 @@ module.exports = (io, lobbies) => {
                 socket.emit('error', 'Game does not exist');
                 return;
             }
+            else if (lobby.fleetPlaced[socket.id])
+            {
+                socket.emit('error', 'Fleets have already been placed');
+                return;
+            
+            }
 
             // We restructure the incoming data to add server-side HP
             // This prevents players from trying to start with extra health
@@ -121,6 +145,7 @@ module.exports = (io, lobbies) => {
                     isDestroyed: false
                 }
             };
+            lobby.fleetPlaced[socket.id] = true;
 
             socket.emit('fleets_placed_confirmation');
         });
@@ -196,71 +221,22 @@ module.exports = (io, lobbies) => {
             let fleetKey = null;
             let destroyed = false;
 
-            if (shortestDistance <= 2 && dieResult >= 2)
-            {
-                hit = true;
-               
-
-                if (comparePositions(targetHex, opponentFleets.alpha)){
-                    fleetKey = 'alpha';
-                    opponentFleets.alpha.hp -= 1;
-                }
-                    
-                else if (comparePositions(targetHex, opponentFleets.beta))
-                {
-                    fleetKey = 'beta';
-                    opponentFleets.beta.hp -= 1;
-                }
+            let rollSuccessful = false;
+            if (shortestDistance <= 2 && dieResult >= 2) {
+                rollSuccessful = true;
+            } else if ((shortestDistance >= 3 && shortestDistance <= 6) && dieResult >= 3) {
+                rollSuccessful = true;
+            } else if (shortestDistance > 6 && dieResult >= 4) {
+                rollSuccessful = true;
             }
 
-            else if ((shortestDistance >= 3 && shortestDistance <= 6) && dieResult >= 3)
-            {
-                hit = true;
-
-                if (comparePositions(targetHex, opponentFleets.alpha))
-                {
-                    opponentFleets.alpha.hp -= 1;
-                    fleetKey = 'alpha';
-                }
-                else if (comparePositions(targetHex, opponentFleets.beta))
-                {
-                    opponentFleets.beta.hp -= 1;
-                    fleetKey = 'beta';
+            if (rollSuccessful) {
+                fleetKey = resolveStrikeHit(targetHex, opponentFleets);
+                if (fleetKey) {
+                    hit = true;
+                    destroyed = opponentFleets[fleetKey].isDestroyed;
                 }
             }
-
-            else if (shortestDistance > 6 && dieR >= 4){
-                hit = true;
-
-                if (comparePositions(targetHex, opponentFleets.alpha))
-                {
-                    opponentFleets.alpha.hp -= 1;
-                    fleetKey = 'alpha';
-                }
-                else if (comparePositions(targetHex, opponentFleets.beta))
-                {
-                    opponentFleets.beta.hp -= 1;
-                    fleetKey = 'beta';
-                }
-            }
-
-            // 1. Check for Hit & Subtract HP
-            // for (const key in opponentFleets) {
-            //     const fleet = opponentFleets[key];
-
-            //     // Ensure we only hit a fleet that is still "alive" (hp > 0)
-            //     if (fleet.q === targetHex.q && fleet.r === targetHex.r && fleet.hp > 0) {
-            //         hit = true;
-            //         fleetKey = key;
-            //         fleet.hp -= 1; // Persistent HP deduction on server
-                    
-            //         if (fleet.hp <= 0) {
-            //             destroyed = true;
-            //             fleet.isDestroyed = true;
-            //         }
-            //         break; 
-            //     }
-            // }
 
             // 2. Broadcast result to the room
             io.to(gameId).emit('strike_result', {

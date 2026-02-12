@@ -31,7 +31,8 @@ app.post('/create-lobby', (req, res) => {
         activePlayer: null, // Tracks whose turn it is
         fleets: {}, // Secret fleet positions { socketId: { alpha: {q,r}, beta: {q,r} } }
         assets: {}, // Tracks assets like fuel, special weapons, etc.
-        history: [] // Stores a log of all moves/strikes for replay or reconnection
+        history: [], // Stores a log of all moves/strikes for replay or reconnection
+        fleetPlaced: {}
     };
     res.json({ gameId, message: 'Lobby created!' });
 });
