@@ -222,6 +222,7 @@ module.exports = (io, lobbies) => {
             let destroyed = false;
 
 <<<<<<< HEAD
+<<<<<<< HEAD
             let rollSuccessful = false;
             if (shortestDistance <= 2 && dieResult >= 2) {
                 rollSuccessful = true;
@@ -237,6 +238,8 @@ module.exports = (io, lobbies) => {
                     hit = true;
                     destroyed = opponentFleets[fleetKey].isDestroyed;
 =======
+=======
+>>>>>>> 281bab7 (feat: fixed exec api call to include die roll)
             if (shortestDistance <= 2 && dieResult >= 2)
             {
                 hit = true;
@@ -251,6 +254,9 @@ module.exports = (io, lobbies) => {
                 {
                     fleetKey = 'beta';
                     opponentFleets.beta.hp -= 1;
+<<<<<<< HEAD
+>>>>>>> 281bab7 (feat: fixed exec api call to include die roll)
+=======
 >>>>>>> 281bab7 (feat: fixed exec api call to include die roll)
                 }
             }
