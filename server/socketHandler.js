@@ -3,6 +3,7 @@
 // game 'brain': will handle socket.io messages
 module.exports = (io, lobbies) => {
 
+
     //function to ensure that each player can perform an action only when it is its turn
     const switchTurn = (gameId) => {
         const lobby = lobbies[gameId];
@@ -189,7 +190,7 @@ module.exports = (io, lobbies) => {
 
 
         // Handle the "Finish" - Strike Logic
-        socket.on('execute_strike', ({ gameId, targetHex, dieResult }) => {
+        socket.on('execute_strike', ({ gameId, targetHex, dieResult, dieResult }) => {
             const lobby = lobbies[gameId];
             if (checkForActionConditions(lobby, socket) === false) {
                 return;
@@ -221,86 +222,14 @@ module.exports = (io, lobbies) => {
             let fleetKey = null;
             let destroyed = false;
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-            let rollSuccessful = false;
-            if (shortestDistance <= 2 && dieResult >= 2) {
-                rollSuccessful = true;
-            } else if ((shortestDistance >= 3 && shortestDistance <= 6) && dieResult >= 3) {
-                rollSuccessful = true;
-            } else if (shortestDistance > 6 && dieResult >= 4) {
-                rollSuccessful = true;
-            }
-
-            if (rollSuccessful) {
-                fleetKey = resolveStrikeHit(targetHex, opponentFleets);
-                if (fleetKey) {
-                    hit = true;
-                    destroyed = opponentFleets[fleetKey].isDestroyed;
-=======
-=======
->>>>>>> 281bab7 (feat: fixed exec api call to include die roll)
-            if (shortestDistance <= 2 && dieResult >= 2)
-            {
-                hit = true;
-               
-
-                if (comparePositions(targetHex, opponentFleets.alpha)){
-                    fleetKey = 'alpha';
-                    opponentFleets.alpha.hp -= 1;
-                }
-                    
-                else if (comparePositions(targetHex, opponentFleets.beta))
-                {
-                    fleetKey = 'beta';
-                    opponentFleets.beta.hp -= 1;
-<<<<<<< HEAD
->>>>>>> 281bab7 (feat: fixed exec api call to include die roll)
-=======
->>>>>>> 281bab7 (feat: fixed exec api call to include die roll)
-                }
-            }
-
-            else if ((shortestDistance >= 3 && shortestDistance <= 6) && dieResult >= 3)
-            {
-                hit = true;
-
-                if (comparePositions(targetHex, opponentFleets.alpha))
-                {
-                    opponentFleets.alpha.hp -= 1;
-                    fleetKey = 'alpha';
-                }
-                else if (comparePositions(targetHex, opponentFleets.beta))
-                {
-                    opponentFleets.beta.hp -= 1;
-                    fleetKey = 'beta';
-                }
-            }
-
-            else if (shortestDistance > 6 && dieR >= 4){
-                hit = true;
-
-                if (comparePositions(targetHex, opponentFleets.alpha))
-                {
-                    opponentFleets.alpha.hp -= 1;
-                    fleetKey = 'alpha';
-                }
-                else if (comparePositions(targetHex, opponentFleets.beta))
-                {
-                    opponentFleets.beta.hp -= 1;
-                    fleetKey = 'beta';
-                }
-            }
-
             // 1. Check for Hit & Subtract HP
-            // for (const key in opponentFleets) {
-            //     const fleet = opponentFleets[key];
-
-            //     // Ensure we only hit a fleet that is still "alive" (hp > 0)
-            //     if (fleet.q === targetHex.q && fleet.r === targetHex.r && fleet.hp > 0) {
-            //         hit = true;
-            //         fleetKey = key;
-            //         fleet.hp -= 1; // Persistent HP deduction on server
+            for (const key in opponentFleets) {
+                const fleet = opponentFleets[key];
+                // Ensure we only hit a fleet that is still "alive" (hp > 0)
+                if (fleet.q === targetHex.q && fleet.r === targetHex.r && fleet.hp > 0) {
+                    hit = true;
+                    fleetKey = key;
+                    fleet.hp -= 1; // Persistent HP deduction on server
                     
             //         if (fleet.hp <= 0) {
             //             destroyed = true;
