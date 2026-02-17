@@ -48,6 +48,7 @@ describe("Socket Handler Integration", () => {
     const gameId = "test_game_1";
     
     // Manually create the lobby since your handler expects it to exist
+    // @ts-ignore
     lobbies[gameId] = { 
         players: {}, 
         status: 'waiting',
@@ -55,7 +56,8 @@ describe("Socket Handler Integration", () => {
         history: [] 
     };
 
-    clientSocket.emit("join_game", { gameId, playerName: "Commander Shepard" });
+    clientSocket.emit("join_game", { gameId, playerName: "Nick Smith" });
+    clientSocket.emit("join_game", { gameId, playerName: "Johnson Ampofo" });
 
     // Listen for the success response
     clientSocket.on("room_update", (data) => {
@@ -63,8 +65,9 @@ describe("Socket Handler Integration", () => {
         expect(data.status).toBe("waiting");
         // Verify the player was actually added to the 'database'
         const playerIds = Object.keys(lobbies[gameId].players);
-        expect(playerIds.length).toBe(1);
-        expect(lobbies[gameId].players[playerIds[0]].name).toBe("Commander Shepard");
+        expect(playerIds.length).toBe(2);
+        expect(lobbies[gameId].players[playerIds[0]].name).toBe("Nick Smith");
+        expect(lobbies[gameId].players[playerIds[1]].name).toBe("Johnson Ampofo");
         done();
       } catch (error) {
         done(error);
@@ -131,6 +134,18 @@ describe("Socket Handler Integration", () => {
         assets: { [clientSocket.id]: { fuel: 3 }, [enemyId]: { fuel: 3 } },
         history: []
     };
+
+    // LISTENER 1: Success (What we want)
+    clientSocket.on("strike_result", (data) => {
+      expect(data.hit).toBeDefined();
+      done();
+    });
+
+    // LISTENER 2: Failure (Catch the silent error!)
+    clientSocket.on("error", (msg) => {
+      // Force the test to fail immediately with the server's error message
+      done(new Error(`Server Error: ${msg}`)); 
+    });
 
     // ACTION: We fire at 1,1
     clientSocket.emit("execute_strike", { 
