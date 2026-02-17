@@ -42,4 +42,8 @@ app.post('/create-lobby', (req, res) => {
 // socketHandler.js file has functions for game logic
 gameLogic(io, lobbies);
 
-server.listen(3000, () => console.log('Server running on port 3000'));
+if (require.main === module) {
+    server.listen(3000, () => console.log('Server running on port 3000'));
+}
+
+module.exports = server;
