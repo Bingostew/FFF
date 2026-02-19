@@ -2,14 +2,15 @@
   import { isHovering } from '$lib/store'; // Import shared state
   import { io } from "socket.io-client";
   import { goto } from '$app/navigation';
+  const socket = io("http://localhost:3000");
 
   let showMultiplayerModal = false; //Toggles multiplayer modal.
   let showSingleplayerModal = false; //Toggles singleplayer modal.
 
   let nickname = '';
   let lobbyCode = '';
-  const socket = io();
 
+  
   // 0 = Name Input, 1 = Selection, 2 = Create Lobby, 3 = Join Lobby
   let modalStep = 0;
 
@@ -63,7 +64,7 @@
 
   async function goToCreate() {
     try {
-      const res = await fetch('/create-lobby', {method: 'POST'});
+      const res = await fetch('http://localhost:3000/create-lobby', { method: 'POST' });
       const data = await res.json();
       lobbyCode = data.gameId;
       modalStep = 2;
