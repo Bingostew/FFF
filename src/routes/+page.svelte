@@ -64,10 +64,10 @@
 
   async function goToCreate() {
     try {
+      modalStep = 2;
       const res = await fetch('http://localhost:3000/create-lobby', { method: 'POST' });
       const data = await res.json();
       lobbyCode = data.gameId;
-      modalStep = 2;
     } catch (e) {
       console.error("Failed to create lobby", e);
     }
@@ -78,10 +78,14 @@
   }
 
   function goToJoin() {
-    socket.emit('join_game', {lobbyCode, nickname});
     modalStep = 3;
   }
   
+  function connect(){
+    socket.emit('join_game', {lobbyCode, nickname});
+    goto('/multiplayer');
+  }
+
   function goBack() {
     // If in Create/Join, go back to Selection (1). If in Selection, go back to Name (0).
     if (modalStep > 1) modalStep = 1;
@@ -220,7 +224,7 @@
           <input type="text" placeholder="ENTER LOBBY CODE..." bind:value={lobbyCode} class="tactical-input" maxlength="6"/>
           
           <div class="button-group">
-            <button class="action-btn">CONNECT</button>
+            <button class="action-btn" onclick={connect}>CONNECT</button>
             <button class="close-btn" onclick={goBack}>BACK</button>
           </div>
         {/if}

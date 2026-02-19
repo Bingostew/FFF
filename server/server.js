@@ -9,9 +9,11 @@ const { v4: uuidv4 } = require('uuid'); // Library to generate unique IDs
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: "*" } });
+const cors = require('cors');
 
 app.use(express.static('public'));
 app.use(express.json());
+app.use(cors());
 
 // --- DATABASE MOCKUP ---
 // Each room now tracks specific game data
@@ -38,4 +40,4 @@ app.post('/create-lobby', (req, res) => {
 // socketHandler.js file has functions for game logic
 gameLogic(io, lobbies);
 
-server.listen(3000, () => console.log('Server running on port 3000'));
+server.listen(3000, 'localhost', () => console.log('Server running on port 3000'));
