@@ -163,7 +163,7 @@
                         onmouseenter={() => { hoveredHex = hex; $isHovering = true; }}
                         onmouseleave={() => { hoveredHex = null; $isHovering = false; }}
                         onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && handleHexClick(e, hex)}
-                        style="cursor: pointer; outline: none;"
+                        style="cursor: none; outline: none;"
                     >
                         <polygon
                             points={pointsStr}
