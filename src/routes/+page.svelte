@@ -1,14 +1,15 @@
 <script>
   import { isHovering } from '$lib/store'; // Import shared state
-  import { io } from "socket.io-client";
   import { goto } from '$app/navigation';
-  const socket = io("http://localhost:3000");
+  import { createWebSocketModuleRunnerTransport } from 'vite/module-runner';
+  import { initSocket, gameId, socket } from '$lib/gameStore';
 
   let showMultiplayerModal = false; //Toggles multiplayer modal.
   let showSingleplayerModal = false; //Toggles singleplayer modal.
 
   let nickname = '';
   let lobbyCode = '';
+  initSocket();
 
   
   // 0 = Name Input, 1 = Selection, 2 = Create Lobby, 3 = Join Lobby
@@ -68,6 +69,9 @@
       const res = await fetch('http://localhost:3000/create-lobby', { method: 'POST' });
       const data = await res.json();
       lobbyCode = data.gameId;
+
+       gameId.set(lobbyCode);
+      $socket.emit('join_game', {gameId: lobbyCode, playerName: nickname});
     } catch (e) {
       console.error("Failed to create lobby", e);
     }
@@ -82,8 +86,13 @@
   }
   
   function connect(){
-    socket.emit('join_game', {lobbyCode, nickname});
-    goto('/multiplayer');
+    gameId.set(lobbyCode);
+    $socket.emit('join_game', {gameId: lobbyCode, playerName: nickname});
+    $socket.onAny((eventName, ...args) => {
+      alert(`[SOCKET INBOUND] Event: ${eventName} and ${args}`);
+    });
+
+    
   }
 
   function goBack() {

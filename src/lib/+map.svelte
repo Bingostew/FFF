@@ -2,6 +2,7 @@
     // @ts-nocheck
     import { defineHex, Grid, rectangle, Orientation } from 'honeycomb-grid';
     import { isHovering } from '$lib/store';
+    import { socket, gameId, activePlayerId } from '$lib/gameStore';   
     import { getTargetHexes, isGroupConnected, getS } from './gridUtils.js';
     import Sidebar from './Sidebar.svelte';
     import StatusBar from './StatusBar.svelte';
@@ -9,7 +10,7 @@
     const Tile = defineHex({ dimensions: 50, origin: 'topLeft', orientation: Orientation.FLAT, offset: 1 });
     const grid = new Grid(Tile, rectangle({ width: 7, height: 6 }));
     const gridHexes = [...grid];
-
+    const isMyTurn = $derived($activePlayerId === $socket?.id);
     // 2. Global State
     let hoveredHex = $state(null);
     let selectedGroup = $state([]);
@@ -100,18 +101,53 @@
         warningTimeout = setTimeout(() => { if (warning.id === warning.id) warning.show = false; }, 1500);
     }
 
+    $effect(() => {
+        if ($socket) {
+            $socket.on("room_update", ({players}) => {
+                if(Object.keys(players).length === 2){
+                    goto('/multiplayer');
+                }
+            });
+
+            // Listen for the game starting
+            $socket.on('game_start', ({ activePlayer }) => {
+                activePlayerId.set(activePlayer);
+                isConfirmed = true; // This switches the UI to "Battle" mode
+                selectedGroup = [];
+                targetingMode = 'focus';
+            });
+
+            // Listen for turn swaps
+            $socket.on('turn_change', ({ activePlayer }) => {
+                activePlayerId.set(activePlayer);
+            });
+
+            
+            return () => {
+                $socket.off("room_update");
+                $socket.off('game_start');
+                $socket.off('turn_change');
+            };
+        }
+    });
+
     function confirmFleets() {
         if (fleetSelections.length === 2) {
-            console.log("Fleets locked:", fleetSelections.map(f => ({ q: f.q, r: f.r })));
-            isConfirmed = true;
-            // Clear any previous selections and default to focus mode
-            selectedGroup = [];
-            targetingMode = 'focus';
+            const fleetPositions = {
+                alpha: { q: fleetSelections[0].q, r: fleetSelections[0].r },
+                beta: { q: fleetSelections[1].q, r: fleetSelections[1].r }
+            };
+            $socket.emit('place_fleets', { gameId: $gameId, fleetPositions });
+            
+            $socket.on('fleets_placed_confirmation', () =>
+            {
+                $socket.emit('ready_check', {gameId: $gameId})
+            });
         }
     }
 </script>
 
-<div class="layout-container">
+<div class="layout-container" class:not-my-turn={isConfirmed && !isMyTurn}>
     <Sidebar 
         bind:targetingMode 
         bind:isConfirmed 
@@ -217,7 +253,22 @@
         position: fixed; pointer-events: none; color: #e45c5c; font-family: 'Chakra Petch', sans-serif;
         font-size: 24px; font-weight: 600; text-shadow: 0 0 10px black; animation: popAndFade 1.5s forwards;
     }
+    .layout-container.not-my-turn :global(.sidebar-content) {
+        filter: blur(4px) grayscale(0.5);
+        pointer-events: none;
+        user-select: none;
+        transition: filter 0.3s ease;
+    }
+
+    .layout-container.not-my-turn .map-area {
+        cursor: wait;
+    }
     
+    .layout-container.not-my-turn .tactical-grid {
+        opacity: 0.7;
+        pointer-events: none; /* Prevents hex clicks/hovers */
+        transition: opacity 0.3s ease;
+    }
 
     @keyframes popAndFade {
         0% { opacity: 0; transform: translate(15px, 0) scale(0.5); }
