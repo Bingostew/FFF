@@ -151,10 +151,14 @@
         {:else if modalStep === 1}
           <h2>WELCOME, <span class="highlight">{nickname}</span></h2>
           
-          <div class="vertical-stack">
+          <div 
+              class="vertical-stack"
+              role="group"
+              onmouseenter={() => $isHovering = true}
+              onmouseleave={() => $isHovering = false}
+          >
             <button class="action-btn wide" onclick={goToGame}>START GAME</button>
           </div>
-          
           <button class="close-btn" onclick={goBack}>&lt; BACK</button>
         {/if}
 
@@ -177,7 +181,12 @@
             maxlength="12"
           />
 
-          <div class="button-group">
+         <div 
+              class="button-group"
+              role="group"
+              onmouseenter={() => $isHovering = true}
+              onmouseleave={() => $isHovering = false}
+          >
             <button class="action-btn" onclick={confirmName}>CONFIRM</button>
             <button class="close-btn" onclick={() => toggleModal('close')}>CANCEL</button>
           </div>
@@ -185,7 +194,12 @@
         {:else if modalStep === 1}
           <h2>WELCOME, <span class="highlight">{nickname}</span></h2>
           
-          <div class="vertical-stack">
+          <div 
+            class="vertical-stack"
+            role="group"
+            onmouseenter={() => $isHovering = true}
+            onmouseleave={() => $isHovering = false}
+          >
             <button class="action-btn wide" onclick={goToCreate}>CREATE LOBBY</button>
             <button class="action-btn wide" onclick={goToJoin}>JOIN LOBBY</button>
           </div>
