@@ -5,6 +5,7 @@
     import { getTargetHexes, isGroupConnected, getS } from './gridUtils.js';
     import Sidebar from './Sidebar.svelte';
     import StatusBar from './StatusBar.svelte';
+
     // 1. Grid Config
     const Tile = defineHex({ dimensions: 50, origin: 'topLeft', orientation: Orientation.FLAT, offset: 1 });
     const grid = new Grid(Tile, rectangle({ width: 7, height: 6 }));
@@ -18,8 +19,14 @@
     let fleetSelections = $state([]);
     let rotation = $state(0);
     let warning = $state({ show: false, x: 0, y: 0, text: '', id: 0 });
+    
+    //Status state
     let health = $state(2);
     let fuel = $state(3);
+    let currentTurn = $state(1);
+    let friendlySearchedHexes = $state([]);
+    let enemySearchedHexes = $state([]);    
+    let isRevealed = $state(false);
 
     const specialTiles = [
         { col: 1, row: 2, img: 'single_palm.jpg' },
@@ -109,6 +116,31 @@
             targetingMode = 'focus';
         }
     }
+
+   // --- TEST FUNCTIONS (For Simulator) ---
+    function testSearchHex() {
+        if (gridHexes.length > 0) {
+            const randomHex = gridHexes[Math.floor(Math.random() * gridHexes.length)];
+            
+            // Push to ENEMY searched list
+            if (!enemySearchedHexes.some(s => s.q === randomHex.q && s.r === randomHex.r)) {
+                enemySearchedHexes = [...enemySearchedHexes, randomHex];
+            }
+        }
+    }
+
+    // --- PLAYER SEARCH FUNCTION ---
+    function handlePlayerSearch() {
+        // Find hexes that haven't been searched by the player yet
+        const newSearches = selectedGroup.filter(selected => 
+            !friendlySearchedHexes.some(searched => searched.q === selected.q && searched.r === selected.r)
+        );
+        
+        // Push to FRIENDLY searched list
+        friendlySearchedHexes = [...friendlySearchedHexes, ...newSearches];
+        
+        selectedGroup = []; // Clear selection after activating
+    }
 </script>
 
 <div class="layout-container">
@@ -118,14 +150,21 @@
         bind:rotation
         {fleetSelections} 
         onConfirm={confirmFleets}
+        onSearch={handlePlayerSearch}
     />
 
     <div class="map-area"
         role="application"
-        oncontextmenu={(e) => {
-            if (targetingMode === 'directional') {e.preventDefault();rotation++;}
-        }}>
-        <StatusBar {health} {fuel} />
+        oncontextmenu={(e) => {if (targetingMode === 'directional') {e.preventDefault();rotation++;}}}
+        >
+
+        <StatusBar 
+            bind:health 
+            bind:fuel 
+            bind:currentTurn
+            bind:isRevealed
+            onTestSearch={testSearchHex} 
+        />
 
         <svg viewBox="0 0 1000 600" class="tactical-grid">
             <defs>
@@ -146,15 +185,18 @@
                     <pattern id={`pattern-${tile.col}-${tile.row}`} patternUnits="objectBoundingBox" width="1" height="1">
                         <image href={`/${tile.img}`} x="0" y="0" width="10%" height="15%" preserveAspectRatio="xMidYMid slice"/>
                     </pattern>
-            {/each}
+                {/each}
             </defs>
 
-            <g transform="translate(55, 10)"> 
+            <g transform="translate(60, 50)"> 
                 {#each grid as hex}
                     {@const config = specialTiles.find(t => t.col === hex.col && t.row === hex.row)}
                     {@const isFleet = fleetSelections.some(f => f.q === hex.q && f.r === hex.r)}
+                    
+                    {@const isFriendlySearched = friendlySearchedHexes.some(s => s.q === hex.q && s.r === hex.r)}
+                    {@const isEnemySearched = enemySearchedHexes.some(s => s.q === hex.q && s.r === hex.r)}
+                    
                     {@const pointsStr = hex.corners.map(({ x, y }) => `${x},${y}`).join(' ')}
-
                     <g 
                         class="hex-cell"
                         role="button"
@@ -171,6 +213,19 @@
                             stroke={isFleet ? "#4ade80" : "black"} 
                             stroke-width={isFleet ? 2 : 0.5}
                         />
+                        
+                        {#if isFleet && isRevealed}
+                            <polygon
+                                points={pointsStr}
+                                fill="rgba(226, 74, 74, 0.3)"
+                                stroke="#e24a4a"
+                                stroke-width="4"
+                                stroke-dasharray="8,4"
+                                pointer-events="none"
+                            >
+                                <animate attributeName="opacity" values="0.3;1;0.3" dur="1.5s" repeatCount="indefinite" />
+                            </polygon>
+                        {/if}
 
                         <polygon
                             points={pointsStr}
@@ -178,6 +233,28 @@
                             style="opacity: {isFleet ? 1 : 0}; transition: opacity 0.2s;"
                             pointer-events="none"
                         />
+
+                        /*Update if a specific cell is searched*/
+                       {#if isFriendlySearched}
+                            <g pointer-events="none" opacity="1">
+                                <circle cx={hex.x} cy={hex.y} r="12" fill="none" stroke="#22c55e" stroke-width="3" />
+                                <circle cx={hex.x} cy={hex.y} r="3" fill="#22c55e" />
+                                <line x1={hex.x - 20} y1={hex.y} x2={hex.x + 20} y2={hex.y} stroke="#22c55e" stroke-width="1.5" stroke-dasharray="4,4" />
+                                <line x1={hex.x} y1={hex.y - 20} x2={hex.x} y2={hex.y + 20} stroke="#22c55e" stroke-width="1.5" stroke-dasharray="4,4" />
+                            </g>
+                        {/if}
+
+                        {#if isEnemySearched}
+                            <g pointer-events="none" opacity="1">
+                                <polygon 
+                                    points="{hex.x},{hex.y - 15} {hex.x + 15},{hex.y} {hex.x},{hex.y + 15} {hex.x - 15},{hex.y}" 
+                                    fill="rgba(234, 179, 8, 0.2)" 
+                                    stroke="#e24a4a" 
+                                    stroke-width="2" 
+                                />
+                                <circle cx={hex.x} cy={hex.y} r="4" fill="#e24a4a" />
+                            </g>
+                        {/if}
                     </g>
                 {/each}
 
@@ -212,7 +289,12 @@
 <style>
     .layout-container { display: flex; width: 100vw; height: 100vh; overflow: hidden; background: #0b0e14; }
     .map-area { flex-grow: 1; display: flex; justify-content: center; align-items: center; position: relative; }
-    .tactical-grid { width: 80%; height: 80%; filter: drop-shadow(0 0 20px rgba(0,0,0,0.5)); }
+    .tactical-grid { 
+        width: 90%; 
+        height: 90%; 
+        max-width: 900px; /* Hard cap so the hexes never look ridiculously huge */
+        filter: drop-shadow(0 0 20px rgba(0,0,0,0.5));
+    }
     .cursor-warning {
         position: fixed; pointer-events: none; color: #e45c5c; font-family: 'Chakra Petch', sans-serif;
         font-size: 24px; font-weight: 600; text-shadow: 0 0 10px black; animation: popAndFade 1.5s forwards;

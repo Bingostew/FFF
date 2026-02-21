@@ -17,7 +17,8 @@
         isConfirmed = $bindable(false), 
         rotation = $bindable(0),
         fleetSelections = [], 
-        onConfirm = () => {} 
+        onConfirm = () => {},
+        onSearch = () => {} 
     } = $props();
 
     // Simulates a D6 dice roll.
@@ -25,6 +26,8 @@
         if (isRolling) return; 
 
         isRolling = true;
+
+        onSearch()
         const finalResult1 = Math.floor(Math.random() * 6) + 1;
         const finalResult2 = Math.floor(Math.random() * 6) + 1;
         
@@ -71,7 +74,7 @@
         <button 
             class="button" 
             disabled={fleetSelections.length !== 2}
-            onclick={onConfirm}
+            onclick={() => onConfirm()}
             onmouseenter={() => $isHovering = true} 
             onmouseleave={() => $isHovering = false}
         >
@@ -118,14 +121,14 @@
 
             <div class="button-group">
                 <button 
-                    style="margin-top: 20px; border-color: #e24a4a; color: #e24a4a;"
+                    style="margin-top: 10px; border-color: #e24a4a; color: #e24a4a;"
                     onclick={() => {/*isSubmitted = true;*/ diceRoll()}}   
                     disabled={isRolling}                 
                     onmouseenter={() => $isHovering = true} 
                     onmouseleave={() => $isHovering = false}
                 >
                 <span class="btn-text">ACTIVATE</span>
-                    <span class="btn-sub">CONFIRM SELECTION AND ROLL</span>
+                    <span class="btn-sub">CONFIRM AND ROLL</span>
                 </button>
 
                 {#if currentRollDisplay1 !== null && currentRollDisplay2 !== null}
@@ -143,34 +146,36 @@
 {/if}
 
 <style>
-    /*Sidebar button display*/
     .sidebar_targeting {
-        width: 13vw; 
-        padding: 1vw; 
+        width: clamp(200px, 15vw, 300px); /* Scalable width */
+        height: 100%;
+        padding: 2vw; 
         display: flex; 
         flex-direction: column; 
-        gap: 0.5vh; 
+        gap: clamp(8px, 1.5vh, 20px);
         z-index: 10;
+        background: rgba(10, 15, 30, 0.95);
+        border-right: 1px solid rgba(59, 130, 246, 0.3);
+        overflow-y: auto;
     }
+    
     .panel-header {
         font-family: 'Chakra Petch', sans-serif; 
         color: #abbbd1; 
-        font-size: 3vh;
+        font-size: clamp(1.2rem, 3vh, 1.8rem);
         border-bottom: 1px solid rgba(171, 187, 209, 0.3); 
         padding-bottom: 10px; 
         letter-spacing: 2px;
     }
-    .button-group { 
-        display: flex; 
-        flex-direction: column; 
-        gap: 1vh; 
-    }
+    
+    .button-group { display: flex; flex-direction: column; gap: 10px; }
+    
     button {
         font-family: 'Chakra Petch', sans-serif; 
         color: #abbbd1; 
         background: rgba(0, 0, 0, 0.8);
         border: 1px solid rgba(59, 130, 246, 0.3); 
-        padding: 15px 20px; 
+        padding: clamp(10px, 2vh, 15px); 
         cursor: none;
         text-align: left; 
         transition: all 0.2s ease;
@@ -179,37 +184,16 @@
         flex-direction: column; 
         width: 100%;
     }
-    button:hover:not(:disabled) { 
-        background: rgba(59, 130, 246, 0.2); 
-        color: #fff; 
-        border-color: #3b82f6; 
-    }
-    button.active { 
-        background: rgba(59, 130, 246, 0.4); 
-        border-color: #3b82f6; 
-        color: white; 
-        transform: translateX(5px); 
-    }
-    button:disabled { 
-        opacity: 0.5; 
-        cursor: not-allowed; 
-        filter: grayscale(1); 
-    }
-    .btn-text { 
-        font-size: 2.5vh; 
-        font-weight: 700; 
-    }
-    .btn-sub { 
-        font-size: 1.4vh; 
-        opacity: 0.7; 
-    }
-    .btn-hint { 
-        font-size: 1.2vh; 
-        color: #555; 
-        margin-top: 4px; 
-    }
+    
+    button:hover:not(:disabled) { background: rgba(59, 130, 246, 0.2); color: #fff; border-color: #3b82f6; }
+    button.active { background: rgba(59, 130, 246, 0.4); border-color: #3b82f6; color: white; transform: translateX(5px); }
+    button:disabled { opacity: 0.5; cursor: not-allowed; filter: grayscale(1); }
+    
+    .btn-text { font-size: clamp(1rem, 2.5vh, 1.5rem); font-weight: 700; }
+    .btn-sub { font-size: clamp(0.7rem, 1.4vh, 0.9rem); opacity: 0.7; }
+    .btn-hint { font-size: 0.7rem; color: #555; margin-top: 4px; }
 
-    /* Dice rolling display*/
+    /* Dice rolling display */
     .roll-display {
         display: flex;
         flex-direction: column;
@@ -217,28 +201,31 @@
         justify-content: center;
         background: rgba(0, 0, 0, 0.8);
         border: 1px solid #22c55e;
-        padding: 10px;
+        padding: clamp(5px, 1.5vh, 15px);
         margin-top: 10px;
         clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
         transition: all 0.2s ease;
     }
-    .roll-label {
-        font-family: 'Chakra Petch', sans-serif;
-        font-size: 1.4vh;
-        color: #abbbd1;
-        letter-spacing: 2px;
+    
+    .roll-label { 
+        font-family: 'Chakra Petch', sans-serif; 
+        font-size: clamp(0.7rem, 1.4vh, 1rem); 
+        color: #abbbd1; 
+        letter-spacing: 2px; 
+        margin-bottom: 5px;
+    }    
+    .roll-number { 
+        font-family: 'Chakra Petch', sans-serif; 
+        /* FIX: Slightly scaled down to accommodate horizontal layout */
+        font-size: clamp(2.5rem, 6vh, 4.5rem); 
+        font-weight: 700; 
+        color: #22c55e; 
     }
-    .roll-number {
-        font-family: 'Chakra Petch', sans-serif;
-        font-size: 8vh;
-        font-weight: 700;
-        color: #22c55e;
-    }
-    /* Adds a subtle pulse effect while the numbers are rapidly changing */
-    .is-rolling .roll-number {
-        color: #e24a4a;
-        opacity: 0.8;
-        transform: scale(1.5);
-        transition: transform 0.10s ease;
+    
+    .is-rolling .roll-number { 
+        color: #e24a4a; 
+        opacity: 0.8; 
+        transform: scale(1.2); 
+        transition: transform 0.10s ease; 
     }
 </style>

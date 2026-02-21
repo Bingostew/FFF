@@ -2,7 +2,8 @@
   import { isHovering } from '$lib/store'; // Import shared state
   import { io } from "socket.io-client";
   import { goto } from '$app/navigation';
-  const socket = io("http://localhost:3000");
+  //Temporary comment out backend
+  //const socket = io("http://localhost:3000");
 
   let showMultiplayerModal = false; //Toggles multiplayer modal.
   let showSingleplayerModal = false; //Toggles singleplayer modal.
@@ -82,7 +83,7 @@
   }
   
   function connect(){
-    socket.emit('join_game', {lobbyCode, nickname});
+    //socket.emit('join_game', {lobbyCode, nickname});
     goto('/multiplayer');
   }
 
@@ -103,31 +104,37 @@
   <ul class="menu-links">
     <li>
       <a href="/singleplayer"
-        onclick={openSingleplayerModal} 
+        draggable="false"
+        onclick={(e) => { openSingleplayerModal(e); $isHovering = false; }}
         onmouseenter={() => $isHovering = true}
         onmouseleave={() => $isHovering = false}>
         SINGLEPLAYER</a></li>
     <li>
-      <a href="/multiplayer" 
-        onclick={openMultiplayerModal} 
+      <a href="/multiplayer"
+        draggable="false" 
+        onclick={(e) => { openMultiplayerModal(e); $isHovering = false; }} 
         onmouseenter={() => $isHovering = true} 
         onmouseleave={() => $isHovering = false}>
         MULTIPLAYER
       </a></li>    
     <li>
-      <a href="/tutorial" 
+      <a href="/tutorial"
+        draggable="false" 
+        onclick={() => $isHovering = false}
         onmouseenter={() => $isHovering = true} 
         onmouseleave={() => $isHovering = false}>
         TUTORIAL</a></li>
     <li>
-      <a href="/credits" 
+      <a href="/credits"
+        draggable="false" 
+        onclick={() => $isHovering = false}
         onmouseenter={() => $isHovering = true} 
         onmouseleave={() => $isHovering = false}>
         CREDITS</a></li>
   </ul>
 
 
-  {#if showSingleplayerModal}
+{#if showSingleplayerModal}
     <div class="modal-backdrop">
       
       <div class="modal-content" role="document">
@@ -140,30 +147,47 @@
             bind:value={nickname} 
             class="tactical-input"
             maxlength="18"
+            spellcheck="false"
+            autocomplete="off"
+            autocorrect="off"
+            autocapitalize="off"
           />
 
-          <div 
-              class="button-group"
-              role="group"
-              onmouseenter={() => $isHovering = true}
-              onmouseleave={() => $isHovering = false}
-          >
-              <button class="action-btn" onclick={confirmName}>CONFIRM</button>
-              <button class="close-btn" onclick={() => toggleModal('close')}>CANCEL</button>
+          <div class="button-group" role="group">
+              <button 
+                  class="action-btn" 
+                  draggable="false"
+                  onclick={() => { confirmName(); $isHovering = false; }}
+                  onmouseenter={() => $isHovering = true}
+                  onmouseleave={() => $isHovering = false}
+              >CONFIRM</button>
+              
+              <button 
+                  class="close-btn" 
+                  onclick={() => { toggleModal('close'); $isHovering = false; }}
+                  onmouseenter={() => $isHovering = true}
+                  onmouseleave={() => $isHovering = false}
+              >CANCEL</button>
           </div>
 
         {:else if modalStep === 1}
           <h2>WELCOME, <span class="highlight">{nickname}</span></h2>
           
-          <div 
-              class="vertical-stack"
-              role="group"
+          <div class="vertical-stack" role="group">
+            <button 
+                class="action-btn wide" 
+                onclick={() => { goToGame(); $isHovering = false; }}
+                onmouseenter={() => $isHovering = true}
+                onmouseleave={() => $isHovering = false}
+            >START GAME</button>
+          </div>
+          
+          <button 
+              class="close-btn" 
+              onclick={() => { goBack(); $isHovering = false; }} 
               onmouseenter={() => $isHovering = true}
               onmouseleave={() => $isHovering = false}
-          >
-            <button class="action-btn wide" onclick={goToGame}>START GAME</button>
-          </div>
-          <button class="close-btn" onclick={goBack}>&lt; BACK</button>
+          >&lt; BACK</button>
         {/if}
 
       </div>
@@ -183,49 +207,105 @@
             bind:value={nickname} 
             class="tactical-input"
             maxlength="12"
+            spellcheck="false"
+            autocomplete="off"
+            autocorrect="off"
+            autocapitalize="off"
           />
 
-         <div 
-              class="button-group"
-              role="group"
-              onmouseenter={() => $isHovering = true}
-              onmouseleave={() => $isHovering = false}
-          >
-            <button class="action-btn" onclick={confirmName}>CONFIRM</button>
-            <button class="close-btn" onclick={() => toggleModal('close')}>CANCEL</button>
+          <div class="button-group" role="group">
+            <button 
+                class="action-btn" 
+                draggable="false"
+                onclick={() => { confirmName(); $isHovering = false; }}
+                onmouseenter={() => $isHovering = true}
+                onmouseleave={() => $isHovering = false}
+            >CONFIRM</button>
+            
+            <button 
+                class="close-btn" 
+                onclick={() => { toggleModal('close'); $isHovering = false; }}
+                onmouseenter={() => $isHovering = true}
+                onmouseleave={() => $isHovering = false}
+            >CANCEL</button>
           </div>
 
         {:else if modalStep === 1}
           <h2>WELCOME, <span class="highlight">{nickname}</span></h2>
           
-          <div 
-            class="vertical-stack"
-            role="group"
-            onmouseenter={() => $isHovering = true}
-            onmouseleave={() => $isHovering = false}
-          >
-            <button class="action-btn wide" onclick={goToCreate}>CREATE LOBBY</button>
-            <button class="action-btn wide" onclick={goToJoin}>JOIN LOBBY</button>
+          <div class="vertical-stack" role="group">
+            <button 
+                class="action-btn wide" 
+                onclick={() => { goToCreate(); $isHovering = false; }}
+                onmouseenter={() => $isHovering = true}
+                onmouseleave={() => $isHovering = false}
+            >CREATE LOBBY</button>
+            
+            <button 
+                class="action-btn wide" 
+                onclick={() => { goToJoin(); $isHovering = false; }}
+                onmouseenter={() => $isHovering = true}
+                onmouseleave={() => $isHovering = false}
+            >JOIN LOBBY</button>
           </div>
           
-          <button class="close-btn" onclick={goBack}>&lt; BACK</button>
+          <button 
+              class="close-btn" 
+              onclick={() => { goBack(); $isHovering = false; }}
+              onmouseenter={() => $isHovering = true}
+              onmouseleave={() => $isHovering = false}
+          >&lt; BACK</button>
         
         {:else if modalStep === 2}
           <h2>LOBBY CREATED</h2>
           <p class="status-text">{lobbyCode}</p>
           
-          <div class="button-group">
-            <button class="close-btn" onclick={() => toggleModal('close')}>CANCEL</button>
-            <button class="close-btn" onclick={goBack}>BACK</button>
+          <div class="button-group" role="group">
+            <button 
+                class="close-btn" 
+                draggable="false"
+                onclick={() => { toggleModal('close'); $isHovering = false; }}
+                onmouseenter={() => $isHovering = true}
+                onmouseleave={() => $isHovering = false}
+            >CANCEL</button>
+            
+            <button 
+                class="close-btn" 
+                onclick={() => { goBack(); $isHovering = false; }}
+                onmouseenter={() => $isHovering = true}
+                onmouseleave={() => $isHovering = false}
+            >BACK</button>
           </div>
         
         {:else if modalStep === 3}
           <h2>JOIN GAME</h2>
-          <input type="text" placeholder="ENTER LOBBY CODE..." bind:value={lobbyCode} class="tactical-input" maxlength="6"/>
+          <input 
+            type="text" 
+            placeholder="ENTER LOBBY CODE..." 
+            bind:value={lobbyCode} 
+            class="tactical-input" 
+            maxlength="6"
+            spellcheck="false"
+            autocomplete="off"
+            autocorrect="off"
+            autocapitalize="off"
+          />
           
-          <div class="button-group">
-            <button class="action-btn" onclick={connect}>CONNECT</button>
-            <button class="close-btn" onclick={goBack}>BACK</button>
+          <div class="button-group" role="group">
+            <button 
+                class="action-btn" 
+                draggable="false"
+                onclick={() => { connect(); $isHovering = false; }}
+                onmouseenter={() => $isHovering = true}
+                onmouseleave={() => $isHovering = false}
+            >CONNECT</button>
+            
+            <button 
+                class="close-btn" 
+                onclick={() => { goBack(); $isHovering = false; }}
+                onmouseenter={() => $isHovering = true}
+                onmouseleave={() => $isHovering = false}
+            >BACK</button>
           </div>
         {/if}
 
@@ -382,6 +462,8 @@
     display: flex;
     flex-direction: column;
     justify-content: flex-start;
+    user-select: none; 
+    -webkit-user-select: none;
   }
 
   /* LOGO STYLES */

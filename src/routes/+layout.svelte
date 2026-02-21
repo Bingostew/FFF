@@ -39,6 +39,8 @@
 {#if $page.url.pathname !== '/'}
   <a href="/" 
      class="return-btn"
+     draggable="false"
+     onclick={() => $isHovering = false}
      onmouseenter={() => $isHovering = true} 
      onmouseleave={() => $isHovering = false}
   >
