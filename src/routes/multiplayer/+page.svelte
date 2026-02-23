@@ -1,5 +1,5 @@
 <script>
-    import HexMap from '$lib/+map.svelte';
+    import HexMap from '$lib/+map Multi.svelte';
 </script>
 
 <div class="page-content">

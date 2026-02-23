@@ -1,62 +1,60 @@
+<!--SINGLEPLAYER PAGE-->
+<!--SCRIPTS FOR SINGEPLAYER PAGE-->
 <script>
     import HexMap from '$lib/+map.svelte';
 </script>
 
+<!--SINGLEPLAYER HTML-->
+<!--Possibly consier adding more features to the top part of the page-->
 <div class="page-content">
-  <h1 class="glitch-text">FIND, FIX, & FINISH</h1>
-  
-  <div class="map-container">
-    <HexMap />
-  </div>
+    <h1 class="glitch-text">FIND, FIX, & FINISH</h1>
+    
+    <div class="map-container">
+        <HexMap />
+    </div>
 </div>
 
+<!--SINGLEPLAYER HTML APPEARANCE-->
 <style>
-  .page-content {
-    display: flex;
-    flex-direction: column;
-    align-items: center; /* This horizontally centers the glitch text and the map container */
-    
-    /* Use clamp for padding so it doesn't push the map off-screen on short monitors */
-    padding-top: clamp(10px, 2vh, 40px);
-    
-    width: 100vw;
-    height: 100vh;
-    box-sizing: border-box;
-    overflow: hidden; /* Prevents scrollbars from appearing */
-    
-    user-select: none; 
-    -webkit-user-select: none; 
-  }
+    /*Overall layout specification of the page*/
+    .page-content {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding-top: clamp(10px, 2vh, 40px);
+        width: 100vw;
+        height: 100vh;
+        box-sizing: border-box;
+        overflow: hidden;
+        user-select: none; 
+        -webkit-user-select: none; 
+    }
 
-  .map-container {
-    /* 1. Fluid scaling for the container */
-    width: clamp(300px, 95vw, 1100px);   
-    height: clamp(400px, 80vh, 800px);  
-    
-    /* 2. Center the <HexMap /> INSIDE this box */
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    
-    /* 3. Tactical Themeing */
-    background: rgba(10, 15, 30, 0.6); /* Slight dark blue/black tint */
-    border: 1px solid rgba(59, 130, 246, 0.4); /* Faint blue border instead of #333 */
-    box-shadow: 0 0 30px rgba(0, 0, 0, 0.8), 0 0 15px rgba(59, 130, 246, 0.1) inset;
-    
-    border-radius: 8px; /* Optional: slight rounding for a polished screen look */
-    overflow: hidden; /* Ensures the hex map doesn't bleed out of the box */
-  }
+    /*How the container of the map, sidebar, and statusbar looks*/
+    .map-container {
+        width: clamp(300px, 95vw, 1100px);   
+        height: clamp(400px, 80vh, 800px);  
+        
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        
+        background: rgba(10, 15, 30, 0.6);
+        border: 1px solid rgba(59, 130, 246, 0.4); 
+        box-shadow: 0 0 30px rgba(0, 0, 0, 0.8), 0 0 15px rgba(59, 130, 246, 0.1) inset;
+        border-radius: 8px;
+        
+        overflow: hidden; 
+    }
 
-  .glitch-text {
-    font-family: 'Chakra Petch', sans-serif;
-    
-    /* Replaced rigid 7vh with fluid clamp so it scales well on all devices */
-    font-size: clamp(2rem, 3vw, 4.5rem); 
-    
-    color: #3b82f6;
-    margin-bottom: clamp(10px, 2vh, 30px);
-    text-shadow: 0 0 10px rgba(59, 130, 246, 0.6); /* Adds a nice glow */
-    text-align: center;
-    letter-spacing: 2px;
-  }
+    /*Appearance of the logo at the top*/
+    .glitch-text {
+        font-family: 'Chakra Petch', sans-serif;     
+        font-size: clamp(2rem, 3vw, 4.5rem); 
+        color: #3b82f6;
+        margin-bottom: clamp(10px, 2vh, 30px);
+        text-shadow: 0 0 10px rgba(59, 130, 246, 0.6); 
+        text-align: center;
+        letter-spacing: 2px;
+    }
 </style>
