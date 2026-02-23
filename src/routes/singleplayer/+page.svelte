@@ -30,8 +30,8 @@
 
   .map-container {
     /* 1. Fluid scaling for the container */
-    width: clamp(300px, 75vw, 1100px);   
-    height: clamp(400px, 65vh, 800px);  
+    width: clamp(300px, 95vw, 1100px);   
+    height: clamp(400px, 80vh, 800px);  
     
     /* 2. Center the <HexMap /> INSIDE this box */
     display: flex;

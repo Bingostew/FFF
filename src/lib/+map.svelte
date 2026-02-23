@@ -27,6 +27,8 @@
     let friendlySearchedHexes = $state([]);
     let enemySearchedHexes = $state([]);    
     let isRevealed = $state(false);
+    let isEnemyTurn = $state(false);
+
 
     const specialTiles = [
         { col: 1, row: 2, img: 'single_palm.jpg' },
@@ -129,6 +131,58 @@
         }
     }
 
+    function triggerEnemyAI() {
+        if (gridHexes.length === 0) return;
+
+        // 1. Randomly decide the attack pattern and rotation
+        const modes = ['focus', 'directional', 'area'];
+        const randomMode = modes[Math.floor(Math.random() * modes.length)];
+        const randomRotation = Math.floor(Math.random() * 6);
+        
+        // 2. Pick a random hex as the epicenter of the attack
+        const randomHex = gridHexes[Math.floor(Math.random() * gridHexes.length)];
+        
+        // 3. Use your existing utility to calculate the blast radius!
+        const targetHexes = getTargetHexes(randomHex, randomMode, randomRotation, gridHexes);
+        
+        // 4. Filter out hexes the enemy has already searched
+        const newSearches = targetHexes.filter(target => 
+            !enemySearchedHexes.some(searched => searched.q === target.q && searched.r === target.r)
+        );
+        
+        // 5. Paint the new amber warning diamonds on the map
+        enemySearchedHexes = [...enemySearchedHexes, ...newSearches];
+    }
+
+    function executeEnemyTurn() {
+        isEnemyTurn = true; // Tells the Status Bar to turn RED
+
+        setTimeout(() => {
+            if (gridHexes.length > 0) {
+                // 1. Enemy randomly picks focus, directional, or area
+                const modes = ['focus', 'directional', 'area'];
+                const randomMode = modes[Math.floor(Math.random() * modes.length)];
+                const randomRotation = Math.floor(Math.random() * 6);
+                
+                // 2. Picks a random epicenter
+                const randomHex = gridHexes[Math.floor(Math.random() * gridHexes.length)];
+                
+                // 3. Calculates the blast zone
+                const targetHexes = getTargetHexes(randomHex, randomMode, randomRotation, gridHexes);
+                
+                // 4. Paints the map with amber warning diamonds
+                const newSearches = targetHexes.filter(target => 
+                    !enemySearchedHexes.some(searched => searched.q === target.q && searched.r === target.r)
+                );
+                enemySearchedHexes = [...enemySearchedHexes, ...newSearches];
+            }
+            
+            // 5. End the turn, hand control back to the player
+            currentTurn += 1;
+            isEnemyTurn = false; // Turns the Status Bar back to BLUE
+        }, 3000); // 3-second suspense timer!
+    }
+
     // --- PLAYER SEARCH FUNCTION ---
     function handlePlayerSearch() {
         // Find hexes that haven't been searched by the player yet
@@ -148,9 +202,11 @@
         bind:targetingMode 
         bind:isConfirmed 
         bind:rotation
+        bind:isEnemyTurn
         {fleetSelections} 
         onConfirm={confirmFleets}
-        onSearch={handlePlayerSearch}
+        onSearch={handlePlayerSearch} 
+        onTurnEnd={executeEnemyTurn} 
     />
 
     <div class="map-area"
@@ -158,15 +214,7 @@
         oncontextmenu={(e) => {if (targetingMode === 'directional') {e.preventDefault();rotation++;}}}
         >
 
-        <StatusBar 
-            bind:health 
-            bind:fuel 
-            bind:currentTurn
-            bind:isRevealed
-            onTestSearch={testSearchHex} 
-        />
-
-        <svg viewBox="0 0 1000 600" class="tactical-grid">
+        <svg viewBox="-10 -10 600 620" class="tactical-grid" preserveAspectRatio="xMidYMid meet">
             <defs>
                 <pattern id="water-pattern" x="0" y="0" width="200" height="200" patternUnits="userSpaceOnUse">
                     <image href="/water2.jpg" x="0" y="0" width="200" height="200" preserveAspectRatio="xMidYMid slice"/>
@@ -182,13 +230,26 @@
                 </pattern>
 
                 {#each specialTiles as tile}
-                    <pattern id={`pattern-${tile.col}-${tile.row}`} patternUnits="objectBoundingBox" width="1" height="1">
-                        <image href={`/${tile.img}`} x="0" y="0" width="10%" height="15%" preserveAspectRatio="xMidYMid slice"/>
+                    <pattern 
+                        id={`pattern-${tile.col}-${tile.row}`} 
+                        patternUnits="objectBoundingBox" 
+                        patternContentUnits="objectBoundingBox" 
+                        width="1" 
+                        height="1"
+                    >
+                        <image 
+                            href={`/${tile.img}`} 
+                            x="0" 
+                            y="0" 
+                            width="1" 
+                            height="1" 
+                            preserveAspectRatio="xMidYMid slice"
+                        />
                     </pattern>
-                {/each}
+                {/each}    
             </defs>
 
-            <g transform="translate(60, 50)"> 
+            <g transform="translate(30, 40)"> 
                 {#each grid as hex}
                     {@const config = specialTiles.find(t => t.col === hex.col && t.row === hex.row)}
                     {@const isFleet = fleetSelections.some(f => f.q === hex.q && f.r === hex.r)}
@@ -284,22 +345,49 @@
             {/key}
         {/if}
     </div>
+
+    <StatusBar 
+        bind:health 
+        bind:fuel 
+        bind:currentTurn
+        bind:isRevealed
+        bind:isEnemyTurn
+    />
+
+    
 </div>
 
 <style>
-    .layout-container { display: flex; width: 100vw; height: 100vh; overflow: hidden; background: #0b0e14; }
-    .map-area { flex-grow: 1; display: flex; justify-content: center; align-items: center; position: relative; }
-    .tactical-grid { 
-        width: 90%; 
-        height: 90%; 
-        max-width: 900px; /* Hard cap so the hexes never look ridiculously huge */
-        filter: drop-shadow(0 0 20px rgba(0,0,0,0.5));
+    .layout-container { 
+        display: flex; 
+        flex-direction: row; /* Forces the 3 panes side-by-side */
+        width: 100%; 
+        height: 100%; 
+        overflow: hidden; 
+        background: #0b0e14; 
     }
+    
+    .map-area { 
+        flex: 1; /* Tells the map to dynamically stretch/shrink to fill the middle */
+        display: flex; 
+        justify-content: center; 
+        align-items: center; 
+        position: relative; 
+        padding: 1vw; 
+        min-width: 0; /* Critical flexbox rule to prevent the SVG from blowing out the layout */
+        min-height: 0;
+    }
+    
+    .tactical-grid { 
+        width: 100%; 
+        height: 100%; 
+        filter: drop-shadow(0 0 20px rgba(0,0,0,0.5)); 
+    }
+
     .cursor-warning {
         position: fixed; pointer-events: none; color: #e45c5c; font-family: 'Chakra Petch', sans-serif;
         font-size: 24px; font-weight: 600; text-shadow: 0 0 10px black; animation: popAndFade 1.5s forwards;
     }
-    
 
     @keyframes popAndFade {
         0% { opacity: 0; transform: translate(15px, 0) scale(0.5); }

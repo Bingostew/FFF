@@ -16,22 +16,23 @@
         targetingMode = $bindable('focus'), 
         isConfirmed = $bindable(false), 
         rotation = $bindable(0),
+        isEnemyTurn = $bindable(false), // <-- Add this
         fleetSelections = [], 
         onConfirm = () => {},
-        onSearch = () => {} 
+        onSearch = () => {},
+        onTurnEnd = () => {} // <-- Add this
     } = $props();
 
     // Simulates a D6 dice roll.
     function diceRoll() {
-        if (isRolling) return; 
+        if (isRolling || isEnemyTurn) return; 
 
         isRolling = true;
+        onSearch(); // 1. Instantly paint the player's blue radar crosshairs
 
-        onSearch()
         const finalResult1 = Math.floor(Math.random() * 6) + 1;
         const finalResult2 = Math.floor(Math.random() * 6) + 1;
         
-        // Animate BOTH dice independently
         const interval = setInterval(() => {
             currentRollDisplay1 = Math.floor(Math.random() * 6) + 1;
             currentRollDisplay2 = Math.floor(Math.random() * 6) + 1;
@@ -39,12 +40,13 @@
 
         setTimeout(async () => {
             clearInterval(interval);
-            // Set BOTH final numbers
             currentRollDisplay1 = finalResult1;
             currentRollDisplay2 = finalResult2;
             isRolling = false;
 
-            // Send BOTH to your server terminal
+            // 2. DICE FINISHED. KICK OFF THE ENEMY TURN!
+            onTurnEnd(); 
+
             try {
                 await fetch('/api/roll', {
                     method: 'POST',
@@ -122,8 +124,8 @@
             <div class="button-group">
                 <button 
                     style="margin-top: 10px; border-color: #e24a4a; color: #e24a4a;"
-                    onclick={() => {/*isSubmitted = true;*/ diceRoll()}}   
-                    disabled={isRolling}                 
+                    onclick={() => diceRoll()}   
+                    disabled={isRolling || isEnemyTurn}                
                     onmouseenter={() => $isHovering = true} 
                     onmouseleave={() => $isHovering = false}
                 >
@@ -147,16 +149,23 @@
 
 <style>
     .sidebar_targeting {
-        width: clamp(200px, 15vw, 300px); /* Scalable width */
+        /* Sizing and Flexbox rules matched to Status Bar */
         height: 100%;
-        padding: 2vw; 
-        display: flex; 
-        flex-direction: column; 
-        gap: clamp(8px, 1.5vh, 20px);
-        z-index: 10;
+        width: clamp(200px, 15vw, 300px); 
+        padding: clamp(15px, 2vw, 25px); 
+        box-sizing: border-box; 
+        
+        /* Tactical Theme */
         background: rgba(10, 15, 30, 0.95);
         border-right: 1px solid rgba(59, 130, 246, 0.3);
+        
+        display: flex; 
+        flex-direction: column; 
+        gap: clamp(10px, 2vh, 20px);
+        z-index: 10;
+        
         overflow-y: auto;
+        overflow-x: hidden;
     }
     
     .panel-header {
@@ -227,5 +236,29 @@
         opacity: 0.8; 
         transform: scale(1.2); 
         transition: transform 0.10s ease; 
+    }
+
+    .sidebar_targeting {
+        scrollbar-width: thin;
+        scrollbar-color: rgba(59, 130, 246, 0.6) rgba(10, 15, 30, 0.5);
+    }
+
+    /* For Chrome, Edge, and Safari */
+    ::-webkit-scrollbar {
+        width: 6px; /* Super thin, sleek profile */
+    }
+
+    ::-webkit-scrollbar-track {
+        background: rgba(10, 15, 30, 0.5); /* Blends into your panel background */
+        border-left: 1px solid rgba(59, 130, 246, 0.1); /* Faint track line */
+    }
+
+    ::-webkit-scrollbar-thumb {
+        background: rgba(59, 130, 246, 0.5); /* Tactical blue */
+        border-radius: 0px; /* Square edges for that blocky, HUD feel */
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+        background: rgba(59, 130, 246, 0.9); /* Lights up when you grab it */
     }
 </style>
