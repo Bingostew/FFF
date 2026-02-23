@@ -48,6 +48,11 @@
   function openMultiplayerModal(event) {
     event.preventDefault();
     toggleModal('multiplayer'); //Toggles multiplayer modal to switch on. 
+    $socket.on("room_update", ({players}) => {
+      if(Object.keys(players).length == 2){
+        goto("/multiplayer");
+      }
+    });
   }
 
   /**
@@ -70,7 +75,7 @@
       const data = await res.json();
       lobbyCode = data.gameId;
 
-       gameId.set(lobbyCode);
+      gameId.set(lobbyCode);
       $socket.emit('join_game', {gameId: lobbyCode, playerName: nickname});
     } catch (e) {
       console.error("Failed to create lobby", e);
@@ -91,8 +96,6 @@
     $socket.onAny((eventName, ...args) => {
       alert(`[SOCKET INBOUND] Event: ${eventName} and ${args}`);
     });
-
-    
   }
 
   function goBack() {

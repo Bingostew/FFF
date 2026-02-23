@@ -10,8 +10,7 @@
     const Tile = defineHex({ dimensions: 50, origin: 'topLeft', orientation: Orientation.FLAT, offset: 1 });
     const grid = new Grid(Tile, rectangle({ width: 7, height: 6 }));
     const gridHexes = [...grid];
-    const isMyTurn = $derived($activePlayerId === $socket?.id);
-    // 2. Global State
+    const isMyTurn = $derived(!isConfirmed || ($activePlayerId === $socket?.id));  
     let hoveredHex = $state(null);
     let selectedGroup = $state([]);
     let targetingMode = $state('focus');
@@ -36,6 +35,9 @@
 
     // Interaction Handlers
     function handleHexClick(event, hex) {
+
+        if (isConfirmed && !isMyTurn) return;
+
         if (!isConfirmed) {
             const isSpecial = specialTiles.some(t => t.col === hex.col && t.row === hex.row);
 
@@ -103,12 +105,6 @@
 
     $effect(() => {
         if ($socket) {
-            $socket.on("room_update", ({players}) => {
-                if(Object.keys(players).length === 2){
-                    goto('/multiplayer');
-                }
-            });
-
             // Listen for the game starting
             $socket.on('game_start', ({ activePlayer }) => {
                 activePlayerId.set(activePlayer);
@@ -122,6 +118,27 @@
                 activePlayerId.set(activePlayer);
             });
 
+            $socket.on('die_result', ({playerId,number}) =>{
+                if(isMyTurn){
+                    let positionsToSend = [];
+
+                    if (targetingMode === 'directional') {
+                        positionsToSend = highlightedHexes.map(h => ({ q: h.q, r: h.r }));
+                        
+                    } else {
+                        positionsToSend = selectedGroup.map(h => ({ q: h.q, r: h.r }));
+                    }
+
+                    $socket.emit(targetingMode, { 
+                        gameId: $gameId, 
+                        positions: positionsToSend 
+                    });
+                                                                                
+                    selectedGroup = [];
+                }
+            });
+
+         
             
             return () => {
                 $socket.off("room_update");
@@ -145,6 +162,21 @@
             });
         }
     }
+
+    function activate(){
+        if (!isMyTurn) return;
+
+        if(targetingMode === 'focus'){
+            $socket.emit('focus', {
+                gameId:$gameId,
+                positions: selectedGroup.map(h => ({ q: h.q, r: h.r }))
+            });
+        }
+        else{
+            $socket.emit('die_roll', {gameId:$gameId});
+        }
+        
+    }
 </script>
 
 <div class="layout-container" class:not-my-turn={isConfirmed && !isMyTurn}>
@@ -154,6 +186,7 @@
         bind:rotation
         {fleetSelections} 
         onConfirm={confirmFleets}
+        onActivate={activate}
     />
 
     <div class="map-area"
@@ -253,21 +286,12 @@
         position: fixed; pointer-events: none; color: #e45c5c; font-family: 'Chakra Petch', sans-serif;
         font-size: 24px; font-weight: 600; text-shadow: 0 0 10px black; animation: popAndFade 1.5s forwards;
     }
-    .layout-container.not-my-turn :global(.sidebar-content) {
-        filter: blur(4px) grayscale(0.5);
+
+    .layout-container.not-my-turn :global(.sidebar_targeting) {
         pointer-events: none;
         user-select: none;
-        transition: filter 0.3s ease;
-    }
-
-    .layout-container.not-my-turn .map-area {
-        cursor: wait;
-    }
-    
-    .layout-container.not-my-turn .tactical-grid {
-        opacity: 0.7;
-        pointer-events: none; /* Prevents hex clicks/hovers */
-        transition: opacity 0.3s ease;
+        opacity: 0.5;
+        transition: all 0.4s ease;
     }
 
     @keyframes popAndFade {

@@ -9,12 +9,14 @@
         isConfirmed = $bindable(), 
         rotation = $bindable(),
         fleetSelections, 
-        onConfirm
+        onConfirm,
+        onActivate
     } = $props();
 </script>
 
 {#if !isSubmitted}
 <div class="sidebar_targeting">
+    <div class="lock-overlay">SYSTEM LOCKED: WAITING FOR ENEMY</div>
     
     {#if !isConfirmed}
         <h3 class="panel-header">DEPLOYMENT</h3>
@@ -77,7 +79,7 @@
             <div class="button-group">
                 <button 
                     style="margin-top: 20px; border-color: #e24a4a; color: #e24a4a;"
-                    onclick={() => isSubmitted = true}
+                    onclick={() => {isSubmitted = true; onActivate(); }}
                     onmouseenter={() => $isHovering = true} 
                     onmouseleave={() => $isHovering = false}
                 >
@@ -116,4 +118,13 @@
     .btn-text { font-size: 2.5vh; font-weight: 700; }
     .btn-sub { font-size: 1.4vh; opacity: 0.7; }
     .btn-hint { font-size: 1.2vh; color: #555; margin-top: 4px; }
+
+    .lock-overlay { display: none;position: absolute;top: 50%;left: 50%;
+        transform: translate(-50%, -50%) rotate(-10deg);background: #e24a4a;color: white;padding: 5px 10px;
+        font-weight: bold;z-index: 20;white-space: nowrap;pointer-events: none;
+    }
+
+    :global(.not-my-turn) .lock-overlay {
+        display: block;
+    }
 </style>
