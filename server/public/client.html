@@ -22,6 +22,10 @@
     <div class="grid">
         <div class="panel">
             <h3>1. Connection & Lobby</h3>
+            <select id="modeSelect" style="background: #333; color: #fff; border: 1px solid #555; padding: 5px;">
+                <option value="multi">Multiplayer</option>
+                <option value="single">Single Player</option>
+            </select>
             <button onclick="createLobby()">Create New Lobby (HTTP)</button>
             <br>
             <input type="text" id="roomIdInput" placeholder="Enter Room ID">

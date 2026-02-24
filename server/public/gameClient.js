@@ -10,7 +10,13 @@ function log(msg, obj = '') {
 
 // --- HTTP Actions ---
 async function createLobby() {
-    const res = await fetch('/create-lobby', { method: 'POST' });
+    const modeSelect = document.getElementById('modeSelect');
+    const mode = modeSelect ? modeSelect.value : 'multi';
+    const res = await fetch('/create-lobby', { 
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode })
+    });
     const data = await res.json();
     document.getElementById('roomIdInput').value = data.gameId;
     log("Lobby Created:", data);

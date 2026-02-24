@@ -23,6 +23,7 @@ const games = {}
 // --- HTTP: LOBBY MANAGEMENT ---
 
 app.post('/create-lobby', (req, res) => {
+    const { mode } = req.body;
     const gameId = uuidv4().substring(0, 6); // Shorter ID for easier sharing
     lobbies[gameId] = { 
         players: {}, // Using object keyed by socket.id
@@ -32,7 +33,8 @@ app.post('/create-lobby', (req, res) => {
         fleets: {}, // Secret fleet positions { socketId: { alpha: {q,r}, beta: {q,r} } }
         assets: {}, // Tracks assets like fuel, special weapons, etc.
         history: [], // Stores a log of all moves/strikes for replay or reconnection
-        fleetPlaced: {}
+        fleetPlaced: {},
+        mode: mode || 'multi'
     };
     res.json({ gameId, message: 'Lobby created!' });
 });
