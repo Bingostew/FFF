@@ -157,6 +157,7 @@
         }
     }
 
+    /********************ARTIFICIAL INTELLIGENCE*/
     /* Simulate an enemy AI, not going to be final implementation of AI*/ 
     function testSearchHex() {
         if (gridHexes.length > 0) {
