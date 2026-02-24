@@ -95,8 +95,8 @@
         
         <div class="button-group">
             <button 
-                style="margin-top: 20px; border-color: #e24a4a; color: #e24a4a;"
-                onclick={() => {isSubmitted = true; onActivate(); }}
+                class:active={targetingMode === 'focus'} 
+                onclick={() => {targetingMode === 'focus'}}
                 onmouseenter={() => $isHovering = true} 
                 onmouseleave={() => $isHovering = false}
             >
