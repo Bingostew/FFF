@@ -18,8 +18,9 @@ app.use(cors());
 // --- DATABASE MOCKUP ---
 // Each room now tracks specific game data
 const lobbies = {}; 
-
+const games = {}
 // --- HTTP: LOBBY MANAGEMENT ---
+
 
 app.post('/create-lobby', (req, res) => {
     const gameId = uuidv4().substring(0, 6); // Shorter ID for easier sharing
@@ -30,10 +31,12 @@ app.post('/create-lobby', (req, res) => {
         activePlayer: null, // Tracks whose turn it is
         fleets: {}, // Secret fleet positions { socketId: { alpha: {q,r}, beta: {q,r} } }
         assets: {}, // Tracks assets like fuel, special weapons, etc.
-        history: [] // Stores a log of all moves/strikes for replay or reconnection
+        history: [], // Stores a log of all moves/strikes for replay or reconnection
+        fleetPlaced: {}
     };
     res.json({ gameId, message: 'Lobby created!' });
 });
+
 
 // --- SOCKET.IO: GAME LOGIC ---
 

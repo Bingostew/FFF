@@ -10,8 +10,11 @@
         fuel = $bindable(3),
         currentTurn = $bindable(1),
         isRevealed = $bindable(false),
-        isEnemyTurn = $bindable(false) 
+        isConfirmed = false,
+        isMyTurn = true
     } = $props();
+
+    let showEnemyVisuals = $derived(isConfirmed && !isMyTurn);
 
     /*Methods update the basic health and fuel data for the player*/ 
     function move() { if (fuel > 0) fuel -= 1; }
@@ -22,17 +25,13 @@
 <!--HTML FOR STATUSBAR-->
 <div class="status-bar">
     
-    <div class="turn-tracker" class:enemy-active={isEnemyTurn}>
+    <div class="turn-tracker" class:enemy-active={showEnemyVisuals}>
         <div class="turn-info">
             <span class="stat-label turn-label">
-                {isEnemyTurn ? 'ENEMY TURN' : 'FRIENDLY TURN'}
+                {showEnemyVisuals ? 'ENEMY TURN' : 'FRIENDLY TURN'}
             </span>
             <span class="turn-number">{currentTurn}</span>
         </div>
-        
-        {#if isEnemyTurn}
-            <div class="processing-bar"></div>
-        {/if}
     </div>
 
     <div class="stat-container">
@@ -159,31 +158,6 @@
     /*Friendly turn number is white*/
     .turn-number {
         color: #ffffff;
-    }
-
-    /* Animated loading bar while waiting for enemy AI to make a decision.
-    * Remove for multiplayer. 
-    */
-    .processing-bar {
-        position: absolute;
-        bottom: 0;
-        left: 0;
-        height: 3px;
-        background: #e24a4a;
-        width: 0%;
-        animation: process 3s linear forwards;
-    }
-
-    /*Helps with the animation of the loading bar*/
-    @keyframes process {
-        0% { width: 0%; }
-        100% { width: 100%; }
-    }
-
-    /*Pulses red for enemy decision turn*/
-    @keyframes pulseText {
-        0%, 100% { opacity: 1; }
-        50% { opacity: 0.5; }
     }
 
     /*Holds the health and fuel information*/

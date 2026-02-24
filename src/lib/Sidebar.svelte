@@ -23,8 +23,7 @@
         onConfirm,
         onActivate,
         isEnemyTurn = $bindable(false),
-        onSearch,
-        onTurnEnd
+        onSearch
     } = $props();
 
     // Simulates 2 D6 dice roll, does two simultaneous calculations.
@@ -48,18 +47,6 @@
             currentRollDisplay2 = finalResult2;
             isRolling = false;
 
-            // Once player is finished rolling switch to the enemy turn.
-            onTurnEnd(); 
-            
-            // This is for dice roll functionality testing, will print to the console.
-            try {
-                await fetch('/api/roll', {
-                    method: 'POST',
-                    body: JSON.stringify({ result1: finalResult1, result2: finalResult2 })
-                });
-            } catch (e) {
-                console.log(`Dice Rolls, numbers are [${finalResult1}, ${finalResult2}]`);
-            }
         }, 3000); //Roll for 3 seconds.
     }
 </script>
@@ -133,7 +120,7 @@
             <div class="button-group">
                 <button 
                     style="margin-top: 10px; border-color: #e24a4a; color: #e24a4a;"
-                    onclick={() => diceRoll()}   
+                    onclick={() => { onActivate();} }   
                     disabled={isRolling || isEnemyTurn}                
                     onmouseenter={() => $isHovering = true} 
                     onmouseleave={() => $isHovering = false}

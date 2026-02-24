@@ -6,18 +6,18 @@
   import { createWebSocketModuleRunnerTransport } from 'vite/module-runner';
   import { initSocket, gameId, socket } from '$lib/gameStore';
 
-  let showMultiplayerModal = false; //Toggles multiplayer modal.
-  let showSingleplayerModal = false; //Toggles singleplayer modal.
+  let showMultiplayerModal = $state(false); //Toggles multiplayer modal.
+  let showSingleplayerModal = $state(false); //Toggles singleplayer modal.
 
-  let nickname = '';
-  let lobbyCode = '';
+  let nickname = $state('');
+  let lobbyCode = $state('');
   initSocket();
 
   
   /** 0 = Name Input, 1 = Selection, 2 = Create Lobby, 3 = Join Lobby; multiplayer
    * 0 = Name Input, 1 = Start Game; Singleplayer
   */ 
-  let modalStep = 0;
+  let modalStep = $state(0);
   
   /*****************FRONTEND METHODS******************/
   /** * @param {String} gamemode 
@@ -47,6 +47,22 @@
     }
   }
 
+  $effect(() => {
+    if ($socket) {
+      const handleRoomUpdate = ({ players }) => {
+        if (Object.keys(players).length === 2) {
+          goto("/multiplayer");
+        }
+      };
+
+      $socket.on("room_update", handleRoomUpdate);
+
+      return () => {
+        $socket.off("room_update", handleRoomUpdate);
+      };
+    }
+  });
+
   /**
    * @param {{ preventDefault: () => void; }} event
    * Opens a modal for the multiplayer experience. 
@@ -54,11 +70,6 @@
   function openMultiplayerModal(event) {
     event.preventDefault();
     toggleModal('multiplayer'); //Toggles multiplayer modal to switch on. 
-    $socket.on("room_update", ({players}) => {
-      if(Object.keys(players).length == 2){
-        goto("/multiplayer");
-      }
-    });
   }
 
   /**
@@ -562,6 +573,12 @@
         margin-bottom: 2rem;
         font-size: clamp(1.5rem, 4vw, 3rem);
         letter-spacing: 2px;
+
+        user-select: text !important;
+        -webkit-user-select: text !important;
+        cursor: text; /* Changes cursor so user knows they can highlight */
+        position: relative;
+        z-index: 1010;
     }
   
     /* MAIN MENU */ 
