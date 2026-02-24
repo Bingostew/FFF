@@ -67,92 +67,92 @@
 <!--SIDEBAR CONTENT-->
 <!--Will not appear until fleets are deployed-->
 {#if !isSubmitted}
-<div class="sidebar_targeting">
-    <div class="lock-overlay">SYSTEM LOCKED: WAITING FOR ENEMY</div>
-    
-    {#if !isConfirmed}
-        <h3 class="panel-header">DEPLOYMENT</h3>
-            
-        <div class="status-panel">
-            <span>FLEETS:</span>
-            <span class:ready={fleetSelections.length === 2}>
-                {fleetSelections.length} / 2
-            </span>
-        </div>
-
-        <button 
-            class="button" 
-            disabled={fleetSelections.length !== 2}
-            onclick={() => onConfirm()}
-            onmouseenter={() => $isHovering = true} 
-            onmouseleave={() => $isHovering = false}
-        >
-            CONFIRM COORDINATES
-        </button>
-
-    {:else}
-        <h3 class="panel-header">TARGETING</h3>
+    <div class="sidebar_targeting">
+        <!--<div class="lock-overlay">SYSTEM LOCKED: WAITING FOR ENEMY</div>-->
         
-        <div class="button-group">
-            <button 
-                style="margin-top: 20px; border-color: #e24a4a; color: #e24a4a;"
-                onclick={() => {isSubmitted = true; onActivate(); }}
-                onmouseenter={() => $isHovering = true} 
-                onmouseleave={() => $isHovering = false}
-            >
-                <span class="btn-text">FOCUS</span>
-                <span class="btn-sub">SINGLE CELL</span>
-            </button>
-
-            <button 
-                class:active={targetingMode === 'directional'} 
-                onclick={() => targetingMode = 'directional'}
-                onmouseenter={() => $isHovering = true} 
-                onmouseleave={() => $isHovering = false}
-            >
-                <span class="btn-text">DIRECTIONAL</span>
-                <span class="btn-sub">
-                    {#if rotation % 3 === 0} VERTICAL
-                    {:else if rotation % 3 === 1} SLANT RIGHT
-                    {:else} SLANT LEFT
-                    {/if}
+        {#if !isConfirmed}
+            <h3 class="panel-header">DEPLOYMENT</h3>
+                
+            <div class="status-panel">
+                <span>FLEETS:</span>
+                <span class:ready={fleetSelections.length === 2}>
+                    {fleetSelections.length} / 2
                 </span>
-                <span class="btn-hint">[R-CLICK TO ROTATE]</span>
-            </button>
+            </div>
 
             <button 
-                class:active={targetingMode === 'area'} 
-                onclick={() => targetingMode = 'area'}
+                class="button" 
+                disabled={fleetSelections.length !== 2}
+                onclick={() => onConfirm()} 
                 onmouseenter={() => $isHovering = true} 
                 onmouseleave={() => $isHovering = false}
             >
-                <span class="btn-text">AREA</span>
-                <span class="btn-sub">4 ADJACENT CELLS</span>
+                CONFIRM COORDINATES
             </button>
 
+        {:else}
+            <h3 class="panel-header">TARGETING</h3>
+            
             <div class="button-group">
                 <button 
-                    style="margin-top: 10px; border-color: #e24a4a; color: #e24a4a;"
-                    onclick={() => diceRoll()}   
-                    disabled={isRolling || isEnemyTurn}                
+                    class:active={targetingMode === 'focus'} 
+                    onclick={() => targetingMode = 'focus'}
                     onmouseenter={() => $isHovering = true} 
                     onmouseleave={() => $isHovering = false}
                 >
-                    <span class="btn-text">ACTIVATE</span>
-                    <span class="btn-sub">CONFIRM AND ROLL</span>
+                    <span class="btn-text">FOCUS</span>
+                    <span class="btn-sub">SINGLE CELL</span>
                 </button>
 
-                {#if currentRollDisplay1 !== null && currentRollDisplay2 !== null}
-                    <div class="roll-display" class:is-rolling={isRolling}>
-                        <span class="roll-label">ROLL RESULT</span>
-                        <span class="roll-number">{currentRollDisplay1}</span>
-                        <span class="roll-number">{currentRollDisplay2}</span>
-                    </div>
-                {/if}
+                <button 
+                    class:active={targetingMode === 'directional'} 
+                    onclick={() => targetingMode = 'directional'}
+                    onmouseenter={() => $isHovering = true} 
+                    onmouseleave={() => $isHovering = false}
+                >
+                    <span class="btn-text">DIRECTIONAL</span>
+                    <span class="btn-sub">
+                        {#if rotation % 3 === 0} VERTICAL
+                        {:else if rotation % 3 === 1} SLANT RIGHT
+                        {:else} SLANT LEFT
+                        {/if}
+                    </span>
+                    <span class="btn-hint">[R-CLICK TO ROTATE]</span>
+                </button>
+
+                <button 
+                    class:active={targetingMode === 'area'} 
+                    onclick={() => targetingMode = 'area'}
+                    onmouseenter={() => $isHovering = true} 
+                    onmouseleave={() => $isHovering = false}
+                >
+                    <span class="btn-text">AREA</span>
+                    <span class="btn-sub">4 ADJACENT CELLS</span>
+                </button>
+
+                <div class="button-group">
+                    <button 
+                        style="margin-top: 10px; border-color: #e24a4a; color: #e24a4a;"
+                        onclick={() => diceRoll()}   
+                        disabled={isRolling}                
+                        onmouseenter={() => $isHovering = true} 
+                        onmouseleave={() => $isHovering = false}
+                    >
+                        <span class="btn-text">ACTIVATE</span>
+                        <span class="btn-sub">CONFIRM AND ROLL</span>
+                    </button>
+
+                    {#if currentRollDisplay1 !== null && currentRollDisplay2 !== null}
+                        <div class="roll-display" class:is-rolling={isRolling}>
+                            <span class="roll-label">ROLL RESULT</span>
+                            <span class="roll-number">{currentRollDisplay1}</span>
+                            <span class="roll-number">{currentRollDisplay2}</span>
+                        </div>
+                    {/if}
+                </div>
+            
             </div>
-        
-        </div>
-    {/if}
+        {/if}
     </div>
 {/if}
 
@@ -188,21 +188,6 @@
         border-bottom: 1px solid rgba(171, 187, 209, 0.3); 
         padding-bottom: 10px; 
         letter-spacing: 2px;
-    }
-    button:hover:not(:disabled) { background: rgba(59, 130, 246, 0.2); color: #fff; border-color: #3b82f6; }
-    button.active { background: rgba(59, 130, 246, 0.4); border-color: #3b82f6; color: white; transform: translateX(5px); }
-    button:disabled { opacity: 0.5; cursor: not-allowed; filter: grayscale(1); }
-    .btn-text { font-size: 2.5vh; font-weight: 700; }
-    .btn-sub { font-size: 1.4vh; opacity: 0.7; }
-    .btn-hint { font-size: 1.2vh; color: #555; margin-top: 4px; }
-
-    .lock-overlay { display: none;position: absolute;top: 50%;left: 50%;
-        transform: translate(-50%, -50%) rotate(-10deg);background: #e24a4a;color: white;padding: 5px 10px;
-        font-weight: bold;z-index: 20;white-space: nowrap;pointer-events: none;
-    }
-
-    :global(.not-my-turn) .lock-overlay {
-        display: block;
     }
     
     /*Focus, Directional, Area, Activate*/
@@ -241,6 +226,12 @@
         opacity: 0.5; 
         cursor: not-allowed; 
         filter: grayscale(1); 
+    }
+
+    button:hover:not(:disabled) { 
+        background: rgba(59, 130, 246, 0.2); 
+        color: #fff; 
+        border-color: #3b82f6; 
     }
     
     /*Handles the look of the text inside the targeting buttons*/
