@@ -4,6 +4,7 @@
     // @ts-nocheck
     import { defineHex, Grid, rectangle, Orientation } from 'honeycomb-grid';
     import { isHovering } from '$lib/store';
+    import { socket, gameId, activePlayerId } from '$lib/gameStore';   
     import { getTargetHexes, isGroupConnected, getS } from './gridUtils.js';
     import Sidebar from './Sidebar.svelte';
     import StatusBar from './StatusBar.svelte';
@@ -17,8 +18,7 @@
     });
     const grid = new Grid(Tile, rectangle({ width: 7, height: 6 }));
     const gridHexes = [...grid];
-
-    // Global State, in multiplayer will be handled by the server.
+    const isMyTurn = $derived(!isConfirmed || ($activePlayerId === $socket?.id));  
     let hoveredHex = $state(null);
     let selectedGroup = $state([]);
     let targetingMode = $state('focus');
@@ -54,7 +54,9 @@
 
     // Hex interaction handlers.
     function handleHexClick(event, hex) {
-        // Handle fleet deployment phase.
+
+        if (isConfirmed && !isMyTurn) return;
+
         const isSpecial = specialTiles.some(t => t.col === hex.col && t.row === hex.row);
 
         if (!isConfirmed) {
@@ -146,7 +148,52 @@
         }, 1500);
     }
 
-    //Should send an API request to the server to update fleet locations.
+    $effect(() => {
+        if ($socket) {
+            // Listen for the game starting
+            $socket.on('game_start', ({ activePlayer }) => {
+                activePlayerId.set(activePlayer);
+                isConfirmed = true; // This switches the UI to "Battle" mode
+                selectedGroup = [];
+                targetingMode = 'focus';
+            });
+
+            // Listen for turn swaps
+            $socket.on('turn_change', ({ activePlayer }) => {
+                activePlayerId.set(activePlayer);
+            });
+
+            $socket.on('die_result', ({playerId,number}) =>{
+                if(isMyTurn){
+                    let positionsToSend = [];
+
+                    if (targetingMode === 'directional') {
+                        positionsToSend = highlightedHexes.map(h => ({ q: h.q, r: h.r }));
+                        
+                    } else {
+                        positionsToSend = selectedGroup.map(h => ({ q: h.q, r: h.r }));
+                    }
+
+                    $socket.emit(targetingMode, { 
+                        gameId: $gameId, 
+                        positions: positionsToSend 
+                    });
+                                                                                
+                    selectedGroup = [];
+                }
+            });
+
+         
+            
+            return () => {
+                $socket.off("room_update");
+                $socket.off('game_start');
+                $socket.off('turn_change');
+                $socket.off('die_result')
+            };
+        }
+    });
+
     function confirmFleets() {
         if (fleetSelections.length === 2) {
             console.log("Fleets locked:", fleetSelections.map(f => ({ q: f.q, r: f.r })));
@@ -158,88 +205,104 @@
     }
 
     /********************ARTIFICIAL INTELLIGENCE*/
-    /* Simulate an enemy AI, not going to be final implementation of AI*/ 
-    function testSearchHex() {
-        if (gridHexes.length > 0) {
-            const randomHex = gridHexes[Math.floor(Math.random() * gridHexes.length)];
-            
-            // Push to ENEMY searched list
-            if (!enemySearchedHexes.some(s => s.q === randomHex.q && s.r === randomHex.r)) {
-                enemySearchedHexes = [...enemySearchedHexes, randomHex];
-            }
-        }
+    /* Simulate an enemy AI, not going to be final implementation of AI*/
+function activate(){
+    if (!isMyTurn) return;
+
+    if(targetingMode === 'focus'){
+        $socket.emit('focus', {
+            gameId:$gameId,
+            positions: selectedGroup.map(h => ({ q: h.q, r: h.r }))
+        });
     }
+    else{
+        $socket.emit('die_roll', {gameId:$gameId});
+    }
+    
+}
 
-    // Logic for the enemy to select a hex in an attack.
-    function triggerEnemyAI() {
-        if (gridHexes.length === 0) return;
-
-        // Randomly decide the attack pattern and rotation
-        const modes = ['focus', 'directional', 'area'];
-        const randomMode = modes[Math.floor(Math.random() * modes.length)];
-        const randomRotation = Math.floor(Math.random() * 6);
-        
-        // Pick a random hex as the epicenter of the attack, could be updated to not be random. 
-        // Possibly use a search pattern/strategy. 
+/* Simulate an enemy AI, not going to be final implementation of AI*/ 
+function testSearchHex() {
+    if (gridHexes.length > 0) {
         const randomHex = gridHexes[Math.floor(Math.random() * gridHexes.length)];
         
-        const targetHexes = getTargetHexes(randomHex, randomMode, randomRotation, gridHexes);
-        
-        // Filter out hexes the enemy and has already searched
-        const newSearches = targetHexes.filter(target => 
-            !enemySearchedHexes.some(searched => searched.q === target.q && searched.r === target.r) 
-        );
-        
-        // Paint the new search indicators on the map, this can be removed if the friendly player is not supposed to see.
-        enemySearchedHexes = [...enemySearchedHexes, ...newSearches];
+        // Push to ENEMY searched list
+        if (!enemySearchedHexes.some(s => s.q === randomHex.q && s.r === randomHex.r)) {
+            enemySearchedHexes = [...enemySearchedHexes, randomHex];
+        }
     }
+}
 
-    // Full cycle of the enemy hex selection, and then control being given back to the player.
-    function executeEnemyTurn() {
-        isEnemyTurn = true; // Tells the Status Bar to turn RED
+// Logic for the enemy to select a hex in an attack.
+function triggerEnemyAI() {
+    if (gridHexes.length === 0) return;
 
-        setTimeout(() => {
-            if (gridHexes.length > 0) {
-                // 1. Enemy randomly picks focus, directional, or area
-                const modes = ['focus', 'directional', 'area'];
-                const randomMode = modes[Math.floor(Math.random() * modes.length)];
-                const randomRotation = Math.floor(Math.random() * 6);
-                
-                // 2. Picks a random epicenter
-                const randomHex = gridHexes[Math.floor(Math.random() * gridHexes.length)];
-                
-                // 3. Calculates the blast zone
-                const targetHexes = getTargetHexes(randomHex, randomMode, randomRotation, gridHexes);
-                
-                // 4. Paints the map with amber warning diamonds
-                const newSearches = targetHexes.filter(target => 
-                    !enemySearchedHexes.some(searched => searched.q === target.q && searched.r === target.r)
-                );
-                enemySearchedHexes = [...enemySearchedHexes, ...newSearches];
-            }
+    // Randomly decide the attack pattern and rotation
+    const modes = ['focus', 'directional', 'area'];
+    const randomMode = modes[Math.floor(Math.random() * modes.length)];
+    const randomRotation = Math.floor(Math.random() * 6);
+    
+    // Pick a random hex as the epicenter of the attack, could be updated to not be random. 
+    // Possibly use a search pattern/strategy. 
+    const randomHex = gridHexes[Math.floor(Math.random() * gridHexes.length)];
+    
+    const targetHexes = getTargetHexes(randomHex, randomMode, randomRotation, gridHexes);
+    
+    // Filter out hexes the enemy and has already searched
+    const newSearches = targetHexes.filter(target => 
+        !enemySearchedHexes.some(searched => searched.q === target.q && searched.r === target.r) 
+    );
+    
+    // Paint the new search indicators on the map, this can be removed if the friendly player is not supposed to see.
+    enemySearchedHexes = [...enemySearchedHexes, ...newSearches];
+}
+
+// Full cycle of the enemy hex selection, and then control being given back to the player.
+function executeEnemyTurn() {
+    isEnemyTurn = true; // Tells the Status Bar to turn RED
+
+    setTimeout(() => {
+        if (gridHexes.length > 0) {
+            // 1. Enemy randomly picks focus, directional, or area
+            const modes = ['focus', 'directional', 'area'];
+            const randomMode = modes[Math.floor(Math.random() * modes.length)];
+            const randomRotation = Math.floor(Math.random() * 6);
             
-            // 5. End the turn, hand control back to the player
-            currentTurn += 1;
-            isEnemyTurn = false; // Turns the Status Bar back to BLUE
-        }, 3000); // 3-second suspense timer!
-    }
+            // 2. Picks a random epicenter
+            const randomHex = gridHexes[Math.floor(Math.random() * gridHexes.length)];
+            
+            // 3. Calculates the blast zone
+            const targetHexes = getTargetHexes(randomHex, randomMode, randomRotation, gridHexes);
+            
+            // 4. Paints the map with amber warning diamonds
+            const newSearches = targetHexes.filter(target => 
+                !enemySearchedHexes.some(searched => searched.q === target.q && searched.r === target.r)
+            );
+            enemySearchedHexes = [...enemySearchedHexes, ...newSearches];
+        }
+        
+        // 5. End the turn, hand control back to the player
+        currentTurn += 1;
+        isEnemyTurn = false; // Turns the Status Bar back to BLUE
+    }, 3000); // 3-second suspense timer!
+}
 
-    // PLAYER SEARCH METHOD ---
-    function handlePlayerSearch() {
-        // Find hexes that haven't been searched by the player yet
-        const newSearches = selectedGroup.filter(selected => 
-            !friendlySearchedHexes.some(searched => searched.q === selected.q && searched.r === selected.r)
-        );
-        
-        // Push to FRIENDLY searched list
-        friendlySearchedHexes = [...friendlySearchedHexes, ...newSearches];
-        
-        selectedGroup = []; // Clear selection after activating
-    }
+// PLAYER SEARCH METHOD ---
+function handlePlayerSearch() {
+    // Find hexes that haven't been searched by the player yet
+    const newSearches = selectedGroup.filter(selected => 
+        !friendlySearchedHexes.some(searched => searched.q === selected.q && searched.r === selected.r)
+    );
+    
+    // Push to FRIENDLY searched list
+    friendlySearchedHexes = [...friendlySearchedHexes, ...newSearches];
+    
+    selectedGroup = []; // Clear selection after activating
+}
 </script>
 
 <!--MAP HTML-->
-<div class="layout-container">
+<div class="layout-container" class:not-my-turn={isConfirmed && !isMyTurn}>
     <!--LEFT-->
     <Sidebar 
         bind:targetingMode 
@@ -248,6 +311,7 @@
         bind:isEnemyTurn
         {fleetSelections} 
         onConfirm={confirmFleets}
+        onActivate={activate}
         onSearch={handlePlayerSearch} 
         onTurnEnd={executeEnemyTurn} 
     />
@@ -431,8 +495,7 @@
 
 <!--MAP HTML APPEARANCE-->
 <style>
-    /*General layout for the contents of the map*/ 
-    .layout-container { 
+    .layout-container {     
         display: flex; 
         flex-direction: row; 
         width: 100%; 
@@ -440,7 +503,14 @@
         overflow: hidden; 
         background: #0b0e14; 
     }
-    
+
+    .layout-container.not-my-turn :global(.sidebar_targeting) {
+        pointer-events: none;
+        user-select: none;
+        opacity: 0.5;
+        transition: all 0.4s ease;
+    }
+
     /*Layout of the map*/
     .map-area { 
         flex: 1;

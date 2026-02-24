@@ -55,9 +55,13 @@ module.exports = (io, lobbies) => {
     //     // 
         socket.on('join_game', ({ gameId, playerName }) => {
             const lobby = lobbies[gameId];
-            
+            console.log(gameId);
+            console.log(playerName);
             if (!lobby) {
-                socket.emit('error', 'Game does not exist');
+                socket.emit('error', `Game does not exist ${Object.keys(lobbies)}`);
+                for (let key in lobbies) {
+                console.log(key);
+                }
                 return;
             }
 
