@@ -3,86 +3,41 @@
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
+const gameLogic = require('./socketHandler.js');
 const { v4: uuidv4 } = require('uuid'); // Library to generate unique IDs
 
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: "*" } });
+const cors = require('cors');
 
 app.use(express.static('public'));
-
 app.use(express.json());
+app.use(cors());
 
 // --- DATABASE MOCKUP ---
-// In production, use Redis or a real DB
+// Each room now tracks specific game data
 const lobbies = {}; 
 
-// --- 1. HTTP: LOBBY MANAGEMENT ---
+// --- HTTP: LOBBY MANAGEMENT ---
 
-// Create a Lobby
 app.post('/create-lobby', (req, res) => {
-    const gameId = uuidv4(); // Generate unique ID like '9b1deb4d...'
+    const gameId = uuidv4().substring(0, 6); // Shorter ID for easier sharing
     lobbies[gameId] = { 
-        players: [], 
-        status: 'waiting' // waiting -> active
+        players: {}, // Using object keyed by socket.id
+        status: 'waiting', 
+        turn: 1, // Tracks the current round number (starts at 1)
+        activePlayer: null, // Tracks whose turn it is
+        fleets: {}, // Secret fleet positions { socketId: { alpha: {q,r}, beta: {q,r} } }
+        assets: {}, // Tracks assets like fuel, special weapons, etc.
+        history: [] // Stores a log of all moves/strikes for replay or reconnection
     };
-    res.json({ gameId, message: 'Lobby created. Share this ID!' });
+    res.json({ gameId, message: 'Lobby created!' });
 });
 
-// Join Check (Just checks if valid, doesn't connect socket yet)
-app.post('/join-lobby', (req, res) => {
-    const { gameId, userId } = req.body;
-    
-    if (!lobbies[gameId]) {
-        return res.status(404).json({ error: 'Lobby not found' });
-    }
-    
-    // Add logic here to store player info if needed
-    res.json({ success: true, gameId });
-});
+// --- SOCKET.IO: GAME LOGIC ---
 
-// Start Game Trigger
-app.post('/start-game', (req, res) => {
-    const { gameId } = req.body;
-    if (lobbies[gameId]) {
-        lobbies[gameId].status = 'active';
-        // Notify everyone to connect to sockets now!
-        res.json({ success: true, message: 'Game starting!' });
-    } else {
-        res.status(404).json({ error: 'Lobby not found' });
-    }
-});
+// socketHandler.js file has functions for game logic
+gameLogic(io, lobbies);
 
-// --- 2. SOCKET.IO: GAME LOGIC ---
-
-io.on('connection', (socket) => {
-    console.log(`Client connected: ${socket.id}`);
-
-    // Client sends: socket.emit('join_game', { gameId: '...' })
-    socket.on('join_game', ({ gameId }) => {
-        
-        // Security: Only allow joining if the lobby exists in HTTP state
-        if (!lobbies[gameId]) {
-            socket.emit('error', 'Game does not exist');
-            return;
-        }
-
-        // MAGIC HAPPENS HERE: Join the "Room"
-        socket.join(gameId);
-        console.log(`Socket ${socket.id} joined room ${gameId}`);
-        
-        // Notify others in ONLY this room
-        io.to(gameId).emit('player_joined', { playerId: socket.id });
-    });
-
-    // Handle Game Moves
-    socket.on('game_move', (data) => {
-        const { gameId, move } = data;
-        // Broadcast move to everyone in the room EXCEPT the sender
-        socket.to(gameId).emit('update_game_state', move);
-    });
-});
-
-server.listen(3000, () => {
-    console.log('Server running on port 3000');
-});
+server.listen(3000, 'localhost', () => console.log('Server running on port 3000'));
