@@ -443,13 +443,15 @@ module.exports = (io, lobbies) => {
             if (revealPos.length > 0) {
                 io.to(gameId).emit('focus_result', {
                     playerName: player.name,
-                    revealPos: revealPos
+                    revealPos: revealPos,
+                    positions:Positions
                 });
             }
             else {
                 io.to(gameId).emit('focus_result', {
                     playerName: player.name,
-                    revealPos: null
+                    revealPos: null,
+                    postitions:Positions
                 });
             }
             switchTurn(gameId);
@@ -468,13 +470,15 @@ module.exports = (io, lobbies) => {
             for (const key in opponentFleets) {
                 const fleet = opponentFleets[key];
                 if (!fleet.isDestroyed) {
-                    if (comparePositions(Positions[0],fleet)){
+                    console.log(Object.values(Positions));
+                    console.log(Positions);
+                    if (Positions[0] && comparePositions(Positions[0],fleet)){
                         revealPos.push(fleet);
                     }
-                    else if (comparePositions(Positions[1],fleet)){
+                    if (Positions[1] && comparePositions(Positions[1],fleet)){
                         revealPos.push(fleet);
                     }
-                    else if (comparePositions(Positions[2],fleet)){
+                    if (Positions[2] && comparePositions(Positions[2],fleet)){
                         revealPos.push(fleet);
                     }
                 }
@@ -483,13 +487,15 @@ module.exports = (io, lobbies) => {
             if ((revealPos.length > 0) && (dieResult <= 4)) {
                 io.to(gameId).emit('directional_result', {
                     playerName: player.name,
-                    revealPos: revealPos
+                    revealPos: revealPos,
+                    positions: Positions
                 });
             }
             else {
                 io.to(gameId).emit('directional_result', {
                     playerName: player.name,
-                    revealPos: null
+                    revealPos: null,
+                    positions: Positions
                 });
             }
             switchTurn(gameId);
@@ -527,13 +533,15 @@ module.exports = (io, lobbies) => {
             if ((revealPos.length > 0) && (dieResult <= 3)) {
                 io.to(gameId).emit('area_result', {
                     playerName: player.name,
-                    revealPos: revealPos
+                    revealPos: revealPos,
+                    positions: Positions
                 });
             }
             else {
                 io.to(gameId).emit('area_result', {
                     playerName: player.name,
-                    revealPos: null
+                    revealPos: null,
+                    positions: Positions
                 });
             }
             switchTurn(gameId);

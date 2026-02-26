@@ -85,6 +85,7 @@
             selectedGroup = selectedGroup.some(h => highlightedHexes.includes(h)) 
                 ? [] 
                 : [...highlightedHexes];
+            console.log("target clicked " + selectedGroup.length);
             return;
         }
 
@@ -165,34 +166,47 @@
 
             $socket.on('die_result', ({playerId,number}) =>{
                 if(isMyTurn){
-                    let positionsToSend = [];
-
-                    if (targetingMode === 'directional') {
-                        positionsToSend = highlightedHexes.map(h => ({ q: h.q, r: h.r }));
-                        
-                    } else {
-                        positionsToSend = selectedGroup.map(h => ({ q: h.q, r: h.r }));
-                    }
-
+                    let rawPos = selectedGroup;
+                    console.log("length " + selectedGroup.length);
+                    const formattedPositions = {};
+                    rawPos.forEach((h, index) => {
+                        formattedPositions[index] = { q: h.q, r: h.r };
+                    });
                     $socket.emit(targetingMode, { 
                         gameId: $gameId, 
-                        positions: positionsToSend 
+                        Positions: formattedPositions,
+                        dieResult:number
                     });
                                                                                 
                     selectedGroup = [];
                 }
             });
 
-            $socket.on('focus_result', (playerName, revealPos) => {
-                alert("received focus result " + revealPos);
-            });
+            const ISREvents = ['focus_result', 'directional_result', 'area_result'];
+
+            const onISRResult = ({playerName, revealPos, positions}) => {
+                alert("received ISR result " + revealPos);
+               
+                let posArray = Object.values(positions)
+
+                if(isMyTurn){
+                    const newSearches = posArray.map(p => grid.getHex(p)).filter(Boolean);
+                    friendlySearchedHexes = [...friendlySearchedHexes, ...newSearches];
+                }
+                else{
+                    const scannedHexes = posArray.map(p => grid.getHex(p)).filter(Boolean);
+                    enemySearchedHexes = [...enemySearchedHexes, ...scannedHexes];
+                }
+            };
             
+            ISREvents.forEach(evt => $socket.on(evt, onISRResult));
+
             return () => {
                 $socket.off("room_update");
                 $socket.off('game_start');
                 $socket.off('turn_change');
                 $socket.off('die_result');
-                $socket.off('focus_result');
+                ISREvents.forEach(evt => $socket.off(evt));
             };
         }
     });
@@ -220,8 +234,11 @@
                 gameId:$gameId,
                 Positions: selectedGroup.map(h => ({ q: h.q, r: h.r }))
             });
+            selectedGroup = [];
         }
         else{
+        
+            alert("rolling");
             $socket.emit('die_roll', {gameId:$gameId});
         }
         
