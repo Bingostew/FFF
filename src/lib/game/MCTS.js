@@ -1,5 +1,5 @@
 // MCTS.js
-
+// @ts-nocheck
 /**
  * Monte Carlo Tree Search Engine
  * * USAGE:

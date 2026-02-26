@@ -1,3 +1,4 @@
+// @ts-nocheck
 // HexUtils.js
 // Handles the "Odd-Q" Vertical Layout (Shove Odd columns down)
 

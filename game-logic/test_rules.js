@@ -1,6 +1,6 @@
 // test_rules.js
-import { F3Game } from './F3Game.js';
-import { HexUtils } from './HexUtils.js';
+import { F3Game } from '../src/lib/game/F3Game.js';
+import { HexUtils } from '../src/lib/game/HexUtils.js';
 
 // ==========================================
 // 1. UNIT TESTS: HEX GEOMETRY
