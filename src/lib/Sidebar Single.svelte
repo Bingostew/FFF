@@ -8,6 +8,9 @@
     
     // Used for API calls to server
     let isSubmitted = $state(false);
+
+    // Sidebar State
+    let currentPanel = $state(1);
     
     // State variables for dice rolling functionality.
     let currentRollDisplay1 = $state(0);
@@ -25,17 +28,34 @@
         isEnemyTurn = $bindable(false),
         onSearch,
         onTurnEnd,
-        selectedGroup = []
+        selectedGroup = [],
+        targetEnemy = null,
+        attackRange = null,
+        requiredRoll = null,
+        onFireResolve
     } = $props();
 
     let totalFuel = $derived(fleetSelections.reduce((acc, f) => acc + (f.fuel || 0), 0));
+
+    // Automatic panel state change
+    $effect(()=>{
+        if (targetEnemy){
+            currentPanel = 2;
+        }
+    });
+
+    $effect(() => {
+        if (!isEnemyTurn && !targetEnemy && isConfirmed){
+            currentPanel = 1;
+        }
+    });
 
     // Simulates 2 D6 dice roll, does two simultaneous calculations.
     function diceRoll() {
         if (isRolling || isEnemyTurn) return; 
 
         isRolling = true;
-        onSearch(); 
+        const hasDetectedEnemy = onSearch(); 
 
         const finalResult1 = Math.floor(Math.random() * 6) + 1;
         const finalResult2 = Math.floor(Math.random() * 6) + 1;
@@ -52,7 +72,9 @@
             isRolling = false;
 
             // Once player is finished rolling switch to the enemy turn.
-            onTurnEnd(); 
+            if(!hasDetectedEnemy){
+                onTurnEnd(); 
+            }
             
             // This is for dice roll functionality testing, will print to the console.
             try {
@@ -94,78 +116,101 @@
             </button>
 
         {:else}
-            <h3 class="panel-header">TARGETING</h3>
-            
-            <div class="button-group">
-                <button 
-                    class:active={targetingMode === 'focus'} 
-                    onclick={() => targetingMode = 'focus'}
-                    onmouseenter={() => $isHovering = true} 
-                    onmouseleave={() => $isHovering = false}
-                >
-                    <span class="btn-text">FOCUS</span>
-                    <span class="btn-sub">SINGLE CELL</span>
-                </button>
+            {#if !targetEnemy}
+                <h3 class="panel-header">TARGETING</h3>
+                
+                <div class="button-group">
+                    <button 
+                        class:active={targetingMode === 'focus'} 
+                        onclick={() => targetingMode = 'focus'}
+                    >
+                        <span class="btn-text">FOCUS</span>
+                        <span class="btn-sub">SINGLE CELL</span>
+                    </button>
 
-                <button 
-                    class:active={targetingMode === 'directional'} 
-                    onclick={() => targetingMode = 'directional'}
-                    onmouseenter={() => $isHovering = true} 
-                    onmouseleave={() => $isHovering = false}
-                >
-                    <span class="btn-text">DIRECTIONAL</span>
-                    <span class="btn-sub">
-                        {#if rotation % 3 === 0} VERTICAL
-                        {:else if rotation % 3 === 1} SLANT RIGHT
-                        {:else} SLANT LEFT
-                        {/if}
-                    </span>
-                    <span class="btn-hint">[R-CLICK TO ROTATE]</span>
-                </button>
+                    <button 
+                        class:active={targetingMode === 'directional'} 
+                        onclick={() => targetingMode = 'directional'}
+                    >
+                        <span class="btn-text">DIRECTIONAL</span>
+                        <span class="btn-sub">
+                            {#if rotation % 3 === 0} VERTICAL
+                            {:else if rotation % 3 === 1} SLANT RIGHT
+                            {:else} SLANT LEFT
+                            {/if}
+                        </span>
+                        <span class="btn-hint">[R-CLICK TO ROTATE]</span>
+                    </button>
 
-                <button 
-                    class:active={targetingMode === 'area'} 
-                    onclick={() => targetingMode = 'area'}
-                    onmouseenter={() => $isHovering = true} 
-                    onmouseleave={() => $isHovering = false}
-                >
-                    <span class="btn-text">AREA</span>
-                    <span class="btn-sub">4 ADJACENT CELLS</span>
-                </button>
+                    <button 
+                        class:active={targetingMode === 'area'} 
+                        onclick={() => targetingMode = 'area'}
+                    >
+                        <span class="btn-text">AREA</span>
+                        <span class="btn-sub">4 ADJACENT CELLS</span>
+                    </button>
 
-                <button 
-                    class:active={targetingMode === 'move'} 
-                    onclick={() => targetingMode = 'move'}
-                    disabled={totalFuel <= 0}
-                    onmouseenter={() => $isHovering = true} 
-                    onmouseleave={() => $isHovering = false}
-                >
-                    <span class="btn-text">MOVE</span>
-                    <span class="btn-sub">{totalFuel > 0 ? "MOVE FLEET (COST: 1 FUEL)" : "NO FUEL REMAINING"}</span>
-                </button>
+                    <button 
+                        class:active={targetingMode === 'move'} 
+                        onclick={() => targetingMode = 'move'}
+                        disabled={totalFuel <= 0}
+                    >
+                        <span class="btn-text">MOVE</span>
+                        <span class="btn-sub">{totalFuel > 0 ? "MOVE FLEET (COST: 1 FUEL)" : "NO FUEL REMAINING"}</span>
+                    </button>
+
+                    <button 
+                        style="margin-top: 10px; border-color: #3b82f6; color: #3b82f6;"
+                        onclick={() => diceRoll()}   
+                        disabled={isRolling || isEnemyTurn || selectedGroup.length === 0}
+                    >
+                        <span class="btn-text">ACTIVATE SCAN</span>
+                        <span class="btn-sub">CONFIRM AND SEARCH</span>
+                    </button>
+                </div>
+
+            {:else}
+                <h3 class="panel-header" style="color: #e24a4a; border-color: #e24a4a;">FIRE MISSION</h3>
+                
+                <div class="attack-stats">
+                    <div class="stat-row">
+                        <span>RANGE:</span>
+                        <span class="val">{attackRange} HEXES</span>
+                    </div>
+                    <div class="stat-row">
+                        <span>DIFFICULTY:</span>
+                        <span class="val" style="color: #e24a4a;">{requiredRoll}+ NEEDED</span>
+                    </div>
+                </div>
 
                 <div class="button-group">
                     <button 
-                        style="margin-top: 10px; border-color: #e24a4a; color: #e24a4a;"
-                        onclick={() => diceRoll()}   
-                        disabled={isRolling}                
-                        onmouseenter={() => $isHovering = true} 
-                        onmouseleave={() => $isHovering = false}
+                        class="fire-button"
+                        onclick={() => onFireResolve()}
+                        disabled={isRolling}
                     >
-                        <span class="btn-text">ACTIVATE</span>
-                        <span class="btn-sub">CONFIRM AND ROLL</span>
+                        <span class="btn-text">ENGAGE</span>
+                        <span class="btn-sub">EXECUTE ATTACK VECTOR</span>
                     </button>
 
-                    {#if currentRollDisplay1 !== null && currentRollDisplay2 !== null}
-                        <div class="roll-display" class:is-rolling={isRolling}>
-                            <span class="roll-label">ROLL RESULT</span>
-                            <span class="roll-number">{currentRollDisplay1}</span>
-                            <span class="roll-number">{currentRollDisplay2}</span>
-                        </div>
-                    {/if}
+                    <button 
+                        class="cancel-btn"
+                        onclick={() => { targetEnemy = null; }}
+                    >
+                        <span class="btn-text" style="font-size: 0.8rem; text-align: center;">ABORT MISSION</span>
+                    </button>
                 </div>
-            
-            </div>
+            {/if}
+
+            {#if currentRollDisplay1 !== 0}
+                <div class="roll-display" class:is-rolling={isRolling}>
+                    <span class="roll-label">ROLL RESULT</span>
+                    <div style="display: flex; gap: 10px;">
+                        <span class="roll-number">{currentRollDisplay1}</span>
+                        <span class="roll-number">{currentRollDisplay2}</span>
+                    </div>
+                </div>
+            {/if}
         {/if}
     </div>
 {/if}
@@ -306,6 +351,41 @@
         transform: scale(1.2); 
         transition: transform 0.10s ease; 
     }
+
+    
+    .attack-stats {
+        background: rgba(226, 74, 74, 0.1);
+        border: 1px solid rgba(226, 74, 74, 0.3);
+        padding: 15px;
+        margin-bottom: 10px;
+        clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
+    }
+
+    .stat-row {
+        display: flex;
+        justify-content: space-between;
+        font-family: 'Chakra Petch', sans-serif;
+        font-size: 0.9rem;
+        color: #abbbd1;
+        margin-bottom: 5px;
+    }
+
+    .val { font-weight: bold; color: white; }
+
+    .fire-button {
+        border-color: #e24a4a !important;
+        background: rgba(226, 74, 74, 0.2) !important;
+        box-shadow: 0 0 15px rgba(226, 74, 74, 0.2);
+    }
+
+    .cancel-btn {
+        margin-top: 5px;
+        opacity: 0.6;
+        border: none;
+        background: transparent;
+        align-items: center;
+    }
+
 
     /* Custom scrollbars, might be removed in pursuit of better scaling */
     /*::-webkit-scrollbar {
