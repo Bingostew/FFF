@@ -154,12 +154,56 @@ module.exports = (io, lobbies) => {
         switchTurn(gameId);
     };
 
+    const handleMove = (gameId, playerId, fleetKey, newPosition, onError) => {
+        const lobby = lobbies[gameId];
+        if (!validateAction(lobby, playerId, onError)) {
+            return;
+        }
+    
+        const playerAssets = lobby.assets[playerId];
+        if (playerAssets.fuel < 1) {
+            onError('Not enough fuel to move.');
+            return;
+        }
+    
+        const playerFleets = lobby.fleets[playerId];
+        if (playerFleets && playerFleets[fleetKey]) {
+            // Check for collision with own fleets
+            for (const key in playerFleets) {
+                const fleet = playerFleets[key];
+                if ((key !== fleetKey) && (fleet.hp > 0) && comparePositions(fleet, newPosition)) {
+                    onError('Cannot move to a hex occupied by another friendly fleet.');
+                    return;
+                }
+            }
+    
+            const oldPosition = { q: playerFleets[fleetKey].q, r: playerFleets[fleetKey].r };
+    
+            playerAssets.fuel -= 1; // Consume fuel
+            playerFleets[fleetKey].q = newPosition.q;
+            playerFleets[fleetKey].r = newPosition.r;
+    
+            lobby.history.push({
+                action: 'move',
+                playerId: playerId,
+                fleetKey: fleetKey,
+                from: oldPosition,
+                to: newPosition,
+                timestamp: Date.now()
+            });
+    
+            io.to(gameId).emit('fleet_moved', { playerId, fleetKey, newPosition });
+            io.to(playerId).emit('update_assets', playerAssets); // Notify client of new fuel amount
+            switchTurn(gameId);
+        } else {
+            onError('Invalid fleet move');
+        }
+    };
 
     const processBotTurn = (gameId) => {
         const lobby = lobbies[gameId];
         if (!lobby || lobby.status !== 'active') return;
 
-        // Initialize Bot Memory
         if (!lobby.botMemory) {
             lobby.botMemory = {
                 knownHits: [], 
@@ -167,42 +211,35 @@ module.exports = (io, lobbies) => {
             };
         }
 
-        const opponentId = Object.keys(lobby.players).find(id => id !== BOT_ID);
-        const opponentFleets = lobby.fleets[opponentId];
-        const attackerFleets = lobby.fleets[BOT_ID];
-
-        // 1. Update Memory: Remove destroyed fleets from knownHits
+        // Update Memory: Remove destroyed fleets from knownHits before making a decision
         lobby.botMemory.knownHits = lobby.botMemory.knownHits.filter(pos => {
-             return Object.values(opponentFleets).some(f => f.q === pos.q && f.r === pos.r && !f.isDestroyed);
+             const opponentId = Object.keys(lobby.players).find(id => id !== BOT_ID);
+             return Object.values(lobby.fleets[opponentId]).some(f => f.q === pos.q && f.r === pos.r && !f.isDestroyed);
         });
 
-        // 2. Decide Action
-        // Priority 2: Search (Focus/Directional/Area) or Random Strike
-        const actionRoll = Math.random();
-        if (actionRoll < 0.1) {
-            const positions = [];
-            for(let i=0; i<3; i++) positions.push({ q: Math.floor(Math.random()*9)-4, r: Math.floor(Math.random()*9)-4 });
-            handleSearch(gameId, BOT_ID, positions, 0, 'focus', () => {});
-        } else if (actionRoll < 0.2) {
-            const q = Math.floor(Math.random() * 9) - 4;
-            const r = Math.floor(Math.random() * 9) - 4;
-            const directions = [[1,0], [1,-1], [0,-1], [-1,0], [-1,1], [0,1]];
-            const dir = directions[Math.floor(Math.random() * directions.length)];
-            const positions = [];
-            for(let i=0; i<3; i++) positions.push({ q: q + (dir[0]*i), r: r + (dir[1]*i) });
-            handleSearch(gameId, BOT_ID, positions, dieRoll(), 'directional', () => {});
-        } else if (actionRoll < 0.3) {
-            const q = Math.floor(Math.random() * 9) - 4;
-            const r = Math.floor(Math.random() * 9) - 4;
-            const directions = [[1,0], [1,-1], [0,-1], [-1,0], [-1,1], [0,1]];
-            const shuffled = directions.sort(() => 0.5 - Math.random());
-            const positions = [{q, r}];
-            for(let i=0; i<3; i++) positions.push({ q: q + shuffled[i][0], r: r + shuffled[i][1] });
-            handleSearch(gameId, BOT_ID, positions, dieRoll(), 'area', () => {});
-        } else {
-            // Use MCTS for Strike Decision
-            const targetHex = BotAI.getBestStrikeAction(lobby, BOT_ID);
-            handleStrike(gameId, BOT_ID, targetHex, dieRoll(), () => {});
+        // Use MCTS to decide the best action
+        const { bestAction, debugInfo } = BotAI.getBestAction(lobby, BOT_ID);
+        io.to(gameId).emit('bot_thinking', { debugInfo });
+
+        if (!bestAction) {
+            console.log("MCTS returned no action, ending turn.");
+            switchTurn(gameId);
+            return;
+        }
+
+        switch (bestAction.type) {
+            case 'strike':
+                handleStrike(gameId, BOT_ID, bestAction.hex, dieRoll(), () => {});
+                break;
+            case 'move':
+                handleMove(gameId, BOT_ID, bestAction.fleetKey, bestAction.newPosition, () => {});
+                break;
+            case 'search':
+                handleSearch(gameId, BOT_ID, bestAction.positions, dieRoll(), bestAction.searchType, () => {});
+                break;
+            default:
+                console.log(`Unknown MCTS action type: ${bestAction.type}`);
+                switchTurn(gameId);
         }
     };
 
@@ -332,8 +369,8 @@ module.exports = (io, lobbies) => {
             // If single player, place Bot fleets immediately
             if (lobby.mode === 'single' && !lobby.fleetPlaced[BOT_ID]) {
                 lobby.fleets[BOT_ID] = {
-                    alpha: { q: 3, r: -1, hp: 2, isDestroyed: false },
-                    beta: { q: -2, r: 2, hp: 2, isDestroyed: false }
+                    alpha: { q: 5, r: -2, hp: 2, isDestroyed: false },
+                    beta: { q: 1, r: 3, hp: 2, isDestroyed: false }
                 };
                 lobby.fleetPlaced[BOT_ID] = true;
             }
@@ -429,55 +466,7 @@ module.exports = (io, lobbies) => {
          * This sh
          */
         socket.on('move_fleet', ({ gameId, fleetKey, newPosition }) => {
-            const lobby = lobbies[gameId];
-            if (!validateAction(lobby, socket.id, (msg) => socket.emit('error', msg))) {
-                return;
-            }
-
-            const playerAssets = lobby.assets[socket.id];
-            if (playerAssets.fuel < 1) {
-                socket.emit('error', 'Not enough fuel to move.');
-                return;
-            }
-
-            const playerFleets = lobby.fleets[socket.id];
-            if (playerFleets && playerFleets[fleetKey]) {
-                // Check for collision with own fleets
-                for (const key in playerFleets) {
-                    const fleet = playerFleets[key];
-                    if ((key !== fleetKey) && (fleet.hp > 0) && ((fleet.q === newPosition.q) && (fleet.r === newPosition.r))) {
-                        socket.emit('error', 'Cannot move to a hex occupied by another friendly fleet.');
-                        return;
-                    }
-                }
-
-                const oldPosition = { q: playerFleets[fleetKey].q, r: playerFleets[fleetKey].r };
-
-                playerAssets.fuel -= 1; // Consume fuel
-                // Update fleet position
-                playerFleets[fleetKey].q = newPosition.q;
-                playerFleets[fleetKey].r = newPosition.r;
-
-                lobby.history.push({
-                    action: 'move',
-                    playerId: socket.id,
-                    fleetKey: fleetKey,
-                    from: oldPosition,
-                    to: newPosition,
-                    timestamp: Date.now()
-                });
-
-                // Notify all players in the room about the move
-                io.to(gameId).emit('fleet_moved', {
-                    playerId: socket.id,
-                    fleetKey: fleetKey,
-                    newPosition: newPosition
-                });
-                socket.emit('update_assets', playerAssets); // Notify client of new fuel amount
-                switchTurn(gameId);
-            } else {
-                socket.emit('error', 'Invalid fleet move');
-            }
+            handleMove(gameId, socket.id, fleetKey, newPosition, (msg) => socket.emit('error', msg));
         });
         // Handle disconnection
 

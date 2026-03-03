@@ -1,4 +1,5 @@
 const socket = io();
+const BOT_ID = 'CPU_COMMANDER';
 let currentRoom = '';
 
 // --- Logging ---
@@ -114,12 +115,28 @@ socket.on('focus_result', (data) => {
         log('Focus Result: No fleets found at the specified locations.');
     }
 });
+socket.on('bot_thinking', ({ debugInfo }) => {
+    if (debugInfo && debugInfo.length > 0 && debugInfo[0].visits !== undefined) {
+        log("🤖 Bot is thinking... Top MCTS moves considered:");
+        debugInfo.forEach(info => {
+            log(`- Considering Strike: {q:${info.move.q}, r:${info.move.r}} | Visits: ${info.visits} | Win Rate: ${info.winRate}`);
+        });
+    } else if (debugInfo && debugInfo.length > 0) {
+        log("🤖 Bot is thinking... Heuristic decision:");
+        debugInfo.forEach(info => {
+            log(`- Action: ${info.move} | Reason: ${info.reason}`);
+        });
+    }
+});
 socket.on('error', (msg) => log("ERROR:", msg));
 socket.on('turn_change', ({ activePlayer }) => {
     const statusDiv = document.getElementById('connStatus');
     if (activePlayer === socket.id) {
         statusDiv.innerText = "It's your turn!";
         // TODO: Enable buttons/interactions (e.g., enable move/strike buttons)
+    } else if (activePlayer === BOT_ID) {
+        statusDiv.innerHTML = 'Opponent is thinking... <span class="spinner"></span>';
+        // TODO: Disable buttons/interactions to prevent actions out of turn
     } else {
         statusDiv.innerText = "Opponent's turn";
         // TODO: Disable buttons/interactions to prevent actions out of turn

@@ -1,5 +1,5 @@
 class BotAI {
-    static getBestStrikeAction(lobby, botId) {
+    static getBestAction(lobby, botId) {
         const mcts = new MCTS(lobby, botId);
         return mcts.run();
     }
@@ -36,23 +36,79 @@ class MCTS {
         this.opponentId = Object.keys(lobby.players).find(id => id !== botId);
         this.botMemory = lobby.botMemory || { knownHits: [], firedShots: [] };
         this.allHexes = this.generateHexes();
-        
-        // Initial valid moves: All hexes minus those we've already shot at
-        this.initialMoves = this.allHexes.filter(h => 
-            !this.botMemory.firedShots.includes(`${h.q},${h.r}`)
-        );
+        this.initialMoves = this.generateAllPossibleMoves();
     }
 
     generateHexes() {
         let hexes = [];
-        for (let q = -4; q <= 4; q++) {
-            for (let r = -4; r <= 4; r++) {
-                if (Math.abs(q + r) <= 4) {
-                    hexes.push({q, r});
-                }
+        for (let q = 0; q <= 6; q++) {
+            for (let r = -3; r <= 5; r++) {
+                hexes.push({q, r});
             }
         }
         return hexes;
+    }
+
+    generateAllPossibleMoves() {
+        const moves = [];
+        const attackerFleets = this.lobby.fleets[this.botId];
+        const playerAssets = this.lobby.assets[this.botId];
+
+        // 1. Generate Strike moves
+        const strikeMoves = this.allHexes
+            .filter(h => !this.botMemory.firedShots.includes(`${h.q},${h.r}`))
+            .map(hex => ({ type: 'strike', hex }));
+        moves.push(...strikeMoves);
+
+        // 2. Generate Move moves
+        if (playerAssets && playerAssets.fuel > 0) {
+            for (const fleetKey of ['alpha', 'beta']) {
+                const fleet = attackerFleets[fleetKey];
+                if (fleet && fleet.hp > 0) {
+                    const directions = [[1,0], [1,-1], [0,-1], [-1,0], [-1,1], [0,1]];
+                    directions.forEach(dir => {
+                        const newPosition = { q: fleet.q + dir[0], r: fleet.r + dir[1] };
+                        // Boundary check
+                        if (newPosition.q >= 0 && newPosition.q <= 6 && newPosition.r >= -3 && newPosition.r <= 5) {
+                            const otherFleetKey = fleetKey === 'alpha' ? 'beta' : 'alpha';
+                            const otherFleet = attackerFleets[otherFleetKey];
+                            if (!otherFleet || otherFleet.hp <= 0 || !(otherFleet.q === newPosition.q && otherFleet.r === newPosition.r)) {
+                                moves.push({ type: 'move', fleetKey, newPosition });
+                            }
+                        }
+                    });
+                }
+            }
+        }
+
+        // 3. Generate a sample of Search moves to keep the action space manageable
+        for (let i = 0; i < 5; i++) { // Sample 5 of each search type
+            // Focus
+            const focusPositions = [];
+            for(let j=0; j<3; j++) focusPositions.push({ q: Math.floor(Math.random() * 7), r: Math.floor(Math.random() * 9) - 3 });
+            moves.push({ type: 'search', searchType: 'focus', positions: focusPositions });
+
+            // Directional
+            const q = Math.floor(Math.random() * 7);
+            const r = Math.floor(Math.random() * 9) - 3;
+            const directions = [[1,0], [1,-1], [0,-1], [-1,0], [-1,1], [0,1]];
+            const dir = directions[Math.floor(Math.random() * directions.length)];
+            const directionalPositions = [];
+            for(let j=0; j<3; j++) directionalPositions.push({ q: q + (dir[0]*j), r: r + (dir[1]*j) });
+            moves.push({ type: 'search', searchType: 'directional', positions: directionalPositions });
+
+            // Area
+            const area_q = Math.floor(Math.random() * 7);
+            const area_r = Math.floor(Math.random() * 9) - 3;
+            const area_directions = [[1,0], [1,-1], [0,-1], [-1,0], [-1,1], [0,1]];
+            const shuffled_directions = area_directions.sort(() => 0.5 - Math.random());
+            const areaPositions = [{q: area_q, r: area_r}];
+            for(let j=0; j<3; j++) {
+                areaPositions.push({ q: area_q + shuffled_directions[j][0], r: area_r + shuffled_directions[j][1] });
+            }
+            moves.push({ type: 'search', searchType: 'area', positions: areaPositions });
+        }
+        return moves;
     }
 
     run() {
@@ -101,10 +157,40 @@ class MCTS {
         }
 
         // Return best move (most visited)
-        if (root.children.length === 0) return this.initialMoves[Math.floor(Math.random() * this.initialMoves.length)];
+        if (root.children.length === 0) {
+            const randomMove = this.initialMoves[Math.floor(Math.random() * this.initialMoves.length)];
+            return {
+                bestAction: randomMove,
+                debugInfo: [{ action: randomMove, visits: 1, wins: 0, winRate: '0.0%' }]
+            };
+        }
         
-        const bestChild = root.children.reduce((a, b) => a.visits > b.visits ? a : b);
-        return bestChild.move;
+        const sortedChildren = [...root.children].sort((a, b) => b.visits - a.visits);
+        const bestChild = sortedChildren[0];
+
+        const debugInfo = sortedChildren.slice(0, 5).map(child => {
+            let moveDescription;
+            const action = child.move;
+            if (action.type === 'strike') {
+                moveDescription = `Strike at {q:${action.hex.q}, r:${action.hex.r}}`;
+            } else if (action.type === 'move') {
+                moveDescription = `Move ${action.fleetKey} to {q:${action.newPosition.q}, r:${action.newPosition.r}}`;
+            } else if (action.type === 'search') {
+                moveDescription = `Search (${action.searchType}) at ${JSON.stringify(action.positions[0])}`;
+            }
+
+            return {
+                action: moveDescription,
+                visits: child.visits,
+                wins: child.wins,
+                winRate: child.visits > 0 ? `${((child.wins / child.visits) * 100).toFixed(1)}%` : '0.0%'
+            };
+        });
+
+        return {
+            bestAction: bestChild.move,
+            debugInfo
+        };
     }
 
     determinize() {
@@ -162,26 +248,35 @@ class MCTS {
 
     applyMove(state, move) {
         // Check hit on hypothetical opponent
-        const fleets = state.fleets;
-        if ((fleets.alpha.q === move.q && fleets.alpha.r === move.r && !fleets.alpha.isDestroyed)) {
-            fleets.alpha.hp--;
-            if (fleets.alpha.hp <= 0) fleets.alpha.isDestroyed = true;
-        } else if ((fleets.beta.q === move.q && fleets.beta.r === move.r && !fleets.beta.isDestroyed)) {
-            fleets.beta.hp--;
-            if (fleets.beta.hp <= 0) fleets.beta.isDestroyed = true;
+        if (move.type === 'strike') {
+            const targetHex = move.hex;
+            const fleets = state.fleets;
+            if ((fleets.alpha.q === targetHex.q && fleets.alpha.r === targetHex.r && !fleets.alpha.isDestroyed)) {
+                fleets.alpha.hp--;
+                if (fleets.alpha.hp <= 0) fleets.alpha.isDestroyed = true;
+            } else if ((fleets.beta.q === targetHex.q && fleets.beta.r === targetHex.r && !fleets.beta.isDestroyed)) {
+                fleets.beta.hp--;
+                if (fleets.beta.hp <= 0) fleets.beta.isDestroyed = true;
+            }
+        } else if (move.type === 'move') {
+            state.myFleets[move.fleetKey].q = move.newPosition.q;
+            state.myFleets[move.fleetKey].r = move.newPosition.r;
         }
     }
 
     simulate(state, availableMoves) {
-        // Random rollout
-        const moves = [...availableMoves]; // Copy
+        // Random rollout using only strike actions for simplicity
+        const strikeMoves = availableMoves.filter(m => m.type === 'strike');
+        const moves = [...strikeMoves];
+        const simState = JSON.parse(JSON.stringify(state)); // Deep copy for simulation
+
         while (moves.length > 0) {
             // Check win condition
-            if (state.fleets.alpha.isDestroyed && state.fleets.beta.isDestroyed) return this.botId;
+            if (simState.fleets.alpha.isDestroyed && simState.fleets.beta.isDestroyed) return this.botId;
             
             const idx = Math.floor(Math.random() * moves.length);
             const move = moves.splice(idx, 1)[0];
-            this.applyMove(state, move);
+            this.applyMove(simState, move);
         }
         return null; // Draw or ran out of moves
     }
