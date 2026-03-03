@@ -18,8 +18,29 @@
 </div>
 
 <style>
-  .page-content { padding: 100px 50px; color: #fff; font-family: 'Chakra Petch', sans-serif; z-index: 10; position: relative; }
-  .section-header { color: #3b82f6; font-size: 2.5rem; }
-  .step { margin-bottom: 30px; border-left: 2px solid #555; padding-left: 20px; transition: border-color 0.3s; }
-  .step:hover { border-color: #3b82f6; }
+  .page-content { 
+    padding: 100px 50px; 
+    color: #fff; 
+    font-family: 'Chakra Petch', sans-serif; 
+    z-index: 10; 
+    position: relative; 
+    user-select: none; 
+    -webkit-user-select: none;  
+  }
+
+  .section-header { 
+    color: #3b82f6; 
+    font-size: 2.5rem; 
+  }
+
+  .step { 
+    margin-bottom: 30px; 
+    border-left: 2px solid #555; 
+    padding-left: 20px; 
+    transition: border-color 0.3s; 
+  }
+
+  .step:hover { 
+    border-color: #3b82f6; 
+  }
 </style>

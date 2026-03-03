@@ -1,347 +1,680 @@
+<!--MAIN MENU PAGE-->
+<!--SCRIPTS FOR MAIN MENU PAGE-->
 <script>
   import { isHovering } from '$lib/store'; // Import shared state
-  import { io } from "socket.io-client";
+  import { goto } from '$app/navigation';
+  import { createWebSocketModuleRunnerTransport } from 'vite/module-runner';
+  import { initSocket, gameId, socket } from '$lib/gameStore';
 
-  let showMultiplayerModal = false;
+  let showMultiplayerModal = $state(false); //Toggles multiplayer modal.
+  let showSingleplayerModal = $state(false); //Toggles singleplayer modal.
 
-  let nickname = '';
-  let lobbyCode = '';
-  const socket = io();
+  let nickname = $state('');
+  let lobbyCode = $state('');
+  initSocket();
 
-  // 0 = Name Input, 1 = Selection, 2 = Create Lobby, 3 = Join Lobby
-  let modalStep = 0;
-
-  function toggleModal() {
-    showMultiplayerModal = !showMultiplayerModal;
-
-    if (!showMultiplayerModal) {
-      setTimeout(() => {
-        modalStep = 0;
-        nickname = '';
-        lobbyCode = '';
+  
+  /** 0 = Name Input, 1 = Selection, 2 = Create Lobby, 3 = Join Lobby; multiplayer
+   * 0 = Name Input, 1 = Start Game; Singleplayer
+  */ 
+  let modalStep = $state(0);
+  
+  /*****************FRONTEND METHODS******************/
+  /** * @param {String} gamemode 
+   * Modal chooses between showing the singleplayer or multiplayer information. 
+  */
+  function toggleModal(gamemode) {
+    // Update the state based on the button clicked
+    if (gamemode == 'singleplayer') {
+      showSingleplayerModal = true;
+      showMultiplayerModal = false; 
+    }
+    else if (gamemode == 'multiplayer') {
+      showMultiplayerModal = true;
+      showSingleplayerModal = false;
+    }
+    else if (gamemode == 'close') {
+      showMultiplayerModal = false;
+      showSingleplayerModal = false;
+      
+    //Reset modal data
+    setTimeout(() => {
+      modalStep = 0;
+      nickname = '';
+      lobbyCode = '';
       }, 200);
+      return
     }
   }
 
-  function openModal(event) {
+  $effect(() => {
+    if ($socket) {
+      const handleRoomUpdate = ({ players }) => {
+        if (Object.keys(players).length === 2) {
+          goto("/multiplayer");
+        }
+      };
+
+      $socket.on("room_update", handleRoomUpdate);
+
+      return () => {
+        $socket.off("room_update", handleRoomUpdate);
+      };
+    }
+  });
+
+  /**
+   * @param {{ preventDefault: () => void; }} event
+   * Opens a modal for the multiplayer experience. 
+   */
+  function openMultiplayerModal(event) {
     event.preventDefault();
-    toggleModal();
+    toggleModal('multiplayer'); //Toggles multiplayer modal to switch on. 
   }
 
+  /**
+   * @param {{ preventDefault: () => void; }} event
+   * Opens a modal for the singleplayer experience.
+   */
+  function openSingleplayerModal(event) {
+    event.preventDefault();
+    toggleModal('singleplayer'); // Toggles singleplayer modal to switch on.
+  }
+
+  /** Confirms the nickname for the player*/
   function confirmName() {
     if (nickname.trim().length > 0) modalStep = 1;
   }
 
+  /*****************BACKEND METHODS******************/
+  /**
+   * Sends a POST request to the server to create a multiplayer lobby.
+   */
   async function goToCreate() {
-    const res = await fetch('/create-lobby', {method: 'POST'});
-    const data = await res.json();
-    lobbyCode = data.gameId;
-    modalStep = 2;
+    try {
+      modalStep = 2;
+      const res = await fetch('http://localhost:3000/create-lobby', { method: 'POST' });
+      const data = await res.json();
+      lobbyCode = data.gameId;
+
+      gameId.set(lobbyCode);
+      $socket.emit('join_game', {gameId: lobbyCode, playerName: nickname});
+    } catch (e) {
+      console.error("Failed to create lobby", e);
+    }
   }
 
+  /**
+   * Helps for TESTING. Navigates to the singleplayer page, method made for
+   * ease of singleplayer testing. However server may not be needed for singleplayer. 
+   */
+  function goToGame() {
+    goto('/singleplayer');
+  }
+
+  /**
+   * Changes the modal to 3 in order to support multiplayer join lobby functionality. 
+   */
   function goToJoin() {
-    socket.emit('join_game', {lobbyCode, nickname});
     modalStep = 3;
   }
   
+  /**
+   * Sends API request using the lobby code and nickname to join another multiplayer 
+   * lobby. 
+   */
+  function connect(){
+    gameId.set(lobbyCode);
+
+    $socket.emit('join_game', {gameId: lobbyCode, playerName: nickname});
+    //$socket.onAny((eventName, ...args) => {
+    //alert(`[SOCKET INBOUND] Event: ${eventName} and ${args}`);
+    }
+  
+  
+
+  /**
+   * Revert Modal Step by one. 
+   */
   function goBack() {
-    // If in Create/Join, go back to Selection (1). If in Selection, go back to Name (0).
     if (modalStep > 1) modalStep = 1;
     else modalStep = 0;
   }
 </script>
 
-<div class="home-container">
-  
-  <div class="logo">
-    FIND<span class="logo-text2">, FIX, &</span>
-    <span class="logo-text1"> FINISH</span>
-  </div>  
+<!--PAGE HTML-->
+<!--Describes the "look" of the main menu-->
+<div class="mainmenu-container">
 
+  <!--Main menu logo for Find, Fix, & Finish-->
+  <div class="logo">
+    FIND
+    <span class="logo-text2">, FIX, &</span>
+    <span class="logo-text1"> FINISH</span>
+  </div>
+
+  <!--Clickable links for the different parts of the game-->
   <ul class="menu-links">
-    <li><a href="/singleplayer" onmouseenter={() => $isHovering = true} onmouseleave={() => $isHovering = false}>SINGLEPLAYER</a></li>
     <li>
-      <a href="/multiplayer" 
-        onclick={openModal} 
-        onmouseenter={() => $isHovering = true} 
-        onmouseleave={() => $isHovering = false}>
-        MULTIPLAYER
-      </a>
+        <a 
+            href="/singleplayer"
+            class ="select-link"
+            draggable="false"
+            onclick={(e) => { openSingleplayerModal(e); $isHovering = false; }}
+            onmouseenter={() => $isHovering = true}
+            onmouseleave={() => $isHovering = false}
+        >
+            SINGLEPLAYER
+        </a>
+    </li>
+
+    <li>
+        <a 
+            href="/multiplayer"
+            class ="select-link"
+            draggable="false" 
+            onclick={(e) => { openMultiplayerModal(e); $isHovering = false; }} 
+            onmouseenter={() => $isHovering = true} 
+            onmouseleave={() => $isHovering = false}
+        >
+            MULTIPLAYER
+        </a>
     </li>    
-    <li><a href="/tutorial" onmouseenter={() => $isHovering = true} onmouseleave={() => $isHovering = false}>TUTORIAL</a></li>
-    <li><a href="/credits" onmouseenter={() => $isHovering = true} onmouseleave={() => $isHovering = false}>CREDITS</a></li>
+
+    <li>
+        <a 
+            href="/tutorial"
+            class ="select-link"
+            draggable="false" 
+            onclick={() => $isHovering = false}
+            onmouseenter={() => $isHovering = true} 
+            onmouseleave={() => $isHovering = false}
+        >
+            TUTORIAL
+        </a>
+    </li>
+
+    <li>
+        <a 
+            href="/credits"
+            class ="select-link"
+            draggable="false" 
+            onclick={() => $isHovering = false}
+            onmouseenter={() => $isHovering = true} 
+            onmouseleave={() => $isHovering = false}
+        >
+            CREDITS
+        </a>
+    </li>
   </ul>
 
-  {#if showMultiplayerModal}
-    <div class="modal-backdrop">
-      
-      <div class="modal-content" role="document">
-        {#if modalStep === 0}
-        <h2>IDENTIFICATION</h2>
-        
-        <input 
-          type="text" 
-          placeholder="ENTER SHIP NAME..." 
-          bind:value={nickname} 
-          class="tactical-input"
-          maxlength="12"
-        />
+  <!--Singplayer Modal-->
+  {#if showSingleplayerModal}
+      <div class="modal-backdrop">
+          <div class="modal-content" role="document">
+              
+              {#if modalStep === 0}
+                  <h2>IDENTIFICATION</h2>
+                  
+                  <input 
+                      type="text" 
+                      placeholder="ENTER NAME..." 
+                      bind:value={nickname} 
+                      class="tactical-input"
+                      maxlength="18"
+                      spellcheck="false"
+                      autocomplete="off"
+                      autocorrect="off"
+                      autocapitalize="off"
+                  />
 
-        <div class="button-group">
-          <button class="action-btn" onclick={confirmName}>CONFIRM</button>
-          <button class="close-btn" onclick={toggleModal}>CANCEL</button>
-        </div>
+                  <div class="button-group" role="group">
+                      <button 
+                          class="action-btn" 
+                          draggable="false"
+                          onclick={() => { confirmName(); $isHovering = false; }}
+                          onmouseenter={() => $isHovering = true}
+                          onmouseleave={() => $isHovering = false}
+                      >
+                          CONFIRM
+                      </button>
+                      
+                      <button 
+                          class="close-btn" 
+                          onclick={() => { toggleModal('close'); $isHovering = false; }}
+                          onmouseenter={() => $isHovering = true}
+                          onmouseleave={() => $isHovering = false}
+                      >
+                          CANCEL
+                      </button>
+                  </div>
 
-        {:else if modalStep === 1}
-          <h2>WELCOME, <span class="highlight">{nickname}</span></h2>
-          
-          <div class="vertical-stack">
-            <button class="action-btn wide" onclick={goToCreate}>CREATE LOBBY</button>
-            <button class="action-btn wide" onclick={goToJoin}>JOIN LOBBY</button>
-          </div>
-          
-          <button class="close-btn" onclick={goBack}>&lt; BACK</button>
-        
-        {:else if modalStep === 2}
-          <h2>LOBBY CREATED</h2>
-          <p class="status-text">{lobbyCode}</p>
-          
-          <div class="button-group">
-            <button class="close-btn" onclick={toggleModal}>CLOSE</button>
-            <button class="close-btn" onclick={goBack}>BACK</button>
-          </div>
-        
-        {:else if modalStep === 3}
-          <h2>JOIN FREQUENCY</h2>
-          <input type="text" placeholder="ENTER LOBBY CODE..." bind:value={lobbyCode} class="tactical-input" maxlength="6"/>
-          
-          <div class="button-group">
-            <button class="action-btn">CONNECT</button>
-            <button class="close-btn" onclick={goBack}>BACK</button>
-          </div>
-        {/if}
+              {:else if modalStep === 1}
+                  <h2>WELCOME, <span class="highlight">{nickname}</span></h2>
+                  
+                  <div class="vertical-stack" role="group">
+                      <button 
+                          class="action-btn wide" 
+                          onclick={() => { goToGame(); $isHovering = false; }}
+                          onmouseenter={() => $isHovering = true}
+                          onmouseleave={() => $isHovering = false}
+                      >
+                          START GAME
+                      </button>
+                  </div>
+                  
+                  <button 
+                      class="close-btn" 
+                      onclick={() => { goBack(); $isHovering = false; }} 
+                      onmouseenter={() => $isHovering = true}
+                      onmouseleave={() => $isHovering = false}
+                  >
+                      &lt; BACK
+                  </button>
+              {/if}
 
+          </div>
       </div>
-    </div>
   {/if}
 
+  <!--Multiplayer Modal-->
+  {#if showMultiplayerModal}
+      <div class="modal-backdrop">
+          <div class="modal-content" role="document">
+              
+              {#if modalStep === 0}
+                  <h2>IDENTIFICATION</h2>
+                  
+                  <input 
+                      type="text" 
+                      placeholder="ENTER SHIP NAME..." 
+                      bind:value={nickname} 
+                      class="tactical-input"
+                      maxlength="18"
+                      spellcheck="false"
+                      autocomplete="off"
+                      autocorrect="off"
+                      autocapitalize="off"
+                  />
+
+                  <div class="button-group" role="group">
+                      <button 
+                          class="action-btn" 
+                          draggable="false"
+                          onclick={() => { confirmName(); $isHovering = false; }}
+                          onmouseenter={() => $isHovering = true}
+                          onmouseleave={() => $isHovering = false}
+                      >
+                          CONFIRM
+                      </button>
+                      
+                      <button 
+                          class="close-btn" 
+                          onclick={() => { toggleModal('close'); $isHovering = false; }}
+                          onmouseenter={() => $isHovering = true}
+                          onmouseleave={() => $isHovering = false}
+                      >
+                          CANCEL
+                      </button>
+                  </div>
+
+              {:else if modalStep === 1}
+                  <h2>WELCOME, <span class="highlight">{nickname}</span></h2>
+                  
+                  <div class="vertical-stack" role="group">
+                      <button 
+                          class="action-btn wide" 
+                          onclick={() => { goToCreate(); $isHovering = false; }}
+                          onmouseenter={() => $isHovering = true}
+                          onmouseleave={() => $isHovering = false}
+                      >
+                          CREATE LOBBY
+                      </button>
+                      
+                      <button 
+                          class="action-btn wide" 
+                          onclick={() => { goToJoin(); $isHovering = false; }}
+                          onmouseenter={() => $isHovering = true}
+                          onmouseleave={() => $isHovering = false}
+                      >
+                          JOIN LOBBY
+                      </button>
+                  </div>
+                  
+                  <button 
+                      class="close-btn" 
+                      onclick={() => { goBack(); $isHovering = false; }}
+                      onmouseenter={() => $isHovering = true}
+                      onmouseleave={() => $isHovering = false}
+                  >
+                      &lt; BACK
+                  </button>
+              
+              {:else if modalStep === 2}
+                  <h2>LOBBY CREATED</h2>
+                  <p class="status-text">{lobbyCode}</p>
+                  
+                  <div class="button-group" role="group">
+                      <button 
+                          class="close-btn" 
+                          draggable="false"
+                          onclick={() => { toggleModal('close'); $isHovering = false; }}
+                          onmouseenter={() => $isHovering = true}
+                          onmouseleave={() => $isHovering = false}
+                      >
+                          CANCEL
+                      </button>
+                      
+                      <button 
+                          class="close-btn" 
+                          onclick={() => { goBack(); $isHovering = false; }}
+                          onmouseenter={() => $isHovering = true}
+                          onmouseleave={() => $isHovering = false}
+                      >
+                          BACK
+                      </button>
+                  </div>
+              
+              {:else if modalStep === 3}
+                  <h2>JOIN GAME</h2>
+                  
+                  <input 
+                      type="text" 
+                      placeholder="ENTER LOBBY CODE..." 
+                      bind:value={lobbyCode} 
+                      class="tactical-input" 
+                      maxlength="6"
+                      spellcheck="false"
+                      autocomplete="off"
+                      autocorrect="off"
+                      autocapitalize="off"
+                  />
+                  
+                  <div class="button-group" role="group">
+                      <button 
+                          class="action-btn" 
+                          draggable="false"
+                          onclick={() => { connect(); $isHovering = false; }}
+                          onmouseenter={() => $isHovering = true}
+                          onmouseleave={() => $isHovering = false}
+                      >
+                          CONNECT
+                      </button>
+                      
+                      <button 
+                          class="close-btn" 
+                          onclick={() => { goBack(); $isHovering = false; }}
+                          onmouseenter={() => $isHovering = true}
+                          onmouseleave={() => $isHovering = false}
+                      >
+                          BACK
+                      </button>
+                  </div>
+              {/if}
+
+          </div>
+      </div>
+  {/if}
+
+  <!--Main Menu images:CNA logo, CS Dept logo, background world map image-->
   <img src="/cna.png" alt="cna" class="cna-img" />
   <img src="/CS.png" alt="CS" class="CS-img" />
   <img src="/tacticalmap.jpg" alt="map" class="map-img" />
 </div>
 
-
+<!--PAGE HTML STYLES-->
 <style>
-  .vertical-stack { 
-    display: flex; 
-    flex-direction: column;
-    gap: 1.5rem;           
-    align-items: center;    
-    margin-bottom: 1.5rem; 
-    width: 100%;
-  }
-
-
-
-.tactical-input {
-    background: rgba(0, 0, 0, 0.5);
-    border: 1px solid #3b82f6;
-    color: #fff;
-    font-family: 'Chakra Petch', sans-serif;
-    font-size: 2.5vh;
-    padding: 10px;
-    width: 80%;
-    margin-bottom: 2rem;
-    text-align: center;
-    outline: none;
-    transition: box-shadow 0.3s;
-  }
-
-  .tactical-input:focus {
-    box-shadow: 0 0 15px rgba(59, 130, 246, 0.6);
-  }
-
-  .tactical-input::placeholder {
-    color: #5a6b8c;
-  }
-
-  .button-group {
-    display: flex;
-    gap: 1rem;
-    justify-content: center;
-  }
-
-  .action-btn {
-    background: #3b82f6;
-    color: #000;
-    border: 1px solid #3b82f6;
-    padding: 1rem 3rem;
-    font-family: 'Chakra Petch', sans-serif;
-    font-size: 2vh;
-    font-weight: bold;
-    cursor: pointer;
-    transition: all 0.3s;
-  }
-
-  .action-btn.wide { 
-    width: 100%; 
-    max-width: 500px;      
-    display: block;
-  }
-
-  .action-btn:hover {
-    background: #fff;
-    box-shadow: 0 0 15px #fff;
-  }
-
-  .highlight {
-    color: #fff;
-    text-decoration: underline decoration-blue-500;
-  }
-
-  .status-text {
-    color: #abbbd1;
-    margin-bottom: 2rem;
-    font-size: 2vh;
-    letter-spacing: 2px;
-  }
-  
-  .modal-backdrop {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: rgba(0, 0, 0, 0.7); /* Dim the background */
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    z-index: 100; /* Ensure it sits on top of everything */
-    backdrop-filter: blur(4px); /* Optional: blur the map behind it */
-  }
-
-  .modal-content {
-    background: rgba(20, 20, 30, 0.95);
-    border: 2px solid #3b82f6;
-    padding: 3rem;
-    text-align: center;
-    box-shadow: 0 0 20px rgba(59, 130, 246, 0.5);
-    font-family: 'Chakra Petch', sans-serif;
-    color: #fff;
-    width: 60vw;        
-    max-width: 800px;   
-    min-width: 500px;   
-  }
-
-  .modal-content h2 {
-    font-size: 4vh;
-    margin-bottom: 2rem;
-    color: #3b82f6;
-    text-shadow: 0 0 5px #3b82f6;
-  }
-
-  .close-btn {
-    background: transparent;
-    border: 1px solid #abbbd1;
-    color: #abbbd1;
-    padding: 0.5rem 2rem;
-    font-family: 'Chakra Petch', sans-serif;
-    font-size: 2vh;
-    cursor: pointer; /* Or cursor: none if you are using custom cursor */
-    transition: all 0.3s;
-  }
-
-  .close-btn:hover {
-    background: #3b82f6;
-    color: #000;
-    border-color: #3b82f6;
-    box-shadow: 0 0 10px #3b82f6;
-  }
-
-  /* Layout for the Home Page content */
-  .home-container {
-    position: relative;
-    width: 100%;
-    height: 100vh;
-    padding: 1rem 2rem;
-    box-sizing: border-box;
-    display: flex;
-    flex-direction: column;
-    justify-content: flex-start;
-  }
-
-  /* LOGO STYLES */
-  .logo { 
-    font-family: 'Chakra Petch', sans-serif;
-    font-size: 10vh; 
-    font-weight: bold; 
-    color: #3b82f6;
-    line-height: 2;
-  }
-  .logo-text1 { 
-    color: #000; 
-    -webkit-text-stroke: 3px #fff;
-    } 
-  .logo-text2 { 
-    color: #a79d9d; 
+    /*MODALS*/
+    /*Modal layout, provides a vertical look to the modal*/
+    .vertical-stack { 
+        display: flex; 
+        flex-direction: column;
+        gap: clamp(1rem, 2vh, 1.5rem);
+        align-items: center;    
+        margin-bottom: 1.5rem; 
+        width: 100%;
     }
 
-  /* LINK STYLES */
-  .menu-links { 
-    display: flex; 
-    flex-direction: column; 
-    margin-top: 5vh;
-    gap: 6vh; 
-    list-style: none; 
-    padding: 0; 
-  }
+    /*Handles the input look for names and lobbies*/
+    .tactical-input {
+        background: rgba(0, 0, 0, 0.5);
+        border: 1px solid #3b82f6;
+        color: #fff;
+        font-family: 'Chakra Petch', sans-serif;
+        font-size: clamp(1rem, 2.5vw, 1.5rem);
+        padding: 15px;
+        width: 100%;
+        box-sizing: border-box;
+        margin-bottom: 2rem;
+        text-align: center;
+        outline: none;
+        cursor: none;
+        transition: box-shadow 0.3s;
+    }
+
+    /*Gives a blue glow to the input box when selected*/
+    .tactical-input:focus {
+        box-shadow: 0 0 15px rgba(59, 130, 246, 0.6);
+    }
+
+    /*Placeholder to indicate to input a ship name*/ 
+    .tactical-input::placeholder {
+        color: #5a6b8c;
+    }
+
+    /*Background of the modal*/
+    .modal-backdrop {
+        position: fixed;
+        top: 0; 
+        left: 0; 
+        width: 100vw; 
+        height: 100vh;
+        background: rgba(0, 0, 0, 0.85);
+        backdrop-filter: blur(5px);
+        z-index: 1000;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    /*Layout of the modal*/
+    .modal-content {
+        width: min(90%, 500px);
+        background: rgba(10, 15, 30, 0.95);
+        border: 1px solid #3b82f6;
+        box-shadow: 0 0 30px rgba(59, 130, 246, 0.2);
+        padding: clamp(20px, 5vw, 40px);
+        display: flex;
+        flex-direction: column;
+        gap: 25px;
+        text-align: center;
+        align-items: center;
+        justify-content: center;
+        
+        /* Corner Cut Effect */
+        clip-path: polygon(
+            20px 0, 100% 0, 
+            100% calc(100% - 20px), calc(100% - 20px) 100%, 
+            0 100%, 0 20px
+        );
+    }
+
+    .modal-content h2 {
+        font-size: clamp(1.5rem, 5vw, 2.5rem);
+        margin-bottom: 2rem;
+        color: #3b82f6;
+        text-shadow: 0 0 5px #3b82f6;
+        line-height: 1.2;
+        width: 100%;
+    }
+
+    /*Back or Cancel button*/
+    .close-btn {
+        background: transparent;
+        border: 1px solid #abbbd1;
+        color: #abbbd1;
+        padding: 0.8rem 2rem;
+        font-size: clamp(0.9rem, 2.5vw, 1.1rem);
+        font-family: 'Chakra Petch', sans-serif;
+        cursor: none;
+        transition: all 0.3s;
+        white-space: nowrap;
+    }
+
+    /*How the back or cancel button responds when a user hovers over it*/
+    .close-btn:hover {
+        background: #3b82f6;
+        color: #000;
+        border-color: #3b82f6;
+        box-shadow: 0 0 10px #3b82f6;
+    }
+
+    /*BUTTONS*/ 
+    /*Handles layout of multiple buttons, specifically main menu*/ 
+    .button-group {
+        display: flex;
+        gap: 1rem;
+        justify-content: center;
+        width: 100%;
+    }
+
+    /*Handles appearance of Modal buttons*/
+    .action-btn {
+        background: #3b82f6;
+        color: #000;
+        border: 1px solid #3b82f6;
+        padding: clamp(12px, 1.5vh, 20px) clamp(20px, 4vw, 50px);    
+        font-family: 'Chakra Petch', sans-serif;
+        font-size: clamp(0.9rem, 2vw, 1.2rem);
+        font-weight: bold;
+        cursor: none;
+        transition: all 0.3s;
+        white-space: nowrap;
+    }
+
+
+    .action-btn.wide { 
+        width: 100%; 
+        max-width: 500px;      
+        display: block;
+    }
+
+    /*Reacts when a user hovers over the button*/
+    .action-btn:hover {
+        background: #fff;
+        box-shadow: 0 0 15px #fff;
+    }
+
+    .highlight {
+        color: #fff;
+        text-decoration: underline decoration-blue-500;
+    }
+
+    .status-text {
+        color: #abbbd1;
+        margin-bottom: 2rem;
+        font-size: clamp(1.5rem, 4vw, 3rem);
+        letter-spacing: 2px;
+
+        user-select: text !important;
+        -webkit-user-select: text !important;
+        cursor: text; /* Changes cursor so user knows they can highlight */
+        position: relative;
+        z-index: 1010;
+    }
   
-  a {
-    font-family: 'Chakra Petch', sans-serif;
-    color: #abbbd1; 
-    text-decoration: none; 
-    font-size: 5vh; 
-    cursor: none; 
-    transition: color 0.8s;
-  }
-  a:hover { color: #3b82f6; text-shadow: 0 0 10px #3b82f6; }
+    /* MAIN MENU */ 
+    /*Layout for the Main Menu content, prevents zooming in and out, dragging, highlighting*/
+    .mainmenu-container {
+        position: relative;
+        width: 100%;
+        height: 100vh;
+        padding: 1rem 2rem;
+        box-sizing: border-box;
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-start;
+        user-select: none; 
+        -webkit-user-select: none;
+        z-index: 0; /* Ensures the -1 z-index map doesn't fall behind the page body */
+        overflow: hidden; /* Prevents scrollbars from the oversized map image */
+    }
 
-  /* IMAGE STYLES */
-  .cna-img {
-    position: absolute; 
-    top: 10%; 
-    left: 80%; 
-    transform: translate(-50%, -50%);
-    width: 12vh;
-    height: auto; 
-    z-index: 1; 
-    opacity: 0.8; 
-    filter: grayscale(100%) contrast(120%); 
-    pointer-events: none;
-  }
+    /*Menu link styles*/ 
+    .menu-links { 
+        display: flex; 
+        flex-direction: column; 
+        margin-top: clamp(20px, 5vh, 50px);
+        gap: clamp(15px, 4vh, 40px);
+        list-style: none; 
+        padding: 0; 
+    } 
 
-  .CS-img {
-    position: absolute; 
-    top: 10%; 
-    left: 90%; 
-    transform: translate(-50%, -50%);
-    width: 12vh;    
-    height: auto; 
-    z-index: 1; 
-    opacity: 0.8; 
-    filter: grayscale(100%) contrast(120%); 
-    pointer-events: none;
-  }
+    .select-link {
+        font-family: 'Chakra Petch', sans-serif;
+        color: #abbbd1; 
+        text-decoration: none; 
+        font-size: clamp(20px, 4vw, 50px); 
+        cursor: none; 
+        transition: color 0.8s;
+    }
 
-  .map-img {
-    position: absolute; 
-    top: 50%; 
-    left: 50%; 
-    transform: translate(-50%, -50%);
-    width: 130vw;
-    height: auto;
-    z-index: -1;
-    opacity: 0.35; 
-    pointer-events: none;
-  }
+    .select-link:hover { 
+        color: #3b82f6; 
+        text-shadow: 0 0 10px #3b82f6; 
+    }
+
+    /* FF&F LOGO STYLES */
+    .logo { 
+        font-family: 'Chakra Petch', sans-serif;
+        font-size: clamp(40px, 9vw, 100px);
+        font-weight: bold; 
+        color: #3b82f6;
+        line-height: 1.2;
+    }
+
+    .logo-text1 { 
+        color: #000; 
+        -webkit-text-stroke: 3px #fff;
+    }
+
+    /* CUSTOMER IMAGE STYLES */
+    .cna-img {
+        position: absolute; 
+        top: 4vh; 
+        right: 14vw;
+        width: clamp(60px, 12vh, 120px);
+        height: auto; 
+        z-index: 1; 
+        opacity: 0.8; 
+        filter: grayscale(100%) contrast(120%); 
+        pointer-events: none;
+    }
+
+    .CS-img {
+        position: absolute; 
+        top: 4vh; 
+        right: 4vw;
+        width: clamp(60px, 12vh, 120px);    
+        height: auto; 
+        z-index: 1; 
+        opacity: 0.8; 
+        filter: grayscale(100%) contrast(120%); 
+        pointer-events: none;
+    }
+
+    /* Background world map*/
+    .map-img {
+        position: absolute; 
+        top: 50%; 
+        left: 50%; 
+        transform: translate(-50%, -50%);
+        min-width: 100vw;
+        min-height: 100vh;
+        width: 110vmax;
+        height: auto;
+        z-index: -1;
+        opacity: 0.35; 
+        pointer-events: none;
+    }
 </style>

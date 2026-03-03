@@ -15,5 +15,6 @@ echo "Downloading required packages"
 npm install svelte vite @sveltejs/vite-plugin-svelte
 npm i honeycomb-grid
 npm i socket.io-client
+npm i uuid
 
 echo "Task Completed!------------------------------"

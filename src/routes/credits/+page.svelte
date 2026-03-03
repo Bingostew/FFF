@@ -14,9 +14,13 @@ Although immensely simplified, the game aims to highlight how different capabili
     z-index: 10;
     font-size: 3.5vh; 
     position: relative; 
+    user-select: none; 
+    -webkit-user-select: none; 
   }
+  
   .section-header { 
     font-family: 'Black Ops One', cursive; 
     font-size: 5vh; 
-    color: #a79d9d; }
+    color: #a79d9d; 
+  }
 </style>
