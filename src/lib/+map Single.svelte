@@ -5,8 +5,8 @@
     import { defineHex, Grid, rectangle, Orientation } from 'honeycomb-grid';
     import { isHovering } from '$lib/store';
     import { getTargetHexes, isGroupConnected, getS } from './gridUtils.js';
-    import Sidebar from './Sidebar.svelte';
-    import StatusBar from './StatusBar.svelte';
+    import Sidebar from './Sidebar Single.svelte';
+    import StatusBar from './StatusBar Single.svelte';
 
     // Grid Config
     const Tile = defineHex({ 
@@ -15,28 +15,32 @@
         orientation: Orientation.FLAT, 
         offset: 1 
     });
+    
     const grid = new Grid(Tile, rectangle({ width: 7, height: 6 }));
     const gridHexes = [...grid];
 
-    // Global State, in multiplayer will be handled by the server.
+    // --- GLOBAL STATE ---
+    // Moved these to the top so isMyTurn can safely read them!
+    let isConfirmed = $state(false);
+    let isEnemyTurn = $state(false);
+    const isMyTurn = $derived(!isConfirmed || !isEnemyTurn);  
+
     let hoveredHex = $state(null);
     let selectedGroup = $state([]);
     let targetingMode = $state('focus');
-    let isConfirmed = $state(false);
     let fleetSelections = $state([]);
     let rotation = $state(0);
     let warning = $state({ show: false, x: 0, y: 0, text: '', id: 0 });
     
-    // Status state, this is information for the specific player. Probably handled client side.
+    // Status state
     let health = $state(2);
     let fuel = $state(3);
     let currentTurn = $state(1);
     let friendlySearchedHexes = $state([]);
     let enemySearchedHexes = $state([]);    
     let isRevealed = $state(false);
-    let isEnemyTurn = $state(false);
 
-    // This is the layout of the land tiles, other tiles are all water by default.
+    // This is the layout of the land tiles
     const specialTiles = [
         { col: 1, row: 2, img: 'single_palm.jpg' },
         { col: 2, row: 1, img: 'double_palm.jpg' },
@@ -46,7 +50,7 @@
         { col: 5, row: 2, img: 'mountain.jpg' }
     ];
 
-    // Get the hexes that have been targeted by the player. Also filters out land so directional search does not search land. 
+    // Gets highlighted hexes & automatically filters out land!
     let highlightedHexes = $derived(
         getTargetHexes(hoveredHex, targetingMode, rotation, gridHexes)
         .filter(hex => !specialTiles.some(t => t.col === hex.col && t.row === hex.row))
@@ -54,16 +58,17 @@
 
     // Hex interaction handlers.
     function handleHexClick(event, hex) {
-        // Handle fleet deployment phase.
+        if (isConfirmed && !isMyTurn) return;
+
+        // GLOBAL LAND CHECK
         const isSpecial = specialTiles.some(t => t.col === hex.col && t.row === hex.row);
+        if (isSpecial) {
+            showWarning(event.clientX, event.clientY, isConfirmed ? "Cannot select land" : "Cannot place fleet on land");
+            return;
+        }
 
+        // DEPLOYMENT PHASE
         if (!isConfirmed) {
-            // Keeps players from interacting with the land. 
-            if (isSpecial){
-                showWarning(event.clientX, event.clientY, "Cannot place fleet on land");
-                return;
-            }
-
             const index = fleetSelections.findIndex(h => h.q === hex.q && h.r === hex.r);
             if (index > -1) {
                 fleetSelections = fleetSelections.filter(h => h !== fleetSelections[index]);
@@ -73,13 +78,9 @@
             return;
         }
 
-        if (isSpecial){
-            showWarning(event.clientX, event.clientY, "Cannot select land");
-            return;
-        }
-
-        // AdvancedTargeting Logic
+        // TARGETING PHASE
         if (targetingMode === 'directional') {
+            // highlightedHexes is already land-free, so we just use it directly!
             selectedGroup = selectedGroup.some(h => highlightedHexes.includes(h)) 
                 ? [] 
                 : [...highlightedHexes];
@@ -101,7 +102,6 @@
         }
     }
 
-    //Handles the selection of hexes using focus and area methods.
     function handleNewSelection(event, hex) {
         if (targetingMode === 'focus') {
             if (selectedGroup.length >= 3) {
@@ -146,93 +146,65 @@
         }, 1500);
     }
 
-    //Should send an API request to the server to update fleet locations.
     function confirmFleets() {
         if (fleetSelections.length === 2) {
             console.log("Fleets locked:", fleetSelections.map(f => ({ q: f.q, r: f.r })));
             isConfirmed = true;
-            // Clear any previous selections and default to focus mode
             selectedGroup = [];
             targetingMode = 'focus';
         }
     }
 
-    /* Simulate an enemy AI, not going to be final implementation of AI*/ 
-    function testSearchHex() {
-        if (gridHexes.length > 0) {
-            const randomHex = gridHexes[Math.floor(Math.random() * gridHexes.length)];
-            
-            // Push to ENEMY searched list
-            if (!enemySearchedHexes.some(s => s.q === randomHex.q && s.r === randomHex.r)) {
-                enemySearchedHexes = [...enemySearchedHexes, randomHex];
-            }
-        }
-    }
+    // --- ARTIFICIAL INTELLIGENCE ---
 
-    // Logic for the enemy to select a hex in an attack.
     function triggerEnemyAI() {
         if (gridHexes.length === 0) return;
 
-        // Randomly decide the attack pattern and rotation
         const modes = ['focus', 'directional', 'area'];
         const randomMode = modes[Math.floor(Math.random() * modes.length)];
         const randomRotation = Math.floor(Math.random() * 6);
-        
-        // Pick a random hex as the epicenter of the attack, could be updated to not be random. 
-        // Possibly use a search pattern/strategy. 
         const randomHex = gridHexes[Math.floor(Math.random() * gridHexes.length)];
         
         const targetHexes = getTargetHexes(randomHex, randomMode, randomRotation, gridHexes);
         
-        // Filter out hexes the enemy and has already searched
         const newSearches = targetHexes.filter(target => 
             !enemySearchedHexes.some(searched => searched.q === target.q && searched.r === target.r) 
         );
         
-        // Paint the new search indicators on the map, this can be removed if the friendly player is not supposed to see.
         enemySearchedHexes = [...enemySearchedHexes, ...newSearches];
     }
 
-    // Full cycle of the enemy hex selection, and then control being given back to the player.
     function executeEnemyTurn() {
         isEnemyTurn = true; // Tells the Status Bar to turn RED
 
         setTimeout(() => {
             if (gridHexes.length > 0) {
-                // 1. Enemy randomly picks focus, directional, or area
                 const modes = ['focus', 'directional', 'area'];
                 const randomMode = modes[Math.floor(Math.random() * modes.length)];
                 const randomRotation = Math.floor(Math.random() * 6);
-                
-                // 2. Picks a random epicenter
                 const randomHex = gridHexes[Math.floor(Math.random() * gridHexes.length)];
                 
-                // 3. Calculates the blast zone
                 const targetHexes = getTargetHexes(randomHex, randomMode, randomRotation, gridHexes);
                 
-                // 4. Paints the map with amber warning diamonds
+                // Filters out hexes already attacked by the AI OR the Player
                 const newSearches = targetHexes.filter(target => 
-                    !enemySearchedHexes.some(searched => searched.q === target.q && searched.r === target.r)
+                    !enemySearchedHexes.some(searched => searched.q === target.q && searched.r === target.r) &&
+                    !friendlySearchedHexes.some(searched => searched.q === target.q && searched.r === target.r)
                 );
                 enemySearchedHexes = [...enemySearchedHexes, ...newSearches];
             }
             
-            // 5. End the turn, hand control back to the player
             currentTurn += 1;
             isEnemyTurn = false; // Turns the Status Bar back to BLUE
         }, 3000); // 3-second suspense timer!
     }
 
-    // PLAYER SEARCH METHOD ---
     function handlePlayerSearch() {
-        // Find hexes that haven't been searched by the player yet
         const newSearches = selectedGroup.filter(selected => 
             !friendlySearchedHexes.some(searched => searched.q === selected.q && searched.r === selected.r)
         );
         
-        // Push to FRIENDLY searched list
         friendlySearchedHexes = [...friendlySearchedHexes, ...newSearches];
-        
         selectedGroup = []; // Clear selection after activating
     }
 </script>
@@ -246,7 +218,7 @@
         bind:rotation
         bind:isEnemyTurn
         {fleetSelections} 
-        onConfirm={confirmFleets}
+        {selectedGroup} onConfirm={confirmFleets}
         onSearch={handlePlayerSearch} 
         onTurnEnd={executeEnemyTurn} 
     />

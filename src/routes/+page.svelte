@@ -98,7 +98,7 @@
       lobbyCode = data.gameId;
 
       gameId.set(lobbyCode);
-      $socket.emit('join_game', {gameId: lobbyCode, playerName: nickname});
+      //$socket.emit('join_game', {gameId: lobbyCode, playerName: nickname});
     } catch (e) {
       console.error("Failed to create lobby", e);
     }
@@ -125,10 +125,10 @@
    */
   function connect(){
     gameId.set(lobbyCode);
-    $socket.emit('join_game', {gameId: lobbyCode, playerName: nickname});
-    $socket.onAny((eventName, ...args) => {
-      alert(`[SOCKET INBOUND] Event: ${eventName} and ${args}`);
-    });
+    //$socket.emit('join_game', {gameId: lobbyCode, playerName: nickname});
+    //$socket.onAny((eventName, ...args) => {
+      //alert(`[SOCKET INBOUND] Event: ${eventName} and ${args}`);
+    //});
   }
 
   /**

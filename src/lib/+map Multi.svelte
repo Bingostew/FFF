@@ -6,8 +6,8 @@
     import { isHovering } from '$lib/store';
     import { socket, gameId, activePlayerId } from '$lib/gameStore';   
     import { getTargetHexes, isGroupConnected, getS } from './gridUtils.js';
-    import Sidebar from './Sidebar.svelte';
-    import StatusBar from './StatusBar.svelte';
+    import Sidebar from './Sidebar Multi.svelte';
+    import StatusBar from './StatusBar Multi.svelte';
 
     // Grid Config
     const Tile = defineHex({ 
