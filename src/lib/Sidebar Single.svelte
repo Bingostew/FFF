@@ -19,12 +19,16 @@
         targetingMode = $bindable(), 
         isConfirmed = $bindable(), 
         rotation = $bindable(),
-        fleetSelections, 
+        fleetSelections = [], 
         onConfirm,
         onActivate,
         isEnemyTurn = $bindable(false),
-        onSearch
+        onSearch,
+        onTurnEnd,
+        selectedGroup = []
     } = $props();
+
+    let totalFuel = $derived(fleetSelections.reduce((acc, f) => acc + (f.fuel || 0), 0));
 
     // Simulates 2 D6 dice roll, does two simultaneous calculations.
     function diceRoll() {
@@ -47,6 +51,18 @@
             currentRollDisplay2 = finalResult2;
             isRolling = false;
 
+            // Once player is finished rolling switch to the enemy turn.
+            onTurnEnd(); 
+            
+            // This is for dice roll functionality testing, will print to the console.
+            try {
+                await fetch('/api/roll', {
+                    method: 'POST',
+                    body: JSON.stringify({ result1: finalResult1, result2: finalResult2 })
+                });
+            } catch (e) {
+                console.log(`Dice Rolls, numbers are [${finalResult1}, ${finalResult2}]`);
+            }
         }, 3000); //Roll for 3 seconds.
     }
 </script>
@@ -115,6 +131,17 @@
                 >
                     <span class="btn-text">AREA</span>
                     <span class="btn-sub">4 ADJACENT CELLS</span>
+                </button>
+
+                <button 
+                    class:active={targetingMode === 'move'} 
+                    onclick={() => targetingMode = 'move'}
+                    disabled={totalFuel <= 0}
+                    onmouseenter={() => $isHovering = true} 
+                    onmouseleave={() => $isHovering = false}
+                >
+                    <span class="btn-text">MOVE</span>
+                    <span class="btn-sub">{totalFuel > 0 ? "MOVE FLEET (COST: 1 FUEL)" : "NO FUEL REMAINING"}</span>
                 </button>
 
                 <div class="button-group">

@@ -30,12 +30,13 @@
     let targetingMode = $state('focus');
     let fleetSelections = $state([]);
     let rotation = $state(0);
+    let selectedFleetToMove = $state(null);
     let warning = $state({ show: false, x: 0, y: 0, text: '', id: 0 });
     
     // Status state
-    let health = $state(2);
-    let fuel = $state(3);
+    // Status state
     let currentTurn = $state(1);
+    let mousePos = $state({ x: 0, y: 0 }); // Tracks cursor for the tooltip
     let friendlySearchedHexes = $state([]);
     let enemySearchedHexes = $state([]);    
     let isRevealed = $state(false);
@@ -52,6 +53,7 @@
 
     // Gets highlighted hexes & automatically filters out land!
     let highlightedHexes = $derived(
+        targetingMode === 'move' ? [] :
         getTargetHexes(hoveredHex, targetingMode, rotation, gridHexes)
         .filter(hex => !specialTiles.some(t => t.col === hex.col && t.row === hex.row))
     );
@@ -69,17 +71,83 @@
 
         // DEPLOYMENT PHASE
         if (!isConfirmed) {
+            const tacticalNames = ["USS Gentile", "USS Maroon"]; 
+
             const index = fleetSelections.findIndex(h => h.q === hex.q && h.r === hex.r);
+            
             if (index > -1) {
+                // Remove ship and re-assign names to the remaining ones based on their new index
                 fleetSelections = fleetSelections.filter(h => h !== fleetSelections[index]);
+                fleetSelections = fleetSelections.map((f, i) => ({ 
+                    ...f, 
+                    name: tacticalNames[i], 
+                    id: i + 1 
+                }));
             } else if (fleetSelections.length < 2) {
-                fleetSelections = [...fleetSelections, hex];
+                // Add new ship with distinct stats and a custom name
+                const newId = fleetSelections.length + 1;
+                const newName = tacticalNames[fleetSelections.length]; // Grabs the name from the array
+
+                fleetSelections = [...fleetSelections, { 
+                    q: hex.q, 
+                    r: hex.r, 
+                    name: newName, 
+                    id: newId, 
+                    health: 2, 
+                    fuel: 3 
+                }];
             }
             return;
         }
 
+        // --- NEW: MOVE LOGIC ---
+        if (targetingMode === 'move') {
+            const isFleet = fleetSelections.find(h => h.q === hex.q && h.r === hex.r);
+            
+            // 1. Did they click an existing fleet?
+            if (isFleet) {
+                if (selectedFleetToMove && selectedFleetToMove.q === isFleet.q && selectedFleetToMove.r === isFleet.r) {
+                    selectedFleetToMove = null;
+                } else {
+                    selectedFleetToMove = isFleet;
+                }
+                return;
+            }
+
+            // 2. If a fleet is selected, attempt the jump
+            if (selectedFleetToMove) {
+                // Calculate distance using raw q/r coordinates to prevent prototype errors
+                const s1 = -selectedFleetToMove.q - selectedFleetToMove.r;
+                const s2 = -hex.q - hex.r;
+                const isAdjacent = (Math.abs(selectedFleetToMove.q - hex.q) + Math.abs(selectedFleetToMove.r - hex.r) + Math.abs(s1 - s2)) / 2 === 1;
+
+                if (!isAdjacent) {
+                    showWarning(event.clientX, event.clientY, "Must jump to an adjacent hex!");
+                    return;
+                }
+
+                if (selectedFleetToMove.fuel > 0) {
+                    // Update ONLY the moving ship's location and fuel
+                    fleetSelections = fleetSelections.map(f => 
+                        (f.q === selectedFleetToMove.q && f.r === selectedFleetToMove.r) 
+                            ? { ...f, q: hex.q, r: hex.r, fuel: f.fuel - 1 } 
+                            : f
+                    );
+                    selectedFleetToMove = null; 
+                    targetingMode = 'focus'; 
+                    executeEnemyTurn(); 
+                } else {
+                    showWarning(event.clientX, event.clientY, `${selectedFleetToMove.name} is out of fuel!`);
+                }
+            } else {
+                showWarning(event.clientX, event.clientY, "Select a fleet to jump first!");
+            }
+            return;
+        }
+        // --- END MOVE LOGIC ---
+
         // TARGETING PHASE
-        if (targetingMode === 'directional') {
+        else if (targetingMode === 'directional') {
             // highlightedHexes is already land-free, so we just use it directly!
             selectedGroup = selectedGroup.some(h => highlightedHexes.includes(h)) 
                 ? [] 
@@ -146,6 +214,13 @@
         }, 1500);
     }
 
+    //Automatically deselect ship if a different targeting button is selected.
+    $effect(() => {
+        if (targetingMode !== 'move') {
+            selectedFleetToMove = null;
+        }
+    });
+
     function confirmFleets() {
         if (fleetSelections.length === 2) {
             console.log("Fleets locked:", fleetSelections.map(f => ({ q: f.q, r: f.r })));
@@ -210,7 +285,7 @@
 </script>
 
 <!--MAP HTML-->
-<div class="layout-container">
+<div class="layout-container" class:not-my-turn={isConfirmed && !isMyTurn}>
     <!--LEFT-->
     <Sidebar 
         bind:targetingMode 
@@ -218,7 +293,8 @@
         bind:rotation
         bind:isEnemyTurn
         {fleetSelections} 
-        {selectedGroup} onConfirm={confirmFleets}
+        {selectedGroup} 
+        onConfirm={confirmFleets}
         onSearch={handlePlayerSearch} 
         onTurnEnd={executeEnemyTurn} 
     />
@@ -227,6 +303,7 @@
     <div 
         class="map-area"
         role="application"
+        onmousemove={(e) => { mousePos.x = e.clientX; mousePos.y = e.clientY; }}
         oncontextmenu={(e) => {
             if (targetingMode === 'directional') {
                 e.preventDefault();
@@ -250,7 +327,7 @@
                 <pattern id="ship-pattern" patternUnits="objectBoundingBox" width="1" height="1">
                     <image 
                         href="ship.png" 
-                        x="0.1" 
+                        x="15.0" 
                         y="0.1" 
                         width="10%" 
                         height="10%" 
@@ -285,8 +362,7 @@
                     
                     {@const isFriendlySearched = friendlySearchedHexes.some(s => s.q === hex.q && s.r === hex.r)}
                     {@const isEnemySearched = enemySearchedHexes.some(s => s.q === hex.q && s.r === hex.r)}
-                    
-                    {@const pointsStr = hex.corners.map(({ x, y }) => `${x},${y}`).join(' ')}
+                    {@const isSelectedToMove = selectedFleetToMove && selectedFleetToMove.q === hex.q && selectedFleetToMove.r === hex.r} {@const pointsStr = hex.corners.map(({ x, y }) => `${x},${y}`).join(' ')}
                     
                     <g 
                         class="hex-cell"
@@ -301,8 +377,8 @@
                         <polygon
                             points={pointsStr}
                             fill={config ? `url(#pattern-${hex.col}-${hex.row})` : "url(#water-pattern)"}
-                            stroke={isFleet ? "#4ade80" : "black"} 
-                            stroke-width={isFleet ? 2 : 0.5}
+                            stroke="black" 
+                            stroke-width="0.5"
                         />
                         
                         {#if isFleet && isRevealed}
@@ -351,32 +427,62 @@
                 {#each grid as hex}
                     {@const isActive = highlightedHexes.includes(hex)}
                     {@const isSelected = selectedGroup.includes(hex)}
+                    {@const isSelectedToMove = selectedFleetToMove && selectedFleetToMove.q === hex.q && selectedFleetToMove.r === hex.r}
+                    {@const isFleet = fleetSelections.some(f => f.q === hex.q && f.r === hex.r)}
                     
-                    {#if isConfirmed && (isActive || isSelected)}
+                    {#if isFleet || (isConfirmed && (isActive || isSelected || isSelectedToMove))}
                         <g pointer-events="none">
                             <polygon
                                 points={hex.corners.map(({ x, y }) => `${x},${y}`).join(' ')}
-                                fill={isSelected ? 'rgba(200, 74, 74, 0.6)' : 'rgba(59, 130, 246, 0.4)'}
-                                stroke={isSelected ? "#e24a4a" : "#3b82f6"}
-                                stroke-width={isSelected ? 4 : 2}
+                                fill={
+                                    isSelectedToMove ? 'rgba(59, 130, 246, 0.3)' : 
+                                    (isConfirmed && isSelected ? 'rgba(200, 74, 74, 0.6)' : 
+                                    (isConfirmed && isActive ? 'rgba(59, 130, 246, 0.4)' : 'transparent'))
+                                }
+                                stroke={
+                                    isSelectedToMove ? "#3b82f6" : 
+                                    (isConfirmed && isSelected ? "#e24a4a" : 
+                                    (isConfirmed && isActive ? "#3b82f6" : 
+                                    (isFleet ? "#22c55e" : "transparent")))
+                                }
+                                stroke-width={
+                                    isSelectedToMove ? 4 : 
+                                    (isConfirmed && isSelected ? 4 : 
+                                    (isConfirmed && isActive ? 2 : 
+                                    (isFleet ? 4 : 0)))
+                                }
                             />
-                            <text 
-                                x={hex.x} 
-                                y={hex.y} 
-                                dy="25" 
-                                text-anchor="middle" 
-                                fill="white" 
-                                font-size="20" 
-                                font-weight="bold" 
-                                style="text-shadow: 0 0 4px #000;"
-                            >
-                                {String.fromCharCode(65 + hex.col)}-{hex.row + 1}
-                            </text>
+                            
+                            {#if isConfirmed && (isActive || isSelected) && !isSelectedToMove}
+                                <text 
+                                    x={hex.x} 
+                                    y={hex.y} 
+                                    dy="25" 
+                                    text-anchor="middle" 
+                                    fill="white" 
+                                    font-size="20" 
+                                    font-weight="bold" 
+                                    style="text-shadow: 0 0 4px #000;"
+                                >
+                                    {String.fromCharCode(65 + hex.col)}-{hex.row + 1}
+                                </text>
+                            {/if}
                         </g>
                     {/if}
                 {/each}
             </g>
         </svg>
+
+        {#if hoveredHex && isConfirmed}
+            {@const hoveredFleet = fleetSelections.find(f => f.q === hoveredHex.q && f.r === hoveredHex.r)}
+            {#if hoveredFleet}
+                <div class="fleet-tooltip" style="top: {mousePos.y + 15}px; left: {mousePos.x + 15}px;">
+                    <div class="tooltip-header">{hoveredFleet.name}</div>
+                    <div class="tooltip-stat">HEALTH: <span style="color: #4ade80">{hoveredFleet.health} / 2</span></div>
+                    <div class="tooltip-stat">FUEL: <span style="color: #eab308">{hoveredFleet.fuel} / 3</span></div>
+                </div>
+            {/if}
+        {/if}
 
         {#if warning.show}
             {#key warning.id}
@@ -392,18 +498,16 @@
 
     <!--RIGHT-->
     <StatusBar 
-        bind:health 
-        bind:fuel 
         bind:currentTurn
         bind:isRevealed
         bind:isEnemyTurn
+        {fleetSelections}
     />
 </div>
 
 <!--MAP HTML APPEARANCE-->
 <style>
-    /*General layout for the contents of the map*/ 
-    .layout-container { 
+    .layout-container {     
         display: flex; 
         flex-direction: row; 
         width: 100%; 
@@ -411,7 +515,14 @@
         overflow: hidden; 
         background: #0b0e14; 
     }
-    
+
+    .layout-container.not-my-turn :global(.sidebar_targeting) {
+        pointer-events: none;
+        user-select: none;
+        opacity: 0.5;
+        transition: all 0.4s ease;
+    }
+
     /*Layout of the map*/
     .map-area { 
         flex: 1;
@@ -457,5 +568,31 @@
             opacity: 0; 
             transform: translate(15px, -40px); 
         }
+    }
+
+    .fleet-tooltip {
+        position: fixed;
+        background: rgba(10, 15, 30, 0.95);
+        border: 1px solid #4ade80;
+        padding: 10px 15px;
+        color: white;
+        font-family: 'Chakra Petch', sans-serif;
+        pointer-events: none;
+        z-index: 100;
+        box-shadow: 0 0 15px rgba(74, 222, 128, 0.2);
+        border-radius: 4px;
+    }
+    .tooltip-header {
+        font-weight: bold;
+        color: #4ade80;
+        border-bottom: 1px solid rgba(74, 222, 128, 0.3);
+        margin-bottom: 5px;
+        padding-bottom: 5px;
+        letter-spacing: 1px;
+    }
+    .tooltip-stat {
+        font-size: 0.9rem;
+        color: #abbbd1;
+        margin-top: 2px;
     }
 </style>
