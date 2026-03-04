@@ -1,5 +1,6 @@
 import { writable } from 'svelte/store';
 import { io } from 'socket.io-client';
+import { PUBLIC_SERVER_URL } from '$env/static/public'; // Import the variable
 
 export const socket = writable(null);
 export const gameId = writable('');
@@ -9,7 +10,7 @@ let socketInstance = null;
 
 export function initSocket() {
     if (!socketInstance) {
-        socketInstance = io("http://localhost:3000");
+        socketInstance = io(PUBLIC_SERVER_URL);
         socket.set(socketInstance);
     }
 

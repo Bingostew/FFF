@@ -1,5 +1,8 @@
 // the below is straight copy and pasted from gemini. need to 
 // go through and see what works and how it works
+const path = require('path');
+require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
+
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
@@ -10,6 +13,8 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: "*" } });
 const cors = require('cors');
+
+const PORT = process.env.PUBLIC_SERVER_PORT;
 
 app.use(express.static('public'));
 app.use(express.json());
@@ -43,4 +48,4 @@ app.post('/create-lobby', (req, res) => {
 // socketHandler.js file has functions for game logic
 gameLogic(io, lobbies);
 
-server.listen(3000, 'localhost', () => console.log('Server running on port 3000'));
+server.listen(PORT, '0.0.0.0', () => console.log(`Listening on port ${PORT}`));

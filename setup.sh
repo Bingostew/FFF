@@ -16,5 +16,7 @@ npm install svelte vite @sveltejs/vite-plugin-svelte
 npm i honeycomb-grid
 npm i socket.io-client
 npm i uuid
+npm i supertest
+npm i dotenv
 
 echo "Task Completed!------------------------------"

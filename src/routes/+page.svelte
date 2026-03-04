@@ -5,6 +5,7 @@
   import { goto } from '$app/navigation';
   import { createWebSocketModuleRunnerTransport } from 'vite/module-runner';
   import { initSocket, gameId, socket } from '$lib/gameStore';
+  import { PUBLIC_SERVER_URL } from '$env/static/public';
 
   let showMultiplayerModal = $state(false); //Toggles multiplayer modal.
   let showSingleplayerModal = $state(false); //Toggles singleplayer modal.
@@ -93,7 +94,7 @@
   async function goToCreate() {
     try {
       modalStep = 2;
-      const res = await fetch('http://localhost:3000/create-lobby', { method: 'POST' });
+      const res = await fetch(`${PUBLIC_SERVER_URL}/create-lobby`, { method: 'POST' });
       const data = await res.json();
       lobbyCode = data.gameId;
 
