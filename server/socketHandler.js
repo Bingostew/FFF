@@ -270,10 +270,6 @@ module.exports = (io, lobbies) => {
         return Math.floor(Math.random() * 6) + 1;
     }
 
-    function dieResult(die1, die2) {
-        return die1 + die2;
-    }
-
     function calculateHexDistance(hex1, hex2) {
 
         const dx = Math.abs(hex1.q - hex2.q);
@@ -282,6 +278,45 @@ module.exports = (io, lobbies) => {
     
         return Math.max(dx, dy, dz);
     }
+
+    const handlePlayerLeave = (socketId) => {
+        // Find which game the player was in and handle their departure.
+        const gameId = Object.keys(lobbies).find(id => lobbies[id].players[socketId]);
+
+        if (gameId) {
+            const lobby = lobbies[gameId];
+            const playerName = lobby.players[socketId]?.name || 'A player';
+            console.log(`${playerName} from game ${gameId} has left or disconnected.`);
+
+            // Remove player from the lobby state
+            delete lobby.players[socketId];
+            delete lobby.fleets[socketId];
+            if (lobby.assets) delete lobby.assets[socketId];
+
+            // If the game was in progress, end it and declare the other player the winner.
+            if (lobby.status === 'active' && Object.keys(lobby.players).length > 0) {
+                const winnerId = Object.keys(lobby.players)[0];
+                lobby.status = 'game_over';
+                io.to(gameId).emit('game_over', {
+                    winner: lobby.players[winnerId].name,
+                    winnerId: winnerId,
+                    reason: `${playerName} has left the game.`
+                });
+            } else {
+                // If game wasn't active, just update the lobby for any remaining player.
+                io.to(gameId).emit('room_update', {
+                    players: lobby.players,
+                    status: lobby.status
+                });
+            }
+
+            // If the lobby is now empty, delete it to prevent memory leaks.
+            if (Object.keys(lobby.players).length === 0) {
+                console.log(`Deleting empty lobby: ${gameId}`);
+                delete lobbies[gameId];
+            }
+        }
+    };
 
     io.on('connection', (socket) => {
         console.log(`Player connected: ${socket.id}`);
@@ -426,36 +461,8 @@ module.exports = (io, lobbies) => {
         // Handle player leaving the game
 
         socket.on('leave_game', ({ gameId }) => {
-            const lobby = lobbies[gameId];
-            if (lobby && lobby.players[socket.id]) {
-                const playerName = lobby.players[socket.id].name || 'A player';
-                delete lobby.players[socket.id];
-                delete lobby.fleets[socket.id];
-                if (lobby.assets) delete lobby.assets[socket.id];
-                socket.leave(gameId);
-                
-                // If game was in progress, the other player wins.
-                if (lobby.status === 'active' && Object.keys(lobby.players).length > 0) {
-                    const winnerId = Object.keys(lobby.players)[0];
-                    lobby.status = 'game_over';
-                    io.to(gameId).emit('game_over', {
-                        winner: lobby.players[winnerId].name,
-                        winnerId: winnerId,
-                        reason: `${playerName} left the game.`
-                    });
-                } else {
-                    // Otherwise, just update the waiting room
-                    io.to(gameId).emit('room_update', {
-                        players: lobby.players,
-                        status: lobby.status
-                    });
-                }
-
-                if (Object.keys(lobby.players).length === 0) {
-                    console.log(`Deleting empty lobby: ${gameId}`);
-                    delete lobbies[gameId];
-                }
-            }
+            socket.leave(gameId);
+            handlePlayerLeave(socket.id);
         });
 
         /**
@@ -472,42 +479,7 @@ module.exports = (io, lobbies) => {
 
         socket.on('disconnect', () => {
             console.log(`Player disconnected: ${socket.id}`);
-            // Find which game the player was in and handle their departure.
-            const gameId = Object.keys(lobbies).find(id => lobbies[id].players[socket.id]);
-
-            if (gameId) {
-                const lobby = lobbies[gameId];
-                const playerName = lobby.players[socket.id]?.name || 'A player';
-                console.log(`${playerName} from game ${gameId} disconnected.`);
-
-                // Remove player from the lobby state
-                delete lobby.players[socket.id];
-                delete lobby.fleets[socket.id];
-                if (lobby.assets) delete lobby.assets[socket.id];
-
-                // If the game was in progress, end it and declare the other player the winner.
-                if (lobby.status === 'active' && Object.keys(lobby.players).length > 0) {
-                    const winnerId = Object.keys(lobby.players)[0];
-                    lobby.status = 'game_over';
-                    io.to(gameId).emit('game_over', {
-                        winner: lobby.players[winnerId].name,
-                        winnerId: winnerId,
-                        reason: `${playerName} has disconnected.`
-                    });
-                } else {
-                    // If game wasn't active, just update the lobby for any remaining player.
-                    io.to(gameId).emit('room_update', {
-                        players: lobby.players,
-                        status: lobby.status
-                    });
-                }
-
-                // If the lobby is now empty, delete it.
-                if (Object.keys(lobby.players).length === 0) {
-                    console.log(`Deleting empty lobby: ${gameId}`);
-                    delete lobbies[gameId];
-                }
-            }
+            handlePlayerLeave(socket.id);
         });
 
         socket.on('focus', (gameId,Positions) => {
