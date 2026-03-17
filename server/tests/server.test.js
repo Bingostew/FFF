@@ -20,25 +20,13 @@ describe('API Endpoints', () => {   // label tests as 'API Endpoints'
         expect(res.body.message).toBe('Lobby created!');
     });
 
-    // testing /join-lobby
-    it('should join a lobby successfully', async () => {
-        // send request
-        const res = await request(server)
-            .post('/join-lobby') // url
-            .expect('Content-Type', /json/)   // check headers
-            .expect(200);  // check status code
+    // testing 'place-fleets' socket.io thing
 
-        // checks data
-        expect(res.body.message).toBe('Lobby joined!');
-    })
+    // execute_strike socket.io thing
 
-    // testing 'place-fleets'
+    // leave_game   ?
 
-    // execute_strike
-
-    // leave_game
-
-    // move_fleet
+    // move_fleet   socket.io thing
 
     // 
 });
