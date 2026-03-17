@@ -23,7 +23,9 @@
 		"vitest": "^4.0.15"
 	},
 	"dependencies": {
+		"fs": "^0.0.1-security",
 		"honeycomb-grid": "^4.1.5",
+		"path": "^0.12.7",
 		"socket.io-client": "^4.8.3"
 	}
 }

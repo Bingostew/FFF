@@ -3,10 +3,12 @@
   import { io } from "socket.io-client";
 
   let showMultiplayerModal = false;
+  let showSingleplayerModal = false;
 
   let nickname = '';
   let lobbyCode = '';
   const socket = io();
+  let mapList = [];
 
   // 0 = Name Input, 1 = Selection, 2 = Create Lobby, 3 = Join Lobby
   let modalStep = 0;
@@ -26,6 +28,35 @@
   function openModal(event) {
     event.preventDefault();
     toggleModal();
+  }
+
+  async function openSingleplayerModal(event) {
+    event.preventDefault();
+    try {
+        const res = await fetch(`http://${window.location.hostname}:3000/list-maps`);
+        mapList = await res.json();
+    } catch (e) {
+        mapList = [];
+    }
+    showSingleplayerModal = true;
+  }
+
+  async function startSingleplayer(mapFile) {
+    if (mapFile) {
+      try {
+        // Fetch the specific map from the backend
+        const res = await fetch(`http://${window.location.hostname}:3000/maps/${mapFile}?t=` + Date.now());
+        if (!res.ok) throw new Error('Map not found');
+        const data = await res.json();
+        sessionStorage.setItem('customMapData', JSON.stringify(data));
+      } catch (e) {
+        alert('No custom map found on server. Please save one in the Map Editor first.');
+        return;
+      }
+    } else {
+      sessionStorage.removeItem('customMapData');
+    }
+    window.location.href = '/singleplayer';
   }
 
   function confirmName() {
@@ -59,7 +90,14 @@
   </div>  
 
   <ul class="menu-links">
-    <li><a href="/singleplayer" onmouseenter={() => $isHovering = true} onmouseleave={() => $isHovering = false}>SINGLEPLAYER</a></li>
+    <li>
+      <a href="/singleplayer" 
+        onclick={openSingleplayerModal}
+        onmouseenter={() => $isHovering = true} 
+        onmouseleave={() => $isHovering = false}>
+        SINGLEPLAYER
+      </a>
+    </li>
     <li>
       <a href="/multiplayer" 
         onclick={openModal} 
@@ -68,6 +106,7 @@
         MULTIPLAYER
       </a>
     </li>    
+    <li><a href="/map-editor" onmouseenter={() => $isHovering = true} onmouseleave={() => $isHovering = false}>MAP EDITOR</a></li>
     <li><a href="/tutorial" onmouseenter={() => $isHovering = true} onmouseleave={() => $isHovering = false}>TUTORIAL</a></li>
     <li><a href="/credits" onmouseenter={() => $isHovering = true} onmouseleave={() => $isHovering = false}>CREDITS</a></li>
   </ul>
@@ -125,6 +164,27 @@
     </div>
   {/if}
 
+  {#if showSingleplayerModal}
+    <div class="modal-backdrop">
+      <div class="modal-content">
+        <h2>SELECT OPERATION MAP</h2>
+        <div class="vertical-stack">
+            <button class="action-btn wide" onclick={() => startSingleplayer(null)}>DEFAULT MAP</button>
+            
+            {#if mapList.length > 0}
+              <div class="map-list-container">
+                <h3>CUSTOM MAPS</h3>
+                {#each mapList as map}
+                  <button class="action-btn wide map-btn" onclick={() => startSingleplayer(map)}>{map.replace('.json', '')}</button>
+                {/each}
+              </div>
+            {/if}
+        </div>
+        <button class="close-btn" onclick={() => showSingleplayerModal = false}>CANCEL</button>
+      </div>
+    </div>
+  {/if}
+
   <img src="/cna.png" alt="cna" class="cna-img" />
   <img src="/CS.png" alt="CS" class="CS-img" />
   <img src="/tacticalmap.jpg" alt="map" class="map-img" />
@@ -141,6 +201,21 @@
     width: 100%;
   }
 
+  .map-list-container {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    align-items: center;
+    margin-top: 1rem;
+    max-height: 30vh;
+    overflow-y: auto;
+  }
+
+  .map-btn {
+    font-size: 1.5vh;
+    padding: 0.8rem;
+  }
 
 
 .tactical-input {

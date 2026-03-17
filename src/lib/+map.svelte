@@ -3,6 +3,7 @@
     // Import the hex grid and custom cursor. 
     import { defineHex, Grid, rectangle, Orientation } from 'honeycomb-grid';
     import { isHovering } from '$lib/store';
+    import { onMount } from 'svelte';
 
     // 1. Setup Grid
     // Hex Tile class.
@@ -25,14 +26,25 @@
 
     // Configuration: Map coordinates to specific image files,by default all tiles
     // appear as water tiles. This adds land objects. 
-    const specialTiles = [
+    let specialTiles = $state([
         { col: 1, row: 2, img: 'single_palm.jpg' },
         { col: 2, row: 1, img: 'double_palm.jpg' },
         { col: 2, row: 4, img: 'tree.jpg' },
         { col: 3, row: 4, img: 'hill.jpg' },
         { col: 4, row: 3, img: 'peak.jpg' },
         { col: 5, row: 2, img: 'mountain.jpg' }
-    ];
+    ]);
+
+    onMount(() => {
+        const stored = sessionStorage.getItem('customMapData');
+        if (stored) {
+            try {
+                specialTiles = JSON.parse(stored);
+            } catch (e) {
+                console.error('Failed to load custom map data', e);
+            }
+        }
+    });
 
     // Checks if the tile is a non default tile
     function getTileConfig(hex) {
