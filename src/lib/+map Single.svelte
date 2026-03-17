@@ -92,25 +92,6 @@
     function handleHexClick(event, hex) {
         if (isConfirmed && !isMyTurn) return;
 
-
-        if (isConfirmed) {
-            const friendlyFleet = fleetSelections.find(f => f.q === hex.q && f.r === hex.r);
-            const isDetectedEnemy = enemySearchedHexes.some(e => e.q === hex.q && e.r === hex.r);
-
-            // 1. Select Source (Your Fleet)
-            if (friendlyFleet) {
-                sourceFleet = friendlyFleet;
-                showWarning(event.clientX, event.clientY, `Source: ${sourceFleet.name}`);
-                return;
-            }
-
-            // 2. Select Target (Detected Enemy)
-            if (isDetectedEnemy) {
-                targetEnemy = hex;
-                return;
-            }
-        }
-
         // GLOBAL LAND CHECK
         const isSpecial = specialTiles.some(t => t.col === hex.col && t.row === hex.row);
         if (isSpecial) {
@@ -149,7 +130,7 @@
             return;
         }
 
-        // --- NEW: MOVE LOGIC ---
+        // MOVE LOGIC
         if (targetingMode === 'move') {
             const isFleet = fleetSelections.find(h => h.q === hex.q && h.r === hex.r);
             
@@ -194,6 +175,25 @@
             return;
         }
         // --- END MOVE LOGIC ---
+
+        if (isConfirmed) {
+            const friendlyFleet = fleetSelections.find(f => f.q === hex.q && f.r === hex.r);
+            const isDetectedEnemy = enemySearchedHexes.some(e => e.q === hex.q && e.r === hex.r);
+
+            // 1. Select Source (Your Fleet)
+            if (friendlyFleet) {
+                sourceFleet = friendlyFleet;
+                showWarning(event.clientX, event.clientY, `Source: ${sourceFleet.name}`);
+                return;
+            }
+
+            // 2. Select Target (Detected Enemy)
+            if (isDetectedEnemy) {
+                targetEnemy = hex;
+                return;
+            }
+        }
+
 
         // TARGETING PHASE
         else if (targetingMode === 'directional') {
