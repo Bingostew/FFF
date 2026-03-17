@@ -50,6 +50,8 @@ Or, mannually install singular requirements:
 
     `npm i socket.io-client`
 
+    `npm i uuid`
+
 ### Build and Run
 Run `npm run dev -- --host`. Copy and paste the output link in the browser to visualize app.
 

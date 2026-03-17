@@ -11,6 +11,7 @@ const path = require('path');
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: "*" } });
+const cors = require('cors');
 
 // Enable CORS for development so the frontend (port 5173) can talk to the backend (port 3000)
 app.use((req, res, next) => {
@@ -24,8 +25,8 @@ app.use((req, res, next) => {
 });
 
 app.use(express.static('public'));
-
 app.use(express.json());
+app.use(cors());
 
 // Ensure maps directory exists
 const mapsDir = path.join(__dirname, '../static/maps');
@@ -59,32 +60,27 @@ app.get('/maps/:mapFile', (req, res) => {
 });
 
 // --- DATABASE MOCKUP ---
-// In production, use Redis or a real DB
+// Each room now tracks specific game data
 const lobbies = {}; 
+const games = {}
+// --- HTTP: LOBBY MANAGEMENT ---
 
-// --- 1. HTTP: LOBBY MANAGEMENT ---
 
-// Create a Lobby
 app.post('/create-lobby', (req, res) => {
-    const gameId = uuidv4(); // Generate unique ID like '9b1deb4d...'
+    const gameId = uuidv4().substring(0, 6); // Shorter ID for easier sharing
     lobbies[gameId] = { 
-        players: [], 
-        status: 'waiting' // waiting -> active
+        players: {}, // Using object keyed by socket.id
+        status: 'waiting', 
+        turn: 1, // Tracks the current round number (starts at 1)
+        activePlayer: null, // Tracks whose turn it is
+        fleets: {}, // Secret fleet positions { socketId: { alpha: {q,r}, beta: {q,r} } }
+        assets: {}, // Tracks assets like fuel, special weapons, etc.
+        history: [], // Stores a log of all moves/strikes for replay or reconnection
+        fleetPlaced: {}
     };
-    res.json({ gameId, message: 'Lobby created. Share this ID!' });
+    res.json({ gameId, message: 'Lobby created!' });
 });
 
-// Join Check (Just checks if valid, doesn't connect socket yet)
-app.post('/join-lobby', (req, res) => {
-    const { gameId, userId } = req.body;
-    
-    if (!lobbies[gameId]) {
-        return res.status(404).json({ error: 'Lobby not found' });
-    }
-    
-    // Add logic here to store player info if needed
-    res.json({ success: true, gameId });
-});
 
 // Start Game Trigger
 app.post('/start-game', (req, res) => {
@@ -139,6 +135,4 @@ app.post('/save-map', (req, res) => {
 // socketHandler.js file has functions for game logic
 gameLogic(io, lobbies);
 
-server.listen(3000, () => {
-    console.log('Server running on port 3000');
-});
+server.listen(3000, 'localhost', () => console.log('Server running on port 3000'));
