@@ -1,5 +1,8 @@
 // the below is straight copy and pasted from gemini. need to 
 // go through and see what works and how it works
+const path = require('path');
+require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
+
 const express = require('express');
 const http = require('http');
 const path = require('path');
@@ -10,17 +13,26 @@ const { v4: uuidv4 } = require('uuid'); // Library to generate unique IDs
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: "*" } });
+const cors = require('cors');
+
+const PORT = process.env.PUBLIC_SERVER_PORT;
 
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.json());
+app.use(cors());
 
 // --- DATABASE MOCKUP ---
 // Each room now tracks specific game data
 const lobbies = {}; 
+<<<<<<< HEAD
 
 const games = {}
 
+=======
+const games = {}
+>>>>>>> origin/ui
 // --- HTTP: LOBBY MANAGEMENT ---
+
 
 app.post('/create-lobby', (req, res) => {
     const { mode } = req.body;
@@ -33,19 +45,28 @@ app.post('/create-lobby', (req, res) => {
         fleets: {}, // Secret fleet positions { socketId: { alpha: {q,r}, beta: {q,r} } }
         assets: {}, // Tracks assets like fuel, special weapons, etc.
         history: [], // Stores a log of all moves/strikes for replay or reconnection
+<<<<<<< HEAD
         fleetPlaced: {},
         mode: mode || 'multi'
+=======
+        fleetPlaced: {}
+>>>>>>> origin/ui
     };
     res.json({ gameId, message: 'Lobby created!' });
 });
+
 
 // --- SOCKET.IO: GAME LOGIC ---
 
 // socketHandler.js file has functions for game logic
 gameLogic(io, lobbies);
 
+<<<<<<< HEAD
 if (require.main === module) {
     server.listen(3000,'0.0.0.0', () => console.log('Server running on port 3000'));
 }
 
 module.exports = server;
+=======
+server.listen(PORT, '0.0.0.0', () => console.log(`Listening on port ${PORT}`));
+>>>>>>> origin/ui

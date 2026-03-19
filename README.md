@@ -42,12 +42,20 @@ Or, mannually install singular requirements:
 
    `npm config set strict-ssl false`
 
-7. Install Svelte:
+7. Install required npm packages
 
     `npm install svelte vite @sveltejs/vite-plugin-svelte`
+    
+    `npm i honeycomb-grid`
+
+    `npm i socket.io-client`
+
+    `npm i uuid`
 
 ### Build and Run
 Run `npm run dev -- --host`. Copy and paste the output link in the browser to visualize app.
+
+If the target port is already in use, run `npm run dev -- --host --port <port number>` to specify a specific port.
 
 ## Tools and Frameworks
 <img width="150" height="168" alt="image" src="https://github.com/user-attachments/assets/a8e74586-a23d-43a2-a342-3e09b26ee75c" />

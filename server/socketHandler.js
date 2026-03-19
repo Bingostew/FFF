@@ -5,8 +5,11 @@ const BotAI = require('./botAI');
 // game 'brain': will handle socket.io messages
 module.exports = (io, lobbies) => {
 
+<<<<<<< HEAD
     const BOT_ID = 'CPU_COMMANDER';
 
+=======
+>>>>>>> origin/ui
     //function to ensure that each player can perform an action only when it is its turn
     const switchTurn = (gameId) => {
         const lobby = lobbies[gameId];
@@ -318,6 +321,67 @@ module.exports = (io, lobbies) => {
         }
     };
 
+    const comparePositions = (pos1, pos2) => {
+        return pos1.q === pos2.q && pos1.r === pos2.r;
+    };
+
+    function resolveStrikeHit(targetHex, opponentFleets) {
+        let fleetKey = null;
+        if (comparePositions(targetHex, opponentFleets.alpha) && !opponentFleets.alpha.isDestroyed) {
+            fleetKey = 'alpha';
+        } else if (comparePositions(targetHex, opponentFleets.beta) && !opponentFleets.beta.isDestroyed) {
+            fleetKey = 'beta';
+        }
+
+        if (fleetKey) {
+            const fleet = opponentFleets[fleetKey];
+            fleet.hp -= 1;
+            if (fleet.hp <= 0) {
+                fleet.isDestroyed = true;
+            }
+            return fleetKey;
+        }
+        return null;
+    }
+
+    function dieRoll() {
+        return Math.floor(Math.random() * 6) + 1;
+    }
+
+    function dieResult(die1, die2) {
+        return die1 + die2;
+    }
+
+    function checkForActionConditions(lobby, socket){
+        let result = true;
+
+        if (!lobby ) {
+            socket.emit('error', 'Game does not exist');
+            result = false;
+        }
+
+        else if (lobby.status !== 'active') {
+            socket.emit('error', 'Game is not active');
+            result = false;
+        }
+
+        else if (lobby.activePlayer !== socket.id) {
+            socket.emit('error', 'It is not your turn.');
+            result = false;
+        }
+
+        return result;
+    }
+
+    function calculateHexDistance(hex1, hex2) {
+
+        const dx = Math.abs(hex1.q - hex2.q);
+        const dy = Math.abs(hex1.r - hex2.r);
+        const dz = Math.abs(hex1.q + hex1.r - (hex2.q + hex2.r));
+    
+        return Math.max(dx, dy, dz);
+    }
+
     io.on('connection', (socket) => {
         console.log(`Player connected: ${socket.id}`);
 
@@ -455,7 +519,91 @@ module.exports = (io, lobbies) => {
 
         // Handle the "Finish" - Strike Logic
         socket.on('execute_strike', ({ gameId, targetHex, dieResult }) => {
+<<<<<<< HEAD
             handleStrike(gameId, socket.id, targetHex, dieResult, (msg) => socket.emit('error', msg));
+=======
+            const lobby = lobbies[gameId];
+            if (checkForActionConditions(lobby, socket) === false) {
+                return;
+            }
+
+            // Calculate the shortest distance from a living friendly fleet to the target hex
+            const attackerFleets = lobby.fleets[socket.id];
+            const distances = [];
+            if (attackerFleets.alpha && attackerFleets.alpha.hp > 0) {
+                distances.push(calculateHexDistance(attackerFleets.alpha, targetHex));
+            }
+
+            if (attackerFleets.beta && attackerFleets.beta.hp > 0) {
+                distances.push(calculateHexDistance(attackerFleets.beta, targetHex));
+            }
+
+            const shortestDistance = distances.length > 0 ? Math.min(...distances) : Infinity;
+
+            // Find the opponent
+            const opponentId = Object.keys(lobby.players).find(id => id !== socket.id);
+            if (!opponentId) {
+                // This can happen if the opponent disconnects at the exact moment of a strike.
+                console.log(`Strike by ${socket.id} in game ${gameId} has no opponent.`);
+                return;
+            }
+            const opponentFleets = lobby.fleets[opponentId];
+
+            let hit = false;
+            let fleetKey = null;
+            let destroyed = false;
+
+            let rollSuccessful = false;
+            if (shortestDistance <= 2 && dieResult >= 2) {
+                rollSuccessful = true;
+            } else if ((shortestDistance >= 3 && shortestDistance <= 6) && dieResult >= 3) {
+                rollSuccessful = true;
+            } else if (shortestDistance > 6 && dieResult >= 4) {
+                rollSuccessful = true;
+            }
+
+            if (rollSuccessful) {
+                fleetKey = resolveStrikeHit(targetHex, opponentFleets);
+                if (fleetKey) {
+                    hit = true;
+                    destroyed = opponentFleets[fleetKey].isDestroyed;
+                }
+            }
+
+            // 2. Broadcast result to the room
+            io.to(gameId).emit('strike_result', {
+                attacker: socket.id,
+                hit: hit,
+                targetHex: targetHex,
+                fleetKey: fleetKey,
+                hpRemaining: hit ? opponentFleets[fleetKey].hp : null,
+                isDestroyed: destroyed,
+                distance: shortestDistance
+            });
+
+            lobby.history.push({
+                action: 'strike',
+                playerId: socket.id,
+                targetHex: targetHex,
+                hit: hit,
+                fleetKey: fleetKey,
+                distance: shortestDistance,
+                timestamp: Date.now()
+            });
+
+            // 3. Check for Total Victory
+            // If all fleets for the opponent have 0 HP, the attacker wins
+            const allDestroyed = Object.values(opponentFleets).every(f => f.hp <= 0);
+            if (allDestroyed) {
+                lobby.status = 'game_over';
+                io.to(gameId).emit('game_over', { 
+                    winner: lobby.players[socket.id].name,
+                    winnerId: socket.id 
+                });
+            } else {
+                switchTurn(gameId);
+            }
+>>>>>>> origin/ui
         });
 
         // Handle player leaving the game
@@ -473,7 +621,59 @@ module.exports = (io, lobbies) => {
          * This sh
          */
         socket.on('move_fleet', ({ gameId, fleetKey, newPosition }) => {
+<<<<<<< HEAD
             handleMove(gameId, socket.id, fleetKey, newPosition, (msg) => socket.emit('error', msg));
+=======
+            const lobby = lobbies[gameId];
+            if (checkForActionConditions(lobby, socket) === false) {
+                return;
+            }
+
+            const playerAssets = lobby.assets[socket.id];
+            if (playerAssets.fuel < 1) {
+                socket.emit('error', 'Not enough fuel to move.');
+                return;
+            }
+
+            const playerFleets = lobby.fleets[socket.id];
+            if (playerFleets && playerFleets[fleetKey]) {
+                // Check for collision with own fleets
+                for (const key in playerFleets) {
+                    const fleet = playerFleets[key];
+                    if ((key !== fleetKey) && (fleet.hp > 0) && ((fleet.q === newPosition.q) && (fleet.r === newPosition.r))) {
+                        socket.emit('error', 'Cannot move to a hex occupied by another friendly fleet.');
+                        return;
+                    }
+                }
+
+                const oldPosition = { q: playerFleets[fleetKey].q, r: playerFleets[fleetKey].r };
+
+                playerAssets.fuel -= 1; // Consume fuel
+                // Update fleet position
+                playerFleets[fleetKey].q = newPosition.q;
+                playerFleets[fleetKey].r = newPosition.r;
+
+                lobby.history.push({
+                    action: 'move',
+                    playerId: socket.id,
+                    fleetKey: fleetKey,
+                    from: oldPosition,
+                    to: newPosition,
+                    timestamp: Date.now()
+                });
+
+                // Notify all players in the room about the move
+                io.to(gameId).emit('fleet_moved', {
+                    playerId: socket.id,
+                    fleetKey: fleetKey,
+                    newPosition: newPosition
+                });
+                socket.emit('update_assets', playerAssets); // Notify client of new fuel amount
+                switchTurn(gameId);
+            } else {
+                socket.emit('error', 'Invalid fleet move');
+            }
+>>>>>>> origin/ui
         });
         // Handle disconnection
 
@@ -498,6 +698,160 @@ module.exports = (io, lobbies) => {
         socket.on('die_roll', ({gameId}) => {
             const lobby = lobbies[gameId];
             if (!validateAction(lobby, socket.id, (msg) => socket.emit('error', msg))) {
+                return;
+            }
+
+            const die = dieRoll();
+            
+            io.to(gameId).emit('die_result', {
+                playerId: socket.id,
+                die: die
+            });
+        });
+
+        socket.on('focus', ({gameId,Positions}) => {
+            const lobby = lobbies[gameId];
+            let revealPos = [];
+            if (!lobby) {
+                console.error(`Lobby ${gameId} not found!`);
+                return;
+            }
+            const opponentId = Object.keys(lobby.players).find(id => id !== socket.id);
+            const opponentFleets = lobby.fleets[opponentId];
+            const player = lobby.players[socket.id];
+
+            if (checkForActionConditions(lobby, socket) === false) {
+                return;
+            }
+
+            console.log("check");
+
+            for (const key in opponentFleets) {
+                const fleet = opponentFleets[key];
+                if (!fleet.isDestroyed) {
+                    if (comparePositions(Positions[0],fleet)){
+                        revealPos.push(fleet);
+                    }
+                    else if (comparePositions(Positions[1],fleet)){
+                        revealPos.push(fleet);
+                    }
+                    else if (comparePositions(Positions[2],fleet)){
+                        revealPos.push(fleet);
+                    }
+                }
+            }
+
+            if (revealPos.length > 0) {
+                io.to(gameId).emit('focus_result', {
+                    playerName: player.name,
+                    revealPos: revealPos,
+                    positions:Positions
+                });
+            }
+            else {
+                io.to(gameId).emit('focus_result', {
+                    playerName: player.name,
+                    revealPos: null,
+                    postitions:Positions
+                });
+            }
+            switchTurn(gameId);
+        });
+
+        socket.on('directional', ({gameId, Positions, dieResult}) => {
+            const lobby = lobbies[gameId];
+            const player = lobby.players[socket.id];
+            let revealPos = [];
+            const opponentId = Object.keys(lobby.players).find(id => id !== socket.id);
+            const opponentFleets = lobby.fleets[opponentId];
+
+            if (checkForActionConditions(lobby, socket) === false) {
+                return;
+            }
+            for (const key in opponentFleets) {
+                const fleet = opponentFleets[key];
+                if (!fleet.isDestroyed) {
+                    console.log(Object.values(Positions));
+                    console.log(Positions);
+                    if (Positions[0] && comparePositions(Positions[0],fleet)){
+                        revealPos.push(fleet);
+                    }
+                    if (Positions[1] && comparePositions(Positions[1],fleet)){
+                        revealPos.push(fleet);
+                    }
+                    if (Positions[2] && comparePositions(Positions[2],fleet)){
+                        revealPos.push(fleet);
+                    }
+                }
+            }
+
+            if ((revealPos.length > 0) && (dieResult <= 4)) {
+                io.to(gameId).emit('directional_result', {
+                    playerName: player.name,
+                    revealPos: revealPos,
+                    positions: Positions
+                });
+            }
+            else {
+                io.to(gameId).emit('directional_result', {
+                    playerName: player.name,
+                    revealPos: null,
+                    positions: Positions
+                });
+            }
+            switchTurn(gameId);
+        });
+
+        socket.on('area', ({gameId, Positions, dieResult}) => {
+            const lobby = lobbies[gameId];
+            const player = lobby.players[socket.id];
+            let revealPos = [];
+            const opponentId = Object.keys(lobby.players).find(id => id !== socket.id);
+            const opponentFleets = lobby.fleets[opponentId];
+
+            if (checkForActionConditions(lobby, socket) === false) {
+                return;
+            }
+            for (const key in opponentFleets) {
+                const fleet = opponentFleets[key];
+                if (!fleet.isDestroyed) {
+                    if (comparePositions(Positions[0],fleet)){
+                        revealPos.push(fleet);
+                    }
+                    else if (comparePositions(Positions[1],fleet)){
+                        revealPos.push(fleet);
+                    }
+                    else if (comparePositions(Positions[2],fleet)){
+                        revealPos.push(fleet);
+                    }
+                    else if (comparePositions(Positions[3],fleet)){
+                        revealPos.push(fleet);
+                    }
+
+                }
+            }
+
+            if ((revealPos.length > 0) && (dieResult <= 3)) {
+                io.to(gameId).emit('area_result', {
+                    playerName: player.name,
+                    revealPos: revealPos,
+                    positions: Positions
+                });
+            }
+            else {
+                io.to(gameId).emit('area_result', {
+                    playerName: player.name,
+                    revealPos: null,
+                    positions: Positions
+                });
+            }
+            switchTurn(gameId);
+        });
+
+
+        socket.on('die_roll', ({gameId}) => {
+            const lobby = lobbies[gameId];
+            if (checkForActionConditions(lobby, socket) === false) {
                 return;
             }
 

@@ -5,10 +5,18 @@ chmod 0755 ~/.local/bin/n
 export N_PREFIX="$HOME/.local"
 export PATH="$N_PREFIX/bin:$PATH"
 echo "n successfully installed!"
-echo "Downloading lts"
+echo "Downloading npm"
 n install lts
+echo "npm successfully installed!"
 echo "Setting TLS Permissions"
 export NODE_TLS_REJECT_UNAUTHORIZED=0
 npm config set strict-ssl false
-echo "Downloading svelte"
+echo "Downloading required packages"
 npm install svelte vite @sveltejs/vite-plugin-svelte
+npm i honeycomb-grid
+npm i socket.io-client
+npm i uuid
+npm i supertest
+npm i dotenv
+
+echo "Task Completed!------------------------------"

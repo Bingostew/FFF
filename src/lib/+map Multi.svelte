@@ -1,0 +1,552 @@
+<!--MAP, INTERACTIVELY DISPLAYS GRIDS, ALL DATA SURROUNDING GRIDS, FLEET LOCATIONS-->
+<!--SCRIPTS FOR MAP-->
+<script>
+    // @ts-nocheck
+    import { defineHex, Grid, rectangle, Orientation } from 'honeycomb-grid';
+    import { isHovering } from '$lib/store';
+    import { socket, gameId, activePlayerId } from '$lib/gameStore';   
+    import { getTargetHexes, isGroupConnected, getS } from './gridUtils.js';
+    import Sidebar from './Sidebar Multi.svelte';
+    import StatusBar from './StatusBar Multi.svelte';
+
+    // Grid Config
+    const Tile = defineHex({ 
+        dimensions: 50, 
+        origin: 'topLeft', 
+        orientation: Orientation.FLAT, 
+        offset: 1 
+    });
+    const grid = new Grid(Tile, rectangle({ width: 7, height: 6 }));
+    const gridHexes = [...grid];
+    const isMyTurn = $derived(!isConfirmed || ($activePlayerId === $socket?.id));  
+    
+    let hoveredHex = $state(null);
+    let selectedGroup = $state([]);
+    let targetingMode = $state('focus');
+    let isConfirmed = $state(false);
+    let fleetSelections = $state([]);
+    let rotation = $state(0);
+    let warning = $state({ show: false, x: 0, y: 0, text: '', id: 0 });
+    
+    // Status state, this is information for the specific player. Probably handled client side.
+    let health = $state(2);
+    let fuel = $state(3);
+    let currentTurn = $state(1);
+    let friendlySearchedHexes = $state([]);
+    let enemySearchedHexes = $state([]);    
+    let isRevealed = $state(false);
+
+    // This is the layout of the land tiles, other tiles are all water by default.
+    const specialTiles = [
+        { col: 1, row: 2, img: 'single_palm.jpg' },
+        { col: 2, row: 1, img: 'double_palm.jpg' },
+        { col: 2, row: 4, img: 'tree.jpg' },
+        { col: 3, row: 4, img: 'hill.jpg' },
+        { col: 4, row: 3, img: 'peak.jpg' },
+        { col: 5, row: 2, img: 'mountain.jpg' }
+    ];
+
+    // Get the hexes that have been targeted by the player. Also filters out land so directional search does not search land. 
+    let highlightedHexes = $derived(
+        getTargetHexes(hoveredHex, targetingMode, rotation, gridHexes)
+        .filter(hex => !specialTiles.some(t => t.col === hex.col && t.row === hex.row))
+    );
+
+    // Hex interaction handlers.
+    function handleHexClick(event, hex) {
+
+        if (isConfirmed && !isMyTurn) return;
+
+        const isSpecial = specialTiles.some(t => t.col === hex.col && t.row === hex.row);
+
+        if (!isConfirmed) {
+            // Keeps players from interacting with the land. 
+            if (isSpecial){
+                showWarning(event.clientX, event.clientY, "Cannot place fleet on land");
+                return;
+            }
+
+            const index = fleetSelections.findIndex(h => h.q === hex.q && h.r === hex.r);
+            if (index > -1) {
+                fleetSelections = fleetSelections.filter(h => h !== fleetSelections[index]);
+            } else if (fleetSelections.length < 2) {
+                fleetSelections = [...fleetSelections, hex];
+            }
+            return;
+        }
+
+        if (isSpecial){
+            showWarning(event.clientX, event.clientY, "Cannot select land");
+            return;
+        }
+
+        // AdvancedTargeting Logic
+        if (targetingMode === 'directional') {
+            selectedGroup = selectedGroup.some(h => highlightedHexes.includes(h)) 
+                ? [] 
+                : [...highlightedHexes];
+            console.log("target clicked " + selectedGroup.length);
+            return;
+        }
+
+        const idx = selectedGroup.indexOf(hex);
+        if (idx > -1) {
+            if (targetingMode === 'area') {
+                const testGroup = selectedGroup.filter(h => h !== hex);
+                if (!isGroupConnected(testGroup)) {
+                    showWarning(event.clientX, event.clientY, "Cannot split group");
+                    return;
+                }
+            }
+            selectedGroup = selectedGroup.filter(h => h !== hex);
+        } else {
+            handleNewSelection(event, hex);
+        }
+    }
+
+    //Handles the selection of hexes using focus and area methods.
+    function handleNewSelection(event, hex) {
+        if (targetingMode === 'focus') {
+            if (selectedGroup.length >= 3) {
+                return showWarning(event.clientX, event.clientY, "Limit 3");
+            }
+
+            const adjacent = selectedGroup.some(s => {
+                const dist = (Math.abs(s.q - hex.q) + Math.abs(s.r - hex.r) + Math.abs(getS(s) - getS(hex))) / 2;
+                return dist === 1;
+            });
+
+            if (adjacent) {
+                showWarning(event.clientX, event.clientY, "No adjacent selection");
+            } else {
+                selectedGroup = [...selectedGroup, hex];
+            }
+
+        } else if (targetingMode === 'area') {
+            if (selectedGroup.length >= 4) {
+                return showWarning(event.clientX, event.clientY, "Limit 4");
+            }
+
+            const touching = selectedGroup.length === 0 || selectedGroup.some(s => {
+                const dist = (Math.abs(s.q - hex.q) + Math.abs(s.r - hex.r) + Math.abs(getS(s) - getS(hex))) / 2;
+                return dist === 1;
+            });
+
+            if (!touching) {
+                showWarning(event.clientX, event.clientY, "Must be adjacent");
+            } else {
+                selectedGroup = [...selectedGroup, hex];
+            }
+        }
+    }
+
+    let warningTimeout;
+    function showWarning(x, y, text) {
+        clearTimeout(warningTimeout);
+        warning = { show: true, x, y, text, id: Date.now() };
+        warningTimeout = setTimeout(() => { 
+            if (warning.id === warning.id) warning.show = false; 
+        }, 1500);
+    }
+
+    $effect(() => {
+        if ($socket) {
+            // Listen for the game starting
+            $socket.on('game_start', ({ activePlayer }) => {
+                activePlayerId.set(activePlayer);
+                isConfirmed = true; // This switches the UI to "Battle" mode
+                selectedGroup = [];
+                targetingMode = 'focus';
+            });
+
+            // Listen for turn swaps
+            $socket.on('turn_change', ({ activePlayer }) => {
+                activePlayerId.set(activePlayer);
+            });
+
+            $socket.on('die_result', ({playerId,number}) =>{
+                if(isMyTurn){
+                    let rawPos = selectedGroup;
+                    console.log("length " + selectedGroup.length);
+                    const formattedPositions = {};
+                    rawPos.forEach((h, index) => {
+                        formattedPositions[index] = { q: h.q, r: h.r };
+                    });
+                    $socket.emit(targetingMode, { 
+                        gameId: $gameId, 
+                        Positions: formattedPositions,
+                        dieResult:number
+                    });
+                                                                                
+                    selectedGroup = [];
+                }
+            });
+
+            const ISREvents = ['focus_result', 'directional_result', 'area_result'];
+
+            const onISRResult = ({playerName, revealPos, positions}) => {
+                alert("received ISR result " + revealPos);
+               
+                let posArray = Object.values(positions)
+
+                if(isMyTurn){
+                    const newSearches = posArray.map(p => grid.getHex(p)).filter(Boolean);
+                    friendlySearchedHexes = [...friendlySearchedHexes, ...newSearches];
+                }
+                else{
+                    const scannedHexes = posArray.map(p => grid.getHex(p)).filter(Boolean);
+                    enemySearchedHexes = [...enemySearchedHexes, ...scannedHexes];
+                }
+            };
+            
+            ISREvents.forEach(evt => $socket.on(evt, onISRResult));
+
+            return () => {
+                $socket.off("room_update");
+                $socket.off('game_start');
+                $socket.off('turn_change');
+                $socket.off('die_result');
+                ISREvents.forEach(evt => $socket.off(evt));
+            };
+        }
+    });
+
+    function confirmFleets() {
+        if (fleetSelections.length === 2) {
+            const fleetPositions = {
+                alpha: { q: fleetSelections[0].q, r: fleetSelections[0].r },
+                beta: { q: fleetSelections[1].q, r: fleetSelections[1].r }
+            };
+            $socket.emit('place_fleets', { gameId: $gameId, fleetPositions });
+           
+            $socket.once('fleets_placed_confirmation', () =>
+            {
+                $socket.emit('ready_check', {gameId: $gameId})
+            });
+        }
+    }
+
+    function activate(){
+        if (!isMyTurn) return;
+
+        if(targetingMode === 'focus'){
+            $socket.emit('focus', {
+                gameId:$gameId,
+                Positions: selectedGroup.map(h => ({ q: h.q, r: h.r }))
+            });
+            selectedGroup = [];
+        }
+        else{
+        
+            alert("rolling");
+            $socket.emit('die_roll', {gameId:$gameId});
+        }
+        
+    }
+
+    /* Simulate an enemy AI, not going to be final implementation of AI*/ 
+    function testSearchHex() {
+        if (gridHexes.length > 0) {
+            const randomHex = gridHexes[Math.floor(Math.random() * gridHexes.length)];
+            
+            // Push to ENEMY searched list
+            if (!enemySearchedHexes.some(s => s.q === randomHex.q && s.r === randomHex.r)) {
+                enemySearchedHexes = [...enemySearchedHexes, randomHex];
+            }
+        }
+    }
+
+    // Logic for the enemy to select a hex in an attack.
+    function triggerEnemyAI() {
+        if (gridHexes.length === 0) return;
+
+        // Randomly decide the attack pattern and rotation
+        const modes = ['focus', 'directional', 'area'];
+        const randomMode = modes[Math.floor(Math.random() * modes.length)];
+        const randomRotation = Math.floor(Math.random() * 6);
+        
+        // Pick a random hex as the epicenter of the attack, could be updated to not be random. 
+        // Possibly use a search pattern/strategy. 
+        const randomHex = gridHexes[Math.floor(Math.random() * gridHexes.length)];
+        
+        const targetHexes = getTargetHexes(randomHex, randomMode, randomRotation, gridHexes);
+        
+        // Filter out hexes the enemy and has already searched
+        const newSearches = targetHexes.filter(target => 
+            !enemySearchedHexes.some(searched => searched.q === target.q && searched.r === target.r) 
+        );
+        
+        // Paint the new search indicators on the map, this can be removed if the friendly player is not supposed to see.
+        enemySearchedHexes = [...enemySearchedHexes, ...newSearches];
+    }
+
+    // PLAYER SEARCH METHOD ---
+    function handlePlayerSearch() {
+        // Find hexes that haven't been searched by the player yet
+        const newSearches = selectedGroup.filter(selected => 
+            !friendlySearchedHexes.some(searched => searched.q === selected.q && searched.r === selected.r)
+        );
+        
+        // Push to FRIENDLY searched list
+        friendlySearchedHexes = [...friendlySearchedHexes, ...newSearches];
+        
+        selectedGroup = []; // Clear selection after activating
+    }
+</script>
+
+<!--MAP HTML-->
+<div class="layout-container" class:not-my-turn={isConfirmed && !isMyTurn}>
+    <!--LEFT-->
+    <Sidebar 
+        bind:targetingMode 
+        bind:isConfirmed 
+        bind:rotation
+        {fleetSelections} 
+        onConfirm={confirmFleets}
+        onActivate={activate}
+        onSearch={handlePlayerSearch} 
+    />
+
+    <!--MIDDLE-->
+    <div 
+        class="map-area"
+        role="application"
+        oncontextmenu={(e) => {
+            if (targetingMode === 'directional') {
+                e.preventDefault();
+                rotation++;
+            }
+        }}
+    >
+        <svg viewBox="-10 -10 602 620" class="tactical-grid" preserveAspectRatio="xMidYMid meet">
+            <defs>
+                <pattern id="water-pattern" x="0" y="0" width="200" height="200" patternUnits="userSpaceOnUse">
+                    <image 
+                        href="/water2.jpg" 
+                        x="0" 
+                        y="0" 
+                        width="200" 
+                        height="200" 
+                        preserveAspectRatio="xMidYMid slice"
+                    />
+                </pattern>
+                
+                <pattern id="ship-pattern" patternUnits="objectBoundingBox" width="1" height="1">
+                    <image 
+                        href="ship.png" 
+                        x="0.1" 
+                        y="0.1" 
+                        width="10%" 
+                        height="10%" 
+                        preserveAspectRatio="xMidYMid meet"
+                    />
+                </pattern>
+
+                {#each specialTiles as tile}
+                    <pattern 
+                        id={`pattern-${tile.col}-${tile.row}`} 
+                        patternUnits="objectBoundingBox" 
+                        patternContentUnits="objectBoundingBox" 
+                        width="1" 
+                        height="1"
+                    >
+                        <image 
+                            href={`/${tile.img}`} 
+                            x="0" 
+                            y="0" 
+                            width="1" 
+                            height="1" 
+                            preserveAspectRatio="xMidYMid slice"
+                        />
+                    </pattern>
+                {/each}    
+            </defs>
+
+            <g transform="translate(30, 40)"> 
+                {#each grid as hex}
+                    {@const config = specialTiles.find(t => t.col === hex.col && t.row === hex.row)}
+                    {@const isFleet = fleetSelections.some(f => f.q === hex.q && f.r === hex.r)}
+                    
+                    {@const isFriendlySearched = friendlySearchedHexes.some(s => s.q === hex.q && s.r === hex.r)}
+                    {@const isEnemySearched = enemySearchedHexes.some(s => s.q === hex.q && s.r === hex.r)}
+                    
+                    {@const pointsStr = hex.corners.map(({ x, y }) => `${x},${y}`).join(' ')}
+                    
+                    <g 
+                        class="hex-cell"
+                        role="button"
+                        tabindex="0"
+                        onclick={(e) => handleHexClick(e, hex)}
+                        onmouseenter={() => { hoveredHex = hex; $isHovering = true; }}
+                        onmouseleave={() => { hoveredHex = null; $isHovering = false; }}
+                        onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && handleHexClick(e, hex)}
+                        style="cursor: none; outline: none;"
+                    >
+                        <polygon
+                            points={pointsStr}
+                            fill={config ? `url(#pattern-${hex.col}-${hex.row})` : "url(#water-pattern)"}
+                            stroke={isFleet ? "#4ade80" : "black"} 
+                            stroke-width={isFleet ? 2 : 0.5}
+                        />
+                        
+                        {#if isFleet && isRevealed}
+                            <polygon
+                                points={pointsStr}
+                                fill="rgba(226, 74, 74, 0.3)"
+                                stroke="#e24a4a"
+                                stroke-width="4"
+                                stroke-dasharray="8,4"
+                                pointer-events="none"
+                            >
+                                <animate attributeName="opacity" values="0.3;1;0.3" dur="1.5s" repeatCount="indefinite" />
+                            </polygon>
+                        {/if}
+
+                        <polygon
+                            points={pointsStr}
+                            fill="url(#ship-pattern)"
+                            style="opacity: {isFleet ? 1 : 0}; transition: opacity 0.2s;"
+                            pointer-events="none"
+                        />
+
+                        {#if isFriendlySearched}
+                            <g pointer-events="none" opacity="1">
+                                <circle cx={hex.x} cy={hex.y} r="12" fill="none" stroke="#000" stroke-width="3" />
+                                <circle cx={hex.x} cy={hex.y} r="3" fill="#000" />
+                                <line x1={hex.x - 20} y1={hex.y} x2={hex.x + 20} y2={hex.y} stroke="#000" stroke-width="1.5" stroke-dasharray="4,4" />
+                                <line x1={hex.x} y1={hex.y - 20} x2={hex.x} y2={hex.y + 20} stroke="#000" stroke-width="1.5" stroke-dasharray="4,4" />
+                            </g>
+                        {/if}
+
+                        {#if isEnemySearched}
+                            <g pointer-events="none" opacity="1">
+                                <polygon 
+                                    points="{hex.x},{hex.y - 15} {hex.x + 15},{hex.y} {hex.x},{hex.y + 15} {hex.x - 15},{hex.y}" 
+                                    fill="rgba(234, 179, 8, 0.2)" 
+                                    stroke="#e24a4a" 
+                                    stroke-width="2" 
+                                />
+                                <circle cx={hex.x} cy={hex.y} r="4" fill="#e24a4a" />
+                            </g>
+                        {/if}
+                    </g>
+                {/each}
+
+                {#each grid as hex}
+                    {@const isActive = highlightedHexes.includes(hex)}
+                    {@const isSelected = selectedGroup.includes(hex)}
+                    
+                    {#if isConfirmed && (isActive || isSelected)}
+                        <g pointer-events="none">
+                            <polygon
+                                points={hex.corners.map(({ x, y }) => `${x},${y}`).join(' ')}
+                                fill={isSelected ? 'rgba(200, 74, 74, 0.6)' : 'rgba(59, 130, 246, 0.4)'}
+                                stroke={isSelected ? "#e24a4a" : "#3b82f6"}
+                                stroke-width={isSelected ? 4 : 2}
+                            />
+                            <text 
+                                x={hex.x} 
+                                y={hex.y} 
+                                dy="25" 
+                                text-anchor="middle" 
+                                fill="white" 
+                                font-size="20" 
+                                font-weight="bold" 
+                                style="text-shadow: 0 0 4px #000;"
+                            >
+                                {String.fromCharCode(65 + hex.col)}-{hex.row + 1}
+                            </text>
+                        </g>
+                    {/if}
+                {/each}
+            </g>
+        </svg>
+
+        {#if warning.show}
+            {#key warning.id}
+                <div 
+                    class="cursor-warning" 
+                    style="top: {warning.y}px; left: {warning.x}px;"
+                >
+                    {warning.text}
+                </div>
+            {/key}
+        {/if}
+    </div>
+
+    <!--RIGHT-->
+    <StatusBar 
+        bind:health 
+        bind:fuel 
+        bind:currentTurn
+        bind:isRevealed
+        {isMyTurn}
+        {isConfirmed}
+    />
+</div>
+
+<!--MAP HTML APPEARANCE-->
+<style>
+    .layout-container {     
+        display: flex; 
+        flex-direction: row; 
+        width: 100%; 
+        height: 100%; 
+        overflow: hidden; 
+        background: #0b0e14; 
+    }
+
+    .layout-container.not-my-turn :global(.sidebar_targeting) {
+        pointer-events: none;
+        user-select: none;
+        opacity: 0.5;
+        transition: all 0.4s ease;
+    }
+
+    /*Layout of the map*/
+    .map-area { 
+        flex: 1;
+        display: flex; 
+        justify-content: center; 
+        align-items: center; 
+        position: relative; 
+        padding: 1vw; 
+        min-width: 0; 
+        min-height: 0;
+    }
+    
+    /*Map sizing along with the SVG viewbox*/ 
+    .tactical-grid { 
+        width: 100%; 
+        height: 100%; 
+        filter: drop-shadow(0 0 20px rgba(0,0,0,0.5)); 
+    }
+
+    /*Appearance of the warnings for land, # of selected hexes.*/
+    .cursor-warning {
+        position: fixed; 
+        pointer-events: none; 
+        color: #e45c5c; 
+        font-family: 'Chakra Petch', sans-serif;
+        font-size: 24px; 
+        font-weight: 600; 
+        text-shadow: 0 0 10px black; 
+        animation: popAndFade 1.5s forwards;
+    }
+
+    /*Animation for cursor-warnings*/
+    @keyframes popAndFade {
+        0% { 
+            opacity: 0; 
+            transform: translate(15px, 0) scale(0.5); 
+        }
+        15% { 
+            opacity: 1; 
+            transform: translate(15px, -25px) scale(1.1); 
+        }
+        100% { 
+            opacity: 0; 
+            transform: translate(15px, -40px); 
+        }
+    }
+</style>
