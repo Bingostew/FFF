@@ -21,8 +21,8 @@ Joins a player to an existing lobby.
 **Payload:**
 ```javascript
 {
-  gameId: string,    // The lobby ID to join
-  playerName: string // Optional player name (defaults to "Unknown Commander")
+  gameId: string,     // The lobby ID to join
+  playerName: string  // Player name (defaults to "Unknown Commander" if empty)
 }
 ```
 
@@ -30,6 +30,7 @@ Joins a player to an existing lobby.
 - `"Game does not exist"` - Lobby doesn't exist
 - `"Lobby is full"` - Lobby already has 2 players
 - `"Game has already started"` - Lobby status is not 'waiting'
+- **Note:** In `single` player mode, the CPU Bot automatically joins when the player joins.
 
 **Server Response:** `room_update` event to all players in the room
 
@@ -52,8 +53,10 @@ Places the player's fleet units on the game board. Must be done before readying 
 **Notes:**
 - Each fleet starts with 2 HP (server-side)
 - Server validates and sets initial HP to prevent tampering
+- In `single` player mode, the Bot's fleets are automatically placed when the player places theirs.
 
 **Server Response:** `fleets_placed_confirmation` (confirmation to sender)
+**Error:** `"Fleets have already been placed"` - If player attempts to place fleets more than once
 
 ---
 
@@ -71,6 +74,9 @@ Marks the player as ready and checks if both players are ready to start.
 - Player must have placed their fleets
 - Lobby must be in 'waiting' status
 
+**Notes:**
+- In `single` player mode, the Bot automatically readies up when the player does.
+
 **Server Responses:**
 - If both ready: `game_start` event
 - Error: `"You must place your fleets before readying up."`
@@ -78,13 +84,14 @@ Marks the player as ready and checks if both players are ready to start.
 ---
 
 ### 4. `execute_strike`
-Executes a strike attack on a target hex (opponent's turn-based action).
+Executes a strike attack on a target hex. Requires a die roll.
 
 **Payload:**
 ```javascript
 {
   gameId: string,
-  targetHex: { q: number, r: number }
+  targetHex: { q: number, r: number },
+  dieResult: number // The result of a die roll (1-6)
 }
 ```
 
@@ -136,7 +143,7 @@ Moves one of the player's fleets to a new position.
 **Server Responses:**
 - `fleet_moved` event to all players
 - `update_assets` event to sender (new fuel amount)
-- Error: `"Not enough fuel to move."` or `"Cannot move to a hex occupied by another friendly fleet."`
+- Error: `"Not enough fuel to move."`, `"Cannot move to a hex occupied by another friendly fleet."` or `"Invalid fleet move"`
 
 ---
 
@@ -186,8 +193,7 @@ Performs a "Focus" ISR action (select 3 hexes).
 
 **Payload (Arguments):**
 1. `gameId`: string
-2. `positions`: Array<{ q: number, r: number }> (Length 3)
-3. `dieResult`: number (unused for focus)
+2. `Positions`: Array<{ q: number, r: number }> (Length 3)
 
 **Server Response:** `focus_result` event to all players.
 
@@ -198,7 +204,7 @@ Performs a "Directional" ISR action (select 3 hexes). Requires die roll <= 4.
 
 **Payload (Arguments):**
 1. `gameId`: string
-2. `positions`: Array<{ q: number, r: number }> (Length 3)
+2. `Positions`: Array<{ q: number, r: number }> (Length 3)
 3. `dieResult`: number
 
 **Server Response:** `directional_result` event to all players.
@@ -210,7 +216,7 @@ Performs an "Area" ISR action (select 4 hexes). Requires die roll <= 3.
 
 **Payload (Arguments):**
 1. `gameId`: string
-2. `positions`: Array<{ q: number, r: number }> (Length 4)
+2. `Positions`: Array<{ q: number, r: number }> (Length 4)
 3. `dieResult`: number
 
 **Server Response:** `area_result` event to all players.
@@ -364,15 +370,40 @@ Result of an Area ISR action.
 
 ---
 
+### 14. `bot_thinking`
+Sent in Single Player mode when the Bot is calculating its move.
+
+**Payload:**
+```javascript
+{
+  debugInfo: Array<{
+    action: string,   // Description of move
+    visits: number,   // MCTS visits
+    wins: number,     // MCTS wins
+    winRate: string   // Win rate percentage
+  }>
+}
+```
+
+---
+
 ## HTTP Endpoints
 
 ### `POST /create-lobby`
 Creates a new game lobby.
 
+**Payload:**
+```javascript
+{
+  mode: "multi" | "single" // Optional, defaults to "multi"
+}
+```
+
 **Response:**
 ```javascript
 {
-  gameId: string  // Unique lobby identifier
+  gameId: string, // Unique lobby identifier
+  message: string // Success message
 }
 ```
 
@@ -458,7 +489,6 @@ Creates a new game lobby.
 ---
 
 ## Sequence Diagram
-
 ```mermaid
 sequenceDiagram
     participant A as Client A (Red)
@@ -466,28 +496,28 @@ sequenceDiagram
     participant B as Client B (Blue)
 
     Note over A, B: Lobby Creation (HTTP) omitted
-
+    
     %% Joining
     A->>S: join_game {gameId}
     S->>A: room_update {players: [A]}
     B->>S: join_game {gameId}
     S->>A: room_update {players: [A, B]}
     S->>B: room_update {players: [A, B]}
-
+    
     %% Placement
     A->>S: place_fleets {positions}
     S->>A: fleets_placed_confirmation
     B->>S: place_fleets {positions}
     S->>B: fleets_placed_confirmation
-
+    
     %% Ready Up
     A->>S: ready_check
     B->>S: ready_check
     Note right of S: Both ready? Start Game.
     S->>A: game_start {activePlayer: A}
     S->>B: game_start {activePlayer: A}
-
-    %% Turn 1: Move
+    
+    %% Turn 1: Player A Moves
     Note over A: Player A's Turn
     A->>S: move_fleet {fleetKey, newPos}
     S->>A: update_assets {fuel}
@@ -495,48 +525,46 @@ sequenceDiagram
     S->>B: fleet_moved {playerId: A, ...}
     S->>A: turn_change {activePlayer: B}
     S->>B: turn_change {activePlayer: B}
-
-    %% Turn 2: Strike
+    
+    %% Turn 2: Player B Strikes
     Note over B: Player B's Turn
-    B->>S: execute_strike {targetHex}
+    B->>S: die_roll {gameId}
+    S->>A: die_result {die: 4, ...}
+    S->>B: die_result {die: 4, ...}
+    B->>S: execute_strike {targetHex, dieResult: 4}
     S->>A: strike_result {hit: true/false, ...}
     S->>B: strike_result {hit: true/false, ...}
     S->>A: turn_change {activePlayer: A}
     S->>B: turn_change {activePlayer: A}
-
-    %% Turn 3: ISR Action
-    Note over A: Player A's Turn (ISR)
-    A->>S: die_roll {gameId}
-    S->>A: die_result {die: 3, ...}
-    S->>B: die_result {die: 3, ...}
-    A->>S: focus {positions}
+    
+    %% Turn 3: Player A uses ISR (Focus)
+    Note over A: Player A's Turn (ISR - Focus)
+    A->>S: focus {Positions}
     S->>A: focus_result {revealPos: [...]}
     S->>B: focus_result {revealPos: [...]}
-
-    %% Turn 4: ISR Action (Directional)
+    S->>A: turn_change {activePlayer: B}
+    S->>B: turn_change {activePlayer: B}
+    
+    %% Turn 4: Player B uses ISR (Directional)
     Note over B: Player B's Turn (ISR - Directional)
     B->>S: die_roll {gameId}
     S->>A: die_result {die: 3, ...}
     S->>B: die_result {die: 3, ...}
-    B->>S: directional {positions, dieResult}
+    B->>S: directional {Positions, dieResult: 3}
     S->>A: directional_result {revealPos: [...]}
     S->>B: directional_result {revealPos: [...]}
-
-    %% Turn 5: ISR Action (Area)
-    Note over A: Player A's Turn (ISR - Area)
-    A->>S: die_roll {gameId}
-    S->>A: die_result {die: 2, ...}
-    S->>B: die_result {die: 2, ...}
-    A->>S: area {positions, dieResult}
-    S->>A: area_result {revealPos: [...]}
-    S->>B: area_result {revealPos: [...]}
+    S->>A: turn_change {activePlayer: A}
+    S->>B: turn_change {activePlayer: A}
     
-
     %% Game Over Condition
     Note over A: Player A destroys last fleet
-    A->>S: execute_strike {targetHex}
+    A->>S: die_roll {gameId}
+    S->>A: die_result {die: 5, ...}
+    S->>B: die_result {die: 5, ...}
+    A->>S: execute_strike {targetHex, dieResult: 5}
     S->>A: strike_result {isDestroyed: true, ...}
     S->>B: strike_result {isDestroyed: true, ...}
+    Note right of S: Opponent fleets destroyed. Game over.
     S->>A: game_over {winner: A}
     S->>B: game_over {winner: A}
 ```

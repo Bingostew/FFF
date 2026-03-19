@@ -1,14 +1,13 @@
-<!--MULTIPLAYER MAP, INTERACTIVELY DISPLAYS GRIDS, ALL DATA SURROUNDING GRIDS, FLEET LOCATIONS-->
+<!--MAP, INTERACTIVELY DISPLAYS GRIDS, ALL DATA SURROUNDING GRIDS, FLEET LOCATIONS-->
 <!--SCRIPTS FOR MAP-->
-
-<!--UPDATE SUCH THAT IT DOES NOT HAVE THE AI-->
 <script>
     // @ts-nocheck
     import { defineHex, Grid, rectangle, Orientation } from 'honeycomb-grid';
     import { isHovering } from '$lib/store';
+    import { socket, gameId, activePlayerId } from '$lib/gameStore';   
     import { getTargetHexes, isGroupConnected, getS } from './gridUtils.js';
-    import Sidebar from './Sidebar.svelte';
-    import StatusBar from './StatusBar.svelte';
+    import Sidebar from './Sidebar Multi.svelte';
+    import StatusBar from './StatusBar Multi.svelte';
 
     // Grid Config
     const Tile = defineHex({ 
@@ -19,8 +18,8 @@
     });
     const grid = new Grid(Tile, rectangle({ width: 7, height: 6 }));
     const gridHexes = [...grid];
-
-    // Global State, in multiplayer will be handled by the server.
+    const isMyTurn = $derived(!isConfirmed || ($activePlayerId === $socket?.id));  
+    
     let hoveredHex = $state(null);
     let selectedGroup = $state([]);
     let targetingMode = $state('focus');
@@ -36,7 +35,6 @@
     let friendlySearchedHexes = $state([]);
     let enemySearchedHexes = $state([]);    
     let isRevealed = $state(false);
-    let isEnemyTurn = $state(false);
 
     // This is the layout of the land tiles, other tiles are all water by default.
     const specialTiles = [
@@ -56,7 +54,9 @@
 
     // Hex interaction handlers.
     function handleHexClick(event, hex) {
-        // Handle fleet deployment phase.
+
+        if (isConfirmed && !isMyTurn) return;
+
         const isSpecial = specialTiles.some(t => t.col === hex.col && t.row === hex.row);
 
         if (!isConfirmed) {
@@ -85,6 +85,7 @@
             selectedGroup = selectedGroup.some(h => highlightedHexes.includes(h)) 
                 ? [] 
                 : [...highlightedHexes];
+            console.log("target clicked " + selectedGroup.length);
             return;
         }
 
@@ -148,15 +149,99 @@
         }, 1500);
     }
 
-    //Should send an API request to the server to update fleet locations.
+    $effect(() => {
+        if ($socket) {
+            // Listen for the game starting
+            $socket.on('game_start', ({ activePlayer }) => {
+                activePlayerId.set(activePlayer);
+                isConfirmed = true; // This switches the UI to "Battle" mode
+                selectedGroup = [];
+                targetingMode = 'focus';
+            });
+
+            // Listen for turn swaps
+            $socket.on('turn_change', ({ activePlayer }) => {
+                activePlayerId.set(activePlayer);
+            });
+
+            $socket.on('die_result', ({playerId,number}) =>{
+                if(isMyTurn){
+                    let rawPos = selectedGroup;
+                    console.log("length " + selectedGroup.length);
+                    const formattedPositions = {};
+                    rawPos.forEach((h, index) => {
+                        formattedPositions[index] = { q: h.q, r: h.r };
+                    });
+                    $socket.emit(targetingMode, { 
+                        gameId: $gameId, 
+                        Positions: formattedPositions,
+                        dieResult:number
+                    });
+                                                                                
+                    selectedGroup = [];
+                }
+            });
+
+            const ISREvents = ['focus_result', 'directional_result', 'area_result'];
+
+            const onISRResult = ({playerName, revealPos, positions}) => {
+                alert("received ISR result " + revealPos);
+               
+                let posArray = Object.values(positions)
+
+                if(isMyTurn){
+                    const newSearches = posArray.map(p => grid.getHex(p)).filter(Boolean);
+                    friendlySearchedHexes = [...friendlySearchedHexes, ...newSearches];
+                }
+                else{
+                    const scannedHexes = posArray.map(p => grid.getHex(p)).filter(Boolean);
+                    enemySearchedHexes = [...enemySearchedHexes, ...scannedHexes];
+                }
+            };
+            
+            ISREvents.forEach(evt => $socket.on(evt, onISRResult));
+
+            return () => {
+                $socket.off("room_update");
+                $socket.off('game_start');
+                $socket.off('turn_change');
+                $socket.off('die_result');
+                ISREvents.forEach(evt => $socket.off(evt));
+            };
+        }
+    });
+
     function confirmFleets() {
         if (fleetSelections.length === 2) {
-            console.log("Fleets locked:", fleetSelections.map(f => ({ q: f.q, r: f.r })));
-            isConfirmed = true;
-            // Clear any previous selections and default to focus mode
-            selectedGroup = [];
-            targetingMode = 'focus';
+            const fleetPositions = {
+                alpha: { q: fleetSelections[0].q, r: fleetSelections[0].r },
+                beta: { q: fleetSelections[1].q, r: fleetSelections[1].r }
+            };
+            $socket.emit('place_fleets', { gameId: $gameId, fleetPositions });
+           
+            $socket.once('fleets_placed_confirmation', () =>
+            {
+                $socket.emit('ready_check', {gameId: $gameId})
+            });
         }
+    }
+
+    function activate(){
+        if (!isMyTurn) return;
+
+        if(targetingMode === 'focus'){
+            $socket.emit('focus', {
+                gameId:$gameId,
+                Positions: selectedGroup.map(h => ({ q: h.q, r: h.r }))
+            });
+            selectedGroup = [];
+        }
+        else{
+        
+            alert("rolling");
+            $socket.emit('die_roll', {gameId:$gameId});
+        }
+        
     }
 
     /* Simulate an enemy AI, not going to be final implementation of AI*/ 
@@ -195,36 +280,6 @@
         enemySearchedHexes = [...enemySearchedHexes, ...newSearches];
     }
 
-    // Full cycle of the enemy hex selection, and then control being given back to the player.
-    function executeEnemyTurn() {
-        isEnemyTurn = true; // Tells the Status Bar to turn RED
-
-        setTimeout(() => {
-            if (gridHexes.length > 0) {
-                // 1. Enemy randomly picks focus, directional, or area
-                const modes = ['focus', 'directional', 'area'];
-                const randomMode = modes[Math.floor(Math.random() * modes.length)];
-                const randomRotation = Math.floor(Math.random() * 6);
-                
-                // 2. Picks a random epicenter
-                const randomHex = gridHexes[Math.floor(Math.random() * gridHexes.length)];
-                
-                // 3. Calculates the blast zone
-                const targetHexes = getTargetHexes(randomHex, randomMode, randomRotation, gridHexes);
-                
-                // 4. Paints the map with amber warning diamonds
-                const newSearches = targetHexes.filter(target => 
-                    !enemySearchedHexes.some(searched => searched.q === target.q && searched.r === target.r)
-                );
-                enemySearchedHexes = [...enemySearchedHexes, ...newSearches];
-            }
-            
-            // 5. End the turn, hand control back to the player
-            currentTurn += 1;
-            isEnemyTurn = false; // Turns the Status Bar back to BLUE
-        }, 3000); // 3-second suspense timer!
-    }
-
     // PLAYER SEARCH METHOD ---
     function handlePlayerSearch() {
         // Find hexes that haven't been searched by the player yet
@@ -240,17 +295,16 @@
 </script>
 
 <!--MAP HTML-->
-<div class="layout-container">
+<div class="layout-container" class:not-my-turn={isConfirmed && !isMyTurn}>
     <!--LEFT-->
     <Sidebar 
         bind:targetingMode 
         bind:isConfirmed 
         bind:rotation
-        bind:isEnemyTurn
         {fleetSelections} 
         onConfirm={confirmFleets}
+        onActivate={activate}
         onSearch={handlePlayerSearch} 
-        onTurnEnd={executeEnemyTurn} 
     />
 
     <!--MIDDLE-->
@@ -426,14 +480,14 @@
         bind:fuel 
         bind:currentTurn
         bind:isRevealed
-        bind:isEnemyTurn
+        {isMyTurn}
+        {isConfirmed}
     />
 </div>
 
 <!--MAP HTML APPEARANCE-->
 <style>
-    /*General layout for the contents of the map*/ 
-    .layout-container { 
+    .layout-container {     
         display: flex; 
         flex-direction: row; 
         width: 100%; 
@@ -441,7 +495,14 @@
         overflow: hidden; 
         background: #0b0e14; 
     }
-    
+
+    .layout-container.not-my-turn :global(.sidebar_targeting) {
+        pointer-events: none;
+        user-select: none;
+        opacity: 0.5;
+        transition: all 0.4s ease;
+    }
+
     /*Layout of the map*/
     .map-area { 
         flex: 1;

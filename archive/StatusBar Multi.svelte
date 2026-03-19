@@ -1,83 +1,89 @@
+<!--STATUSBAR, DISPLAYS HEALTH, FUEL, TURN, AND TESTING BUTTONS-->
+<!--SCRIPTS FOR STATUSBAR-->
 <script>
     /*Import custom cursor*/
     import { isHovering } from '$lib/store';
 
     /*Game states, will be handled by a server in the future*/
     let { 
+        health = $bindable(2), 
+        fuel = $bindable(3),
         currentTurn = $bindable(1),
         isRevealed = $bindable(false),
-        isMyTurn = true,
-        isMultiplayer = false,
-        fleetSelections = [] /* Now imports the array of ships */
+        isConfirmed = false,
+        isMyTurn = true
     } = $props();
 
+    let showEnemyVisuals = $derived(isConfirmed && !isMyTurn);
+
     /*Methods update the basic health and fuel data for the player*/ 
-    /* (Global move/damage test buttons removed: stats are now per-ship!) */
-    function toggleReveal() { 
-        isRevealed = !isRevealed;
-    }
+    function move() { if (fuel > 0) fuel -= 1; }
+    function damage() { if (health > 0) health -= 1; }
+    function toggleReveal() { isRevealed = !isRevealed; }
 </script>
 
+<!--HTML FOR STATUSBAR-->
 <div class="status-bar">
     
-    <div class="turn-tracker" class:enemy-active={!isMyTurn}>
+    <div class="turn-tracker" class:enemy-active={showEnemyVisuals}>
         <div class="turn-info">
             <span class="stat-label turn-label">
-                    {isMyTurn ? 'FRIENDLY TURN' : (isMultiplayer ? 'OPPONENT TURN' : 'ENEMY TURN')}            </span>
+                {showEnemyVisuals ? 'ENEMY TURN' : 'FRIENDLY TURN'}
+            </span>
             <span class="turn-number">{currentTurn}</span>
         </div>
-        
-        {#if !isMyTurn}
-            <div class="processing-bar"></div>
-        {/if}
     </div>
 
     <div class="stat-container">
-        {#each fleetSelections as fleet}
-            <div class="fleet-card">
-                <div class="fleet-header">
-                    <span class="fleet-name">{fleet.name}</span>
-                </div>
-                
-                <div class="stat-group">
-                    <span class="stat-label">HEALTH</span>
-                    <div class="icons">
-                        {#each Array(fleet.health).fill(0) as _}
-                            <img 
-                                src="/blue_damage.png" 
-                                alt="health" 
-                                class="stat-icon" 
-                                draggable="false" 
-                            />
-                        {/each}
-                        {#each Array(2 - fleet.health).fill(0) as _}
-                            <div class="empty-icon hp"></div>
-                        {/each}
-                    </div>
-                </div>
-                
-                <div class="stat-group">
-                    <span class="stat-label">FUEL</span>
-                    <div class="icons">
-                        {#each Array(fleet.fuel).fill(0) as _}
-                            <img 
-                                src="/fuel.png" 
-                                alt="fuel" 
-                                class="stat-icon fuel" 
-                                draggable="false" 
-                            />
-                        {/each}
-                        {#each Array(3 - fleet.fuel).fill(0) as _}
-                            <div class="empty-icon"></div>
-                        {/each}
-                    </div>
-                </div>
+        <div class="stat-group">
+            <span class="stat-label">HEALTH</span>
+            <div class="icons">
+                {#each Array(health) as _}
+                    <img 
+                        src="/blue_damage.png" 
+                        alt="health" 
+                        class="stat-icon" 
+                        draggable="false" 
+                    />
+                {/each}
             </div>
-        {/each}
+        </div>
+        
+        <div class="stat-group">
+            <span class="stat-label">FUEL</span>
+            <div class="icons">
+                {#each Array(fuel) as _}
+                    <img 
+                        src="/fuel.png" 
+                        alt="fuel" 
+                        class="stat-icon fuel" 
+                        draggable="false" 
+                    />
+                {/each}
+            </div>
+        </div>
     </div>
 
     <div class="test-controls">
         <span class="test-header">// TESTING SPACE</span>
+
+        <button 
+            class="test-btn" 
+            onclick={move} 
+            onmouseenter={() => $isHovering = true} 
+            onmouseleave={() => $isHovering = false}
+        >
+            SIMULATE MOVE - FUEL
+        </button>
+        
+        <button 
+            class="test-btn" 
+            onclick={damage} 
+            onmouseenter={() => $isHovering = true} 
+            onmouseleave={() => $isHovering = false}
+        >
+            SIMULATE DAMAGE - HP
+        </button>
         
         <button 
             class="test-btn danger" 
@@ -90,20 +96,21 @@
     </div>
 </div>
 
+<!--STATUSBAR HTML APPEARANCE-->
 <style>
     /*General layout of the statusbar and its content*/
     .status-bar {
-        height: 100%;
+        height: 100%; 
         width: clamp(200px, 15vw, 300px); 
         padding: clamp(15px, 2vw, 25px); 
         box-sizing: border-box; 
-        background: rgba(10, 15, 30, 0.95);
+        background: rgba(10, 15, 30, 0.95); 
         border-left: 1px solid rgba(59, 130, 246, 0.3);
         display: flex; 
         flex-direction: column;
         gap: clamp(10px, 2vh, 20px); 
         z-index: 10; 
-        overflow-y: auto;
+        overflow-y: auto; 
         overflow-x: hidden;
         scrollbar-width: none;
     }
@@ -119,7 +126,7 @@
         border-radius: 4px;
         transition: all 0.3s ease;
         position: relative;
-        overflow: visible;
+        overflow: visible; 
     }
 
     /*Turn number*/
@@ -153,65 +160,13 @@
         color: #ffffff;
     }
 
-    /* Animated loading bar while waiting for enemy AI to make a decision.
-    * Remove for multiplayer. 
-    */
-    .processing-bar {
-        position: absolute;
-        bottom: 0;
-        left: 0;
-        height: 3px;
-        background: #e24a4a;
-        width: 0%;
-        animation: process 3s linear forwards;
-    }
-
-    /*Helps with the animation of the loading bar*/
-    @keyframes process {
-        0% { width: 0%; }
-        100% { width: 100%; }
-    }
-
-    /*Pulses red for enemy decision turn*/
-    @keyframes pulseText {
-        0%, 100% { opacity: 1; }
-        50% { opacity: 0.5; }
-    }
-
     /*Holds the health and fuel information*/
     .stat-container {
         display: flex;
         flex-direction: column;
         justify-content: space-between;
-        gap: 20px;
-        padding: 10px 0px;
-    }
-
-    /* Individual Ship Card Layout */
-    .fleet-card { 
-        background: rgba(0, 0, 0, 0.4); 
-        border: 1px solid rgba(59, 130, 246, 0.2); 
-        padding: 15px 10px; 
-        border-radius: 4px; 
-        display: flex; 
-        flex-direction: column; 
-        gap: 15px; 
-    }
-
-    /* Name of the vessel */
-    .fleet-header { 
-        border-bottom: 1px solid rgba(59, 130, 246, 0.3); 
-        padding-bottom: 5px; 
-        text-align: center;
-    }
-
-    /* Vessel Text Appearance */
-    .fleet-name { 
-        font-family: 'Chakra Petch', sans-serif; 
-        font-size: 1.1rem; 
-        color: #4ade80; 
-        font-weight: bold; 
-        letter-spacing: 2px; 
+        gap: 30px;
+        padding: 10px;
     }
 
     /*Group of health and fuel images*/
@@ -219,7 +174,7 @@
         display: flex;
         flex-direction: column;
         align-items: center;
-        gap: 5px;
+        gap: 10px;
     }
 
     /*HEALTH and FUEL*/ 
@@ -240,7 +195,7 @@
 
     /*Health icon appearance*/ 
     .stat-icon {
-        width: clamp(30px, 3.5vw, 50px);
+        width: clamp(30px, 3.5vw, 50px); 
         height: auto;
         object-fit: contain;
         filter: drop-shadow(0 0 5px rgba(59, 130, 246, 0.5));
@@ -248,28 +203,13 @@
 
     /*Fuel icon appearance*/
     .stat-icon.fuel { 
-        filter: drop-shadow(0 0 5px rgba(234, 179, 8, 0.5));
-    }
-
-    /* Empty slots so the UI doesn't collapse when health/fuel drops */
-    .empty-icon { 
-        width: clamp(30px, 3.5vw, 50px); 
-        height: clamp(30px, 3.5vw, 50px); 
-        border: 1px dashed rgba(234, 179, 8, 0.3); 
-        border-radius: 50%; 
-        box-sizing: border-box; 
-    }
-
-    /* Square-ish empty slot for health */
-    .empty-icon.hp { 
-        border-color: rgba(59, 130, 246, 0.3); 
-        border-radius: 0; 
+        filter: drop-shadow(0 0 5px rgba(234, 179, 8, 0.5)); 
     }
 
     /* TEST CONTROLS*/
     /* Test Controls Section */
     .test-controls {
-        margin-top: auto;
+        margin-top: 20px;
         display: flex;
         flex-direction: column;
         gap: 8px;
@@ -296,13 +236,13 @@
     }
     
     .test-btn:hover { 
-        background: #333;
+        background: #333; 
         color: white; 
         border-color: white; 
     }
 
     .test-btn.danger:hover { 
-        background: rgba(226, 74, 74, 0.2);
+        background: rgba(226, 74, 74, 0.2); 
         border-color: #e24a4a; 
         color: #e24a4a; 
     }
@@ -315,11 +255,11 @@
 
     /* For Chrome, Edge, and Safari */
     /*::-webkit-scrollbar {
-        width: 6px;
+        width: 6px; 
     }
 
     ::-webkit-scrollbar-track {
-        background: rgba(10, 15, 30, 0.5);
+        background: rgba(10, 15, 30, 0.5); 
         border-left: 1px solid rgba(59, 130, 246, 0.1); 
     }
 
@@ -329,6 +269,6 @@
     }
 
     ::-webkit-scrollbar-thumb:hover {
-        background: rgba(59, 130, 246, 0.9);
+        background: rgba(59, 130, 246, 0.9); 
     }*/
 </style>

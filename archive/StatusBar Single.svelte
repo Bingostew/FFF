@@ -6,8 +6,7 @@
     let { 
         currentTurn = $bindable(1),
         isRevealed = $bindable(false),
-        isMyTurn = true,
-        isMultiplayer = false,
+        isEnemyTurn = $bindable(false),
         fleetSelections = [] /* Now imports the array of ships */
     } = $props();
 
@@ -20,14 +19,15 @@
 
 <div class="status-bar">
     
-    <div class="turn-tracker" class:enemy-active={!isMyTurn}>
+    <div class="turn-tracker" class:enemy-active={isEnemyTurn}>
         <div class="turn-info">
             <span class="stat-label turn-label">
-                    {isMyTurn ? 'FRIENDLY TURN' : (isMultiplayer ? 'OPPONENT TURN' : 'ENEMY TURN')}            </span>
+                {isEnemyTurn ? 'ENEMY TURN' : 'FRIENDLY TURN'}
+            </span>
             <span class="turn-number">{currentTurn}</span>
         </div>
         
-        {#if !isMyTurn}
+        {#if isEnemyTurn}
             <div class="processing-bar"></div>
         {/if}
     </div>
@@ -42,7 +42,7 @@
                 <div class="stat-group">
                     <span class="stat-label">HEALTH</span>
                     <div class="icons">
-                        {#each Array(fleet.health).fill(0) as _}
+                        {#each Array(fleet.health) as _}
                             <img 
                                 src="/blue_damage.png" 
                                 alt="health" 
@@ -50,7 +50,7 @@
                                 draggable="false" 
                             />
                         {/each}
-                        {#each Array(2 - fleet.health).fill(0) as _}
+                        {#each Array(2 - fleet.health) as _}
                             <div class="empty-icon hp"></div>
                         {/each}
                     </div>
@@ -59,7 +59,7 @@
                 <div class="stat-group">
                     <span class="stat-label">FUEL</span>
                     <div class="icons">
-                        {#each Array(fleet.fuel).fill(0) as _}
+                        {#each Array(fleet.fuel) as _}
                             <img 
                                 src="/fuel.png" 
                                 alt="fuel" 
@@ -67,7 +67,7 @@
                                 draggable="false" 
                             />
                         {/each}
-                        {#each Array(3 - fleet.fuel).fill(0) as _}
+                        {#each Array(3 - fleet.fuel) as _}
                             <div class="empty-icon"></div>
                         {/each}
                     </div>

@@ -8,6 +8,9 @@
     
     // Used for API calls to server
     let isSubmitted = $state(false);
+
+    // Sidebar State
+    let currentPanel = $state(1);
     
     // State variables for dice rolling functionality.
     let currentRollDisplay1 = $state(0);
@@ -21,11 +24,12 @@
         rotation = $bindable(),
         fleetSelections = [], 
         onConfirm,
-        isMyTurn = true,
+        onActivate,
+        isEnemyTurn = $bindable(false),
         onSearch,
         onTurnEnd,
         selectedGroup = [],
-        targetEnemy = $bindable(null),
+        targetEnemy = null,
         attackRange = null,
         requiredRoll = null,
         onFireResolve
@@ -33,13 +37,24 @@
 
     let totalFuel = $derived(fleetSelections.reduce((acc, f) => acc + (f.fuel || 0), 0));
 
+    // Automatic panel state change
+    $effect(()=>{
+        if (targetEnemy){
+            currentPanel = 2;
+        }
+    });
+
+    $effect(() => {
+        if (!isEnemyTurn && !targetEnemy && isConfirmed){
+            currentPanel = 1;
+        }
+    });
+
     // Simulates 2 D6 dice roll, does two simultaneous calculations.
     function diceRoll() {
-        if (isRolling || !isMyTurn) return; 
+        if (isRolling || isEnemyTurn) return; 
 
         isRolling = true;
-        
-        // Execute the search logic in the parent Map component
         const hasDetectedEnemy = onSearch(); 
 
         const finalResult1 = Math.floor(Math.random() * 6) + 1;
@@ -50,25 +65,36 @@
             currentRollDisplay2 = Math.floor(Math.random() * 6) + 1;
         }, 50);
 
-        setTimeout(() => {
+        setTimeout(async () => {
             clearInterval(interval);
             currentRollDisplay1 = finalResult1;
             currentRollDisplay2 = finalResult2;
             isRolling = false;
 
-            // If no enemy detected, tell the Map the turn is over.
-            // (The Map will decide if it triggers local AI or waits for Socket)
+            // Once player is finished rolling switch to the enemy turn.
             if(!hasDetectedEnemy){
                 onTurnEnd(); 
             }
-        }, 3000); 
+            
+            // This is for dice roll functionality testing, will print to the console.
+            try {
+                await fetch('/api/roll', {
+                    method: 'POST',
+                    body: JSON.stringify({ result1: finalResult1, result2: finalResult2 })
+                });
+            } catch (e) {
+                console.log(`Dice Rolls, numbers are [${finalResult1}, ${finalResult2}]`);
+            }
+        }, 3000); //Roll for 3 seconds.
     }
 </script>
 
 <!--SIDEBAR CONTENT-->
 <!--Will not appear until fleets are deployed-->
 {#if !isSubmitted}
-    <div class="sidebar_targeting">        
+    <div class="sidebar_targeting">
+        <!--<div class="lock-overlay">SYSTEM LOCKED: WAITING FOR ENEMY</div>-->
+        
         {#if !isConfirmed}
             <h3 class="panel-header">DEPLOYMENT</h3>
                 
@@ -136,7 +162,7 @@
                     <button 
                         style="margin-top: 10px; border-color: #3b82f6; color: #3b82f6;"
                         onclick={() => diceRoll()}   
-                        disabled={isRolling || !isMyTurn || selectedGroup.length === 0}
+                        disabled={isRolling || isEnemyTurn || selectedGroup.length === 0}
                     >
                         <span class="btn-text">ACTIVATE SCAN</span>
                         <span class="btn-sub">CONFIRM AND SEARCH</span>
