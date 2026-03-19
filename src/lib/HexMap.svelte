@@ -101,6 +101,25 @@
 
 </script>
 
+<div class="status-panel">
+    <h2>Turn: {$gameStore.turn} | Phase: {$gameStore.phase}</h2>
+    
+    <div class="turn-indicator {$gameStore.currentPlayer === 'RED' ? 'red-turn' : 'blue-turn'}">
+        {$gameStore.currentPlayer === 'RED' ? '🔴 YOUR TURN' : '🤖 AI IS THINKING...'}
+    </div>
+
+    {#if $gameStore.currentPlayer === 'RED'}
+        <div class="action-buttons">
+            <button on:click={() => gameActions.executeMove('ISR_AREA_CENTER')}>
+                📡 Scan Center
+            </button>
+            <button on:click={() => gameActions.executeMove('ISR_FOCUS_RANDOM')}>
+                🎲 Random Scan
+            </button>
+            </div>
+    {/if}
+</div>
+
 <div class="hex-map-container">
     <svg viewBox="0 0 600 500" class="map-svg">
         
@@ -211,4 +230,34 @@
     .ship-red { fill: #ef4444; stroke: white; stroke-width: 1px; }
     .ship-blue { fill: #3b82f6; stroke: white; stroke-width: 1px; }
     .ship-ghost { fill: transparent; stroke: #3b82f6; stroke-dasharray: 4 2; }
+
+    .status-panel {
+        text-align: center;
+        margin-bottom: 20px;
+        font-family: sans-serif;
+    }
+    .turn-indicator {
+        display: inline-block;
+        padding: 8px 16px;
+        border-radius: 8px;
+        font-weight: bold;
+        color: white;
+        margin-bottom: 10px;
+        transition: background-color 0.3s;
+    }
+    .red-turn { background-color: #ef4444; }
+    .blue-turn { background-color: #3b82f6; }
+    
+    .action-buttons button {
+        background-color: #1f2937;
+        color: white;
+        border: 1px solid #4b5563;
+        padding: 8px 12px;
+        border-radius: 4px;
+        cursor: pointer;
+        margin: 0 5px;
+    }
+    .action-buttons button:hover {
+        background-color: #374151;
+    }
 </style>

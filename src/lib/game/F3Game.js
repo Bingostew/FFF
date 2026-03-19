@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { HexUtils } from './HexUtils.js';
 
 export class F3Game {
@@ -59,34 +60,93 @@ export class F3Game {
     getLegalMoves() {
         const moves = [];
         
-        // RULE: "Conduct ONE of the following... ISR OR Move"
-        
-        // --- OPTION A: ISR (Focus, Directional, Area) ---
-        // Generating EVERY possible ISR combination is too big. 
-        // We optimize by generating only "sensible" ISR moves (e.g., targeting unknown areas).
-        
         if (this.phase === 'SELECT_ACTION') {
-            // 1. Generate Move commands (If fuel > 0)
+            // 1. Generate Move commands
             const myFleets = (this.currentPlayer === 'RED') ? this.redFleets : this.blueFleets;
+            
             myFleets.forEach(fleet => {
                 if (fleet.fuel > 0 && fleet.hp > 0) {
-                    const neighbors = HexUtils.getNeighbors(fleet.pos); // Implement logic to get string neighbors
-                    neighbors.forEach(n => {
-                        if (!this.landHexes.includes(n)) {
-                            moves.push(`MOVE_${fleet.id}_${n}`);
-                        }
-                    });
+                    
+                    // FIX: 1. Convert string "A1" to numbers {col: 0, row: 0}
+                    const hexCoord = HexUtils.parsePos(fleet.pos);
+                    
+                    if (hexCoord) {
+                        // FIX: 2. Calculate neighbors using those numbers
+                        const neighbors = HexUtils.getNeighbors(hexCoord.col, hexCoord.row);
+                        
+                        neighbors.forEach(n => {
+                            // FIX: 3. Convert neighbor math back to a string like "A2"
+                            const neighborStr = HexUtils.posToString(n);
+                            
+                            // 4. Ensure it's not a land hex before allowing movement
+                            if (!this.landHexes.includes(neighborStr)) {
+                                moves.push(`MOVE_${fleet.id}_${neighborStr}`);
+                            }
+                        });
+                    }
                 }
             });
 
             // 2. Generate ISR commands
-            // Focus: Pick 3 random unknown hexes (simplified for MCTS performance)
-            moves.push("ISR_FOCUS_RANDOM"); 
-            // Directional: Scan Row 1-6
-            for (let r=1; r<=6; r++) moves.push(`ISR_DIR_ROW_${r}`);
-            // Area: Scan a cluster (e.g., around C3)
+            // --- NEW RULE: FOCUS picks 3 specific hexes ---
+            // We generate a curated list of 15 random combinations for the AI to simulate,
+            // preventing the engine from crashing under the weight of 11,480 total combinations.
+            const validTargets = [];
+            for (let c = 0; c < 7; c++) {
+                for (let r = 0; r < 6; r++) {
+                    validTargets.push(HexUtils.posToString({col: c, row: r}));
+                }
+            }
+
+            for(let i = 0; i < 15; i++) {
+                // Shuffle the hexes and pick the first 3
+                const shuffled = [...validTargets].sort(() => 0.5 - Math.random());
+                const picked = [shuffled[0], shuffled[1], shuffled[2]].sort(); // Alphabetize them
+                moves.push(`ISR_FOCUS_${picked[0]}_${picked[1]}_${picked[2]}`);
+            }
+            
             moves.push(`ISR_AREA_CENTER`);
-        }
+
+            // --- NEW RULE: DIR is exactly 3 consecutive hexes in a straight line ---
+            // We use Cube Coordinates (x,y,z) because straight lines in offset (col,row) are a nightmare.
+            const cubeDirs = [
+                {x: 1, y: -1, z: 0},  // East/Diagonal
+                {x: 1, y: 0, z: -1},  // North-East
+                {x: 0, y: 1, z: -1}   // North-West
+                // We only need 3 of the 6 directions, otherwise we generate duplicates (e.g., A1-A2-A3 is the same scan as A3-A2-A1)
+            ];
+
+            // Loop through every hex on the 7x6 board
+            for (let c = 0; c < 7; c++) {
+                for (let r = 0; r < 6; r++) {
+                    const startCube = HexUtils.offsetToCube({col: c, row: r});
+                    const startStr = HexUtils.posToString({col: c, row: r});
+
+                    // Cast a 3-hex "Ray" in the 3 primary axes
+                    for (let i = 0; i < 3; i++) {
+                        const dir = cubeDirs[i];
+                        
+                        // Hex 2 (Middle)
+                        const midCube = {x: startCube.x + dir.x, y: startCube.y + dir.y, z: startCube.z + dir.z};
+                        const midOffset = HexUtils.cubeToOffset(midCube);
+                        
+                        // Hex 3 (End)
+                        const endCube = {x: startCube.x + (dir.x * 2), y: startCube.y + (dir.y * 2), z: startCube.z + (dir.z * 2)};
+                        const endOffset = HexUtils.cubeToOffset(endCube);
+
+                        // If all 3 hexes are safely within the 7x6 board boundaries, it's a valid move
+                        if (midOffset.col >= 0 && midOffset.col <= 6 && midOffset.row >= 0 && midOffset.row <= 5 &&
+                            endOffset.col >= 0 && endOffset.col <= 6 && endOffset.row >= 0 && endOffset.row <= 5) {
+                            
+                            const midStr = HexUtils.posToString(midOffset);
+                            const endStr = HexUtils.posToString(endOffset);
+                            
+                            moves.push(`ISR_DIR_${startStr}_${midStr}_${endStr}`);
+                        }
+                    }
+                }
+            }
+        } // End of if (this.phase === 'SELECT_ACTION')
 
         return moves;
     }
@@ -140,6 +200,15 @@ export class F3Game {
     // Helper to switch turns
     turnEnd() {
         this.currentPlayer = (this.currentPlayer === 'RED') ? 'BLUE' : 'RED';
+    }
+
+    // Helper: Converts a string like "C3" into a flat array index for the Intel maps
+    posToIndex(posStr) {
+        const hex = HexUtils.parsePos(posStr);
+        if (!hex) return 0; // Safety fallback
+        
+        // 7 columns (A-G). Index = (Row * Width) + Column
+        return (hex.row * 7) + hex.col;
     }
     
     clone() {

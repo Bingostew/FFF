@@ -38,13 +38,32 @@ export default class MCTS {
             this.backpropagate(node, winner);
         }
 
-        // 4. RESULT
-        // If we found no moves (game over), return null
+        // 4. RESULT & DEBUG LOGGING
         if (root.children.length === 0) return null;
 
-        // Return the move from the child with the MOST VISITS.
-        // (Robust Child criteria is better than highest win-rate for MCTS)
-        const bestChild = root.children.reduce((a, b) => (a.visits > b.visits ? a : b));
+        // Sort all possible moves by how many times the AI investigated them (Visits)
+        const sortedChildren = [...root.children].sort((a, b) => b.visits - a.visits);
+
+        // --- X-RAY DEBUG OUTPUT ---
+        console.log("\n🧠 --- AI INTERNAL THOUGHT PROCESS ---");
+        console.log(`Simulations Run: ${this.iterations}`);
+        console.log("Top 5 Evaluated Moves:");
+        
+        sortedChildren.slice(0, 5).forEach((child, index) => {
+            // Calculate win probability for this specific move
+            const winRate = ((child.score / child.visits) * 100).toFixed(1);
+            
+            // Format the text so it lines up nicely in the terminal
+            const moveStr = child.move.padEnd(18);
+            const visitsStr = child.visits.toString().padStart(4);
+            const scoreStr = child.score.toFixed(1).padStart(6);
+            
+            console.log(`  ${index + 1}. ${moveStr} | Visits: ${visitsStr} | Score: ${scoreStr} | Win Rate: ${winRate}%`);
+        });
+        console.log("--------------------------------------\n");
+
+        // The move with the most visits is the most statistically robust choice
+        const bestChild = sortedChildren[0];
         return bestChild.move;
     }
 
