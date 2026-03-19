@@ -1,17 +1,17 @@
 <!--MAIN MENU PAGE-->
 <!--SCRIPTS FOR MAIN MENU PAGE-->
 <script>
-  import { isHovering } from '$lib/store'; // Import custom cursor
-  import { io } from "socket.io-client";  // Import functinoality for backend.  Not used currently.
-  import { goto } from '$app/navigation';  // More backend functionality.
-  //Temporary comment out backend
-  //const socket = io("http://localhost:3000");
+  import { isHovering } from '$lib/store'; // Import shared state
+  import { goto } from '$app/navigation';
+  import { createWebSocketModuleRunnerTransport } from 'vite/module-runner';
+  import { initSocket, gameId, socket } from '$lib/gameStore';
 
   let showMultiplayerModal = false; //Toggles multiplayer modal.
   let showSingleplayerModal = false; //Toggles singleplayer modal.
 
-  let nickname = ''; //Player name
-  let lobbyCode = ''; //Lobby code used by players to join lobbies. 
+  let nickname = '';
+  let lobbyCode = '';
+  initSocket();
 
   
   /** 0 = Name Input, 1 = Selection, 2 = Create Lobby, 3 = Join Lobby; multiplayer
@@ -54,6 +54,11 @@
   function openMultiplayerModal(event) {
     event.preventDefault();
     toggleModal('multiplayer'); //Toggles multiplayer modal to switch on. 
+    $socket.on("room_update", ({players}) => {
+      if(Object.keys(players).length == 2){
+        goto("/multiplayer");
+      }
+    });
   }
 
   /**
@@ -80,6 +85,9 @@
       const res = await fetch('http://localhost:3000/create-lobby', { method: 'POST' });
       const data = await res.json();
       lobbyCode = data.gameId;
+
+      gameId.set(lobbyCode);
+      $socket.emit('join_game', {gameId: lobbyCode, playerName: nickname});
     } catch (e) {
       console.error("Failed to create lobby", e);
     }
@@ -105,9 +113,11 @@
    * lobby. 
    */
   function connect(){
-    //COMMENTED OUT FOR FRONTEND DEVELOPMENT
-    //socket.emit('join_game', {lobbyCode, nickname});
-    goto('/multiplayer');
+    gameId.set(lobbyCode);
+    $socket.emit('join_game', {gameId: lobbyCode, playerName: nickname});
+    $socket.onAny((eventName, ...args) => {
+      alert(`[SOCKET INBOUND] Event: ${eventName} and ${args}`);
+    });
   }
 
   /**
