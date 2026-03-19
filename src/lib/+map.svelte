@@ -42,12 +42,15 @@
     let friendlySearchedHexes = $state([]);
     let enemySearchedHexes = $state([]);    
     let isRevealed = $state(false);
-    let enemyFleets = $state([]); 
+    let enemyFleets = $state([ 
+        { q: 4, r: -1, name: "IJN Yamato", health: 2 }, { q: 2, r: 1, name: "IJN Musashi", health: 2 }]);
+
 
     let sourceFleet = $state(null);
     let targetEnemy = $state(null);
     let attackRange = $derived.by(() => {
         if (!sourceFleet || !targetEnemy) return null;
+        
 
         let dist = (Math.abs(sourceFleet.q - targetEnemy.q) + 
                     Math.abs(sourceFleet.r - targetEnemy.r) + 
@@ -238,26 +241,28 @@
             if (friendlyFleet) {
                 sourceFleet = friendlyFleet;
                 showWarning(event.clientX, event.clientY, `Source: ${sourceFleet.name}`);
-                return;
             }
 
             // 2. Select Target (Detected Enemy)
             if (isDetectedEnemy) {
                 targetEnemy = hex;
-                return;
             }
         }
 
         // TARGETING PHASE
-        else if (targetingMode === 'directional') {
+        if (targetingMode === 'directional') {
             // highlightedHexes is already land-free, so we just use it directly!
-            selectedGroup = selectedGroup.some(h => highlightedHexes.includes(h)) 
-                ? [] 
-                : [...highlightedHexes];
+            const isAlreadySelected = selectedGroup.length > 0 && 
+                selectedGroup.some(s => s.q === highlightedHexes[0]?.q && s.r === highlightedHexes[0]?.r);
+            if (isAlreadySelected) {
+                selectedGroup = []; 
+            } else {
+                selectedGroup = [...highlightedHexes]; 
+            }
             return;
         }
 
-        const idx = selectedGroup.indexOf(hex);
+        const idx = selectedGroup.findIndex(s => s.q === hex.q && s.r === hex.r);
         if (idx > -1) {
             if (targetingMode === 'area') {
                 const testGroup = selectedGroup.filter(h => h !== hex);
@@ -331,7 +336,6 @@
                 $socket.once('fleets_placed_confirmation', () => { $socket.emit('ready_check', {gameId: $gameId}); });
             } else {
                 isConfirmed = true;
-                enemyFleets = [ { q: 6, r: -3, name: "IJN Yamato", health: 2 }, { q: 4, r: 0, name: "IJN Musashi", health: 2 } ];
             }
             selectedGroup = [];
             targetingMode = 'focus';
@@ -340,9 +344,17 @@
 
     function handlePlayerSearch() {
         if (isMultiplayer) {
+            const rawPos = selectedGroup;
+            const formattedPositions = {};
+            rawPos.forEach((h, index) => { 
+                formattedPositions[index] = { q: h.q, r: h.r }; 
+            });
+
             $socket.emit('die_roll', { gameId: $gameId });
             return false; 
         } else {
+            if (selectedGroup.length === 0) return false;
+
             const newSearches = selectedGroup.filter(selected => !friendlySearchedHexes.some(searched => searched.q === selected.q && searched.r === selected.r));
             const detected = selectedGroup.find(hex => enemyFleets.some(e => e.q === hex.q && e.r === hex.r));
             friendlySearchedHexes = [...friendlySearchedHexes, ...newSearches];
@@ -350,6 +362,7 @@
             if(detected){
                 targetEnemy = detected;
                 showWarning(mousePos.x, mousePos.y, "TARGET DETECTED: FIRE MISSION ACTIVE");
+
                 if (!sourceFleet && fleetSelections.length > 0) sourceFleet = fleetSelections[0];
                 selectedGroup = []; 
                 return true; 
@@ -504,6 +517,9 @@
 
             <g transform="translate(30, 40)"> 
                 {#each grid as hex}
+                    <!-- CHEAT MODE: SHOWS ENEMEY LOCATION -->
+                    {@const isEnemyFleet = enemyFleets.some(e => e.q === hex.q && e.r === hex.r)} /* ADD THIS CONSTANT */
+
                     {@const config = specialTiles.find(t => t.col === hex.col && t.row === hex.row)}
                     {@const isFleet = fleetSelections.some(f => f.q === hex.q && f.r === hex.r)}
                     
@@ -528,6 +544,31 @@
                             stroke-width="0.5"
                         />
                         
+                        {#if isEnemyFleet}
+                            <polygon
+                                points={pointsStr}
+                                fill="#000000" 
+                                fill-opacity="0.6" 
+                                stroke="#4ade80" 
+                                stroke-width="2"
+                                pointer-events="none" 
+                            />
+                            
+                            <text 
+                                x={hex.x} 
+                                y={hex.y} 
+                                dy="5" 
+                                text-anchor="middle" 
+                                fill="#4ade80" 
+                                font-family="'Chakra Petch', sans-serif"
+                                font-size="12" 
+                                font-weight="bold" 
+                                pointer-events="none"
+                            >
+                                ENEMY
+                            </text>
+                        {/if}
+
                         {#if isFleet && isRevealed}
                             <polygon
                                 points={pointsStr}
@@ -572,8 +613,8 @@
                 {/each}
 
                 {#each grid as hex}
-                    {@const isActive = highlightedHexes.includes(hex)}
-                    {@const isSelected = selectedGroup.includes(hex)}
+                    {@const isActive = highlightedHexes.some(h => h.q === hex.q && h.r === hex.r)}
+                    {@const isSelected = selectedGroup.some(s => s.q === hex.q && s.r === hex.r)}
                     {@const isSelectedToMove = selectedFleetToMove && selectedFleetToMove.q === hex.q && selectedFleetToMove.r === hex.r}
                     {@const isFleet = fleetSelections.some(f => f.q === hex.q && f.r === hex.r)}
                     
@@ -583,18 +624,18 @@
                                 points={hex.corners.map(({ x, y }) => `${x},${y}`).join(' ')}
                                 fill={
                                     isSelectedToMove ? 'rgba(59, 130, 246, 0.3)' : 
-                                    (isConfirmed && isSelected ? 'rgba(200, 74, 74, 0.6)' : 
-                                    (isConfirmed && isActive ? 'rgba(59, 130, 246, 0.4)' : 'transparent'))
+                                    isSelected ? 'rgba(226, 74, 74, 0.6)' :   /* Red takes priority */
+                                    isActive ? 'rgba(59, 130, 246, 0.4)' : 'transparent'
                                 }
                                 stroke={
                                     isSelectedToMove ? "#3b82f6" : 
-                                    (isConfirmed && isSelected ? "#e24a4a" : 
-                                    (isConfirmed && isActive ? "#3b82f6" : 
+                                    (isConfirmed && isSelected ? "#e24a4a" :                 /* PRIORITY 1: RED */
+                                    (isConfirmed && isActive ? "#3b82f6" :                   /* PRIORITY 2: BLUE */
                                     (isFleet ? "#22c55e" : "transparent")))
                                 }
                                 stroke-width={
                                     isSelectedToMove ? 4 : 
-                                    (isConfirmed && isSelected ? 4 : 
+                                    (isConfirmed && isSelected ? 5 :                         /* BOLDER FOR SELECTION */
                                     (isConfirmed && isActive ? 2 : 
                                     (isFleet ? 4 : 0)))
                                 }
@@ -652,6 +693,8 @@
             {/key}
         {/if}
     </div>
+
+ 
 
     <!--RIGHT-->
     <StatusBar 
@@ -753,4 +796,14 @@
         color: #abbbd1;
         margin-top: 2px;
     }
+
+    .hex-cell polygon {
+        transition: fill 0.1s ease, stroke 0.1s ease;
+    }
+
+    [fill*="rgba(200, 74, 74, 0.6)"] {
+        stroke-width: 5px !important;
+        filter: drop-shadow(0 0 5px rgba(226, 74, 74, 0.5));
+    }
+    
 </style>

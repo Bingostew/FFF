@@ -11,7 +11,6 @@
     
     // State variables for dice rolling functionality.
     let currentRollDisplay1 = $state(0);
-    let currentRollDisplay2 = $state(0);    
     let isRolling = $state(false);
 
     // Standard JS props (using defaults to prevent crashes)
@@ -35,7 +34,17 @@
 
     // Simulates 2 D6 dice roll, does two simultaneous calculations.
     function diceRoll() {
+
+        const needsRoll = targetingMode === 'directional' || targetingMode === 'area';
+
         if (isRolling || !isMyTurn) return; 
+
+
+        if(!needsRoll){
+            onSearch();
+            onTurnEnd();
+            return;
+        }
 
         isRolling = true;
         
@@ -43,17 +52,14 @@
         const hasDetectedEnemy = onSearch(); 
 
         const finalResult1 = Math.floor(Math.random() * 6) + 1;
-        const finalResult2 = Math.floor(Math.random() * 6) + 1;
         
         const interval = setInterval(() => {
             currentRollDisplay1 = Math.floor(Math.random() * 6) + 1;
-            currentRollDisplay2 = Math.floor(Math.random() * 6) + 1;
         }, 50);
 
         setTimeout(() => {
             clearInterval(interval);
             currentRollDisplay1 = finalResult1;
-            currentRollDisplay2 = finalResult2;
             isRolling = false;
 
             // If no enemy detected, tell the Map the turn is over.
@@ -61,7 +67,7 @@
             if(!hasDetectedEnemy){
                 onTurnEnd(); 
             }
-        }, 3000); 
+        }, 1000); 
     }
 </script>
 
@@ -181,7 +187,6 @@
                     <span class="roll-label">ROLL RESULT</span>
                     <div style="display: flex; gap: 10px;">
                         <span class="roll-number">{currentRollDisplay1}</span>
-                        <span class="roll-number">{currentRollDisplay2}</span>
                     </div>
                 </div>
             {/if}
