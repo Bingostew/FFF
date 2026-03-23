@@ -3,7 +3,7 @@
 <script>
   import { isHovering } from '$lib/store'; // Import shared state
   import { goto } from '$app/navigation';
-  import { createWebSocketModuleRunnerTransport } from 'vite/module-runner';
+  // import { createWebSocketModuleRunnerTransport } from 'vite/module-runner';
   import { initSocket, gameId, socket } from '$lib/gameStore';
   import { PUBLIC_SERVER_URL } from '$env/static/public';
 
@@ -49,17 +49,17 @@
   }
 
   $effect(() => {
-    if ($socket) {
+    if (socket) {
       const handleRoomUpdate = ({ players }) => {
         if (Object.keys(players).length === 2) {
           goto("/multiplayer");
         }
       };
 
-      $socket.on("room_update", handleRoomUpdate);
+      socket.on("room_update", handleRoomUpdate);
 
       return () => {
-        $socket.off("room_update", handleRoomUpdate);
+        socket.off("room_update", handleRoomUpdate);
       };
     }
   });
@@ -99,7 +99,7 @@
       lobbyCode = data.gameId;
 
       gameId.set(lobbyCode);
-      $socket.emit('join_game', {gameId: lobbyCode, playerName: nickname});
+      socket.emit('join_game', {gameId: lobbyCode, playerName: nickname});
     } catch (e) {
       console.error("Failed to create lobby", e);
     }
@@ -127,7 +127,7 @@
   function connect(){
     gameId.set(lobbyCode);
 
-    $socket.emit('join_game', {gameId: lobbyCode, playerName: nickname});
+    socket.emit('join_game', {gameId: lobbyCode, playerName: nickname});
     //$socket.onAny((eventName, ...args) => {
     //alert(`[SOCKET INBOUND] Event: ${eventName} and ${args}`);
     }
