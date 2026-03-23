@@ -2,7 +2,7 @@
 <!--SCRIPTS FOR MAP-->
 <script>
     // @ts-nocheck
-    import { defineHex, Grid, rectangle, Orientation } from 'honeycomb-grid';
+    import { defineHex, Grid, rectangle, Orientation, line } from 'honeycomb-grid';
     import { isHovering } from '$lib/store';
     import { socket, gameId, activePlayerId } from '$lib/gameStore';   
     import { getTargetHexes, isGroupConnected, getS } from './gridUtils.js';
@@ -24,10 +24,7 @@
     let isMultiplayer = $derived(!!$socket && !!$gameId); // <-- Checks if the game is in multiplayer or singleplayer
     let isConfirmed = $state(false);
     let isEnemyTurn = $state(false); // Used strictly for local AI
-    
-    // <-- NEW: Unified Turn Logic
     let isMyTurn = $derived(!isConfirmed || (isMultiplayer ? ($activePlayerId === $socket?.id) : !isEnemyTurn));
-
     let hoveredHex = $state(null);
     let selectedGroup = $state([]);
     let targetingMode = $state('focus');
@@ -44,7 +41,7 @@
     let isRevealed = $state(false);
     let enemyFleets = $state([ 
         { q: 4, r: -1, name: "IJN Yamato", health: 2 }, { q: 2, r: 1, name: "IJN Musashi", health: 2 }]);
-
+    let overlay = $state({ show : false, text:'', mode: 'fail'});
 
     let sourceFleet = $state(null);
     let targetEnemy = $state(null);
@@ -56,7 +53,7 @@
                     Math.abs(sourceFleet.r - targetEnemy.r) + 
                     Math.abs((-sourceFleet.q - sourceFleet.r) - (-targetEnemy.q - targetEnemy.r))) / 2;
 
-        const lineOfSight = grid.traverse(grid.line({ start: sourceFleet, end: targetEnemy }));
+        const lineOfSight = grid.traverse(line({ start: sourceFleet, stop: targetEnemy }));
         let landPenalty = 0;
         
         const pathArray = [...lineOfSight].slice(1, -1);
@@ -87,11 +84,17 @@
     ];
 
     // Gets highlighted hexes & automatically filters out land!
-    let highlightedHexes = $derived(
-        targetingMode === 'move' ? [] :
-        getTargetHexes(hoveredHex, targetingMode, rotation, gridHexes)
+    let highlightedHexes = $derived.by(() => {
+        if (!hoveredHex || targetingMode === 'move') return [];
+
+        if (targetEnemy) {
+            const isLand = specialTiles.some(t => t.col === hoveredHex.col && t.row === hoveredHex.row);
+            return isLand ? [] : [hoveredHex];
+        }
+
+        return getTargetHexes(hoveredHex, targetingMode, rotation, gridHexes)
         .filter(hex => !specialTiles.some(t => t.col === hex.col && t.row === hex.row))
-    );
+    });
 
     // --- SOCKET LISTENERS (Only runs if Multiplayer) ---
     $effect(() => {
@@ -145,6 +148,19 @@
     function handleHexClick(event, hex) {
         if (isConfirmed && !isMyTurn) return;
 
+        // TARGET ACQUIRED 
+        if(targetEnemy){
+            const friendlyFleet = fleetSelections.find(f => f.q === hex.q && f.r === hex.r);
+
+            if(friendlyFleet){
+                sourceFleet = friendlyFleet;
+                showWarning(event.clientX, event.clientY, `ATTACKER: ${sourceFleet.name}`);
+            }else {
+            showWarning(event.clientX, event.clientY, "Select a friendly fleet to engage!");
+            }
+
+            return;
+        }
         // GLOBAL LAND CHECK
         const isSpecial = specialTiles.some(t => t.col === hex.col && t.row === hex.row);
         if (isSpecial) {
@@ -361,9 +377,7 @@
 
             if(detected){
                 targetEnemy = detected;
-                showWarning(mousePos.x, mousePos.y, "TARGET DETECTED: FIRE MISSION ACTIVE");
-
-                if (!sourceFleet && fleetSelections.length > 0) sourceFleet = fleetSelections[0];
+                sourceFleet = null;
                 selectedGroup = []; 
                 return true; 
             }
@@ -372,24 +386,48 @@
         }
     }
 
-    // NEW: We need this to pass to the Sidebar so it knows how to end turns
     function handleTurnEnd() {
+
+        targetEnemy = null;
+        sourceFleet = null;
+        selectedGroup = [];
+
         if (!isMultiplayer) executeEnemyTurn(); 
     }
 
-    function resolveAttack() {
+    function resolveAttack(roll1, roll2) {
         if (!sourceFleet || !targetEnemy) return;
 
         if (isMultiplayer) {
             $socket.emit('attack', { gameId: $gameId, source: sourceFleet, target: targetEnemy });
             targetEnemy = null;
         } else {
-            const roll = Math.floor(Math.random() * 6) + 1; 
-            if (roll >= requiredRoll) showWarning(mousePos.x, mousePos.y, `HIT! Rolled a ${roll}`);
-            else showWarning(mousePos.x, mousePos.y, `MISS! Rolled a ${roll} (Needed ${requiredRoll}+)`);
+            const hit1 = roll1 >= requiredRoll;
+            const hit2 = roll2 >= requiredRoll;
+            const totalHits = (hit1 ? 1 : 0) + (hit2 ? 1 : 0);
             
-            targetEnemy = null;
-            executeEnemyTurn(); 
+            if (totalHits === 2) {
+                triggerOverlay("CRITICAL STRIKE: 2 HITS", "success");
+            } else if (totalHits === 1) {
+                triggerOverlay("TARGET HIT", "success");
+            } else {
+                triggerOverlay("STRIKE FAILED: 0 HITS", "fail");
+            }
+            
+            const enemyIndex = enemyFleets.findIndex(e => e.q === targetEnemy.q && e.r === targetEnemy.r);
+            if (enemyIndex !== -1 && totalHits > 0){
+                enemyFleets[enemyIndex].health -= totalHits;
+                if(enemyFleets[enemyIndex].health <= 0){
+                    enemyFleets = enemyFleets.filter((_, i) => i !== enemyIndex);
+                }
+            }
+
+            setTimeout(() => {
+                targetEnemy = null;
+                sourceFleet = null;
+                selectedGroup = [];
+                executeEnemyTurn();
+            }, 2000);
         }
     }
 
@@ -438,6 +476,14 @@
         }, 3000); // 3-second suspense timer!
     }
 
+    function triggerOverlay(message, mode = 'fail'){
+        overlay = {show: true, text:message, mode};
+
+        setTimeout(() => {
+            overlay.show = false;
+        }, 2000);
+    }
+
 </script>
 
 <!--MAP HTML-->
@@ -448,11 +494,13 @@
         bind:isConfirmed 
         bind:rotation
         bind:targetEnemy
+        bind:sourceFleet
         {fleetSelections} 
         {selectedGroup} 
         {attackRange}
         {requiredRoll}
         {isMyTurn}
+        onScanResult={triggerOverlay}
         onConfirm={confirmFleets}
         onSearch={handlePlayerSearch} 
         onTurnEnd={handleTurnEnd} 
@@ -694,6 +742,19 @@
         {/if}
     </div>
 
+    {#if overlay.show}
+    <div class="fullscreen-lock-overlay" class:overlay-success={overlay.mode === 'success'}>
+        <div class="failure-content">
+            <div class="glitch-text">
+                {overlay.text}
+            </div>
+            <div class="sub-text">
+                {overlay.mode === 'success' ? 'FIRE CONTROL INITIALIZED...' : 'RECALIBRATING SENSORS...'}
+            </div>
+        </div>
+    </div>
+    {/if}
+
  
 
     <!--RIGHT-->
@@ -804,6 +865,46 @@
     [fill*="rgba(200, 74, 74, 0.6)"] {
         stroke-width: 5px !important;
         filter: drop-shadow(0 0 5px rgba(226, 74, 74, 0.5));
+    }
+
+    .fullscreen-lock-overlay {
+        position: fixed;
+        top: 0; left: 0;
+        width: 100vw; height: 100vh;
+        background: rgba(15, 20, 30, 0.7);
+        backdrop-filter: blur(4px);
+        display: flex; justify-content: center; align-items: center;
+        z-index: 9999;
+        pointer-events: all;
+        animation: fadeInOut 2s forwards;
+    }
+
+    /* Default (Fail) Color */
+    .glitch-text {
+        font-size: 4rem;
+        font-weight: 900;
+        color: #e24a4a; /* Red */
+        text-shadow: 0 0 20px rgba(226, 74, 74, 0.5);
+        text-transform: uppercase;
+        letter-spacing: 10px;
+    }
+
+    /* Success Mode Override */
+    .overlay-success .glitch-text {
+        color: #4ade80; /* Tactical Green */
+        text-shadow: 0 0 20px rgba(74, 222, 128, 0.5);
+    }
+
+    .overlay-success .sub-text {
+        color: #4ade80;
+        opacity: 1;
+    }
+
+    @keyframes fadeInOut {
+        0% { opacity: 0; transform: scale(1.1); }
+        15% { opacity: 1; transform: scale(1); }
+        85% { opacity: 1; transform: scale(1); }
+        100% { opacity: 0; transform: scale(0.9); }
     }
     
 </style>

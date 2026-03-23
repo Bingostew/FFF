@@ -11,6 +11,8 @@
     
     // State variables for dice rolling functionality.
     let currentRollDisplay1 = $state(0);
+    let currentRollDisplay2 = $state(0);
+
     let isRolling = $state(false);
 
     // Standard JS props (using defaults to prevent crashes)
@@ -18,11 +20,13 @@
         targetingMode = $bindable(), 
         isConfirmed = $bindable(), 
         rotation = $bindable(),
+        sourceFleet = $bindable(),
         fleetSelections = [], 
         onConfirm,
         isMyTurn = true,
         onSearch,
         onTurnEnd,
+        onScanResult,
         selectedGroup = [],
         targetEnemy = $bindable(null),
         attackRange = null,
@@ -32,40 +36,61 @@
 
     let totalFuel = $derived(fleetSelections.reduce((acc, f) => acc + (f.fuel || 0), 0));
 
-    // Simulates 2 D6 dice roll, does two simultaneous calculations.
-    function diceRoll() {
+    function diceRoll(isAttack = false) {
 
         const needsRoll = targetingMode === 'directional' || targetingMode === 'area';
 
         if (isRolling || !isMyTurn) return; 
 
 
-        if(!needsRoll){
-            onSearch();
+        if(!needsRoll && !isAttack){
+            const detected = onSearch(); 
+            if(detected){
+                return;
+            }
             onTurnEnd();
-            return;
         }
 
         isRolling = true;
         
         // Execute the search logic in the parent Map component
-        const hasDetectedEnemy = onSearch(); 
-
         const finalResult1 = Math.floor(Math.random() * 6) + 1;
-        
+        const finalResult2 = Math.floor(Math.random() * 6) + 1;
+
         const interval = setInterval(() => {
             currentRollDisplay1 = Math.floor(Math.random() * 6) + 1;
+            if (isAttack) currentRollDisplay2 = Math.floor(Math.random() * 6) + 1;
         }, 50);
 
         setTimeout(() => {
             clearInterval(interval);
             currentRollDisplay1 = finalResult1;
+
+            if(isAttack) currentRollDisplay2 = finalResult2;
             isRolling = false;
 
-            // If no enemy detected, tell the Map the turn is over.
-            // (The Map will decide if it triggers local AI or waits for Socket)
-            if(!hasDetectedEnemy){
-                onTurnEnd(); 
+            if(isAttack){
+                onFireResolve(finalResult1, finalResult2);
+            }
+            else{
+                const threshold = targetingMode === 'directional' ? 4 : 3;
+                const isRollSuccess = finalResult1 <= threshold;
+                const hasDetectedEnemy = onSearch(); 
+
+                if (!isRollSuccess) {
+                    currentRollDisplay1 = 0;
+                    onScanResult(`SCAN FAILED: ROLLED ${finalResult1}`);
+                    onTurnEnd();
+                } else {
+                    if(hasDetectedEnemy){
+                        onScanResult("TARGET FOUND", 'success');
+                    }
+                    else {
+                        onScanResult("AREA CLEAR: NO TARGETS FOUND", 'success');
+                        currentRollDisplay1 = 0;
+                        onTurnEnd(); 
+                    }
+                }
             }
         }, 1000); 
     }
@@ -98,7 +123,7 @@
         {:else}
             {#if !targetEnemy}
                 <h3 class="panel-header">TARGETING</h3>
-                
+               
                 <div class="button-group">
                     <button 
                         class:active={targetingMode === 'focus'} 
@@ -152,30 +177,41 @@
             {:else}
                 <h3 class="panel-header" style="color: #e24a4a; border-color: #e24a4a;">FIRE MISSION</h3>
                 
-                <div class="attack-stats">
-                    <div class="stat-row">
-                        <span>RANGE:</span>
-                        <span class="val">{attackRange} HEXES</span>
+                {#if !sourceFleet}
+                    <div class="status-panel" style="border-color: #e24a4a; animation: pulse 2s infinite;">
+                        <span style="color: #e24a4a; font-weight: bold;">SELECT SOURCE FLEET</span>
                     </div>
-                    <div class="stat-row">
-                        <span>DIFFICULTY:</span>
-                        <span class="val" style="color: #e24a4a;">{requiredRoll}+ NEEDED</span>
+                    <p class="btn-sub" style="text-align: center; margin-top: 10px;">Click one of your ships on the map to calculate firing solution.</p>
+                {:else}
+                    <div class="attack-stats">
+                        <div class="stat-row">
+                            <span>SOURCE:</span>
+                            <span class="val">{sourceFleet.name}</span>
+                        </div>
+                        <div class="stat-row">
+                            <span>RANGE:</span>
+                            <span class="val">{attackRange} HEXES</span>
+                        </div>
+                        <div class="stat-row">
+                            <span>DIFFICULTY:</span>
+                            <span class="val" style="color: #e24a4a;">{requiredRoll}+ NEEDED</span>
+                        </div>
                     </div>
-                </div>
+                {/if}
 
                 <div class="button-group">
                     <button 
                         class="fire-button"
-                        onclick={() => onFireResolve()}
-                        disabled={isRolling}
+                        onclick={() => diceRoll(true)}
+                        disabled={isRolling || !sourceFleet}
                     >
                         <span class="btn-text">ENGAGE</span>
-                        <span class="btn-sub">EXECUTE ATTACK VECTOR</span>
+                        <span class="btn-sub">{sourceFleet ? "EXECUTE ATTACK VECTOR" : "WAITING FOR SOURCE..."}</span>
                     </button>
 
                     <button 
                         class="cancel-btn"
-                        onclick={() => { targetEnemy = null; }}
+                        onclick={() => { targetEnemy = null; sourceFleet = null; }}
                     >
                         <span class="btn-text" style="font-size: 0.8rem; text-align: center;">ABORT MISSION</span>
                     </button>
@@ -184,9 +220,13 @@
 
             {#if currentRollDisplay1 !== 0}
                 <div class="roll-display" class:is-rolling={isRolling}>
-                    <span class="roll-label">ROLL RESULT</span>
-                    <div style="display: flex; gap: 10px;">
+                    <span class="roll-label">{targetEnemy ? 'BATTERY FIRE' : 'SCAN RESULT'}</span>
+                    <div style="display: flex; gap: 15px;">
                         <span class="roll-number">{currentRollDisplay1}</span>
+                        {#if targetEnemy} <span class="roll-number" style="border-left: 1px solid #22c55e; padding-left: 15px;">
+                                {currentRollDisplay2}
+                            </span>
+                        {/if}
                     </div>
                 </div>
             {/if}
@@ -363,6 +403,12 @@
         border: none;
         background: transparent;
         align-items: center;
+    }
+
+    @keyframes pulse {
+        0% { opacity: 1; }
+        50% { opacity: 0.5; }
+        100% { opacity: 1; }
     }
 
 
