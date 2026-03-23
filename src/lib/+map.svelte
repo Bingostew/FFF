@@ -2,7 +2,7 @@
 <!--SCRIPTS FOR MAP-->
 <script>
     // @ts-nocheck
-    import { defineHex, Grid, rectangle, Orientation } from 'honeycomb-grid';
+    import { defineHex, Grid, rectangle, Orientation, line } from 'honeycomb-grid';
     import { isHovering } from '$lib/store';
     import { socket, gameId, activePlayerId } from '$lib/gameStore';   
     import { getTargetHexes, isGroupConnected, getS } from './gridUtils.js';
@@ -24,10 +24,7 @@
     let isMultiplayer = $derived(!!$socket && !!$gameId); // <-- Checks if the game is in multiplayer or singleplayer
     let isConfirmed = $state(false);
     let isEnemyTurn = $state(false); // Used strictly for local AI
-    
-    // <-- NEW: Unified Turn Logic
     let isMyTurn = $derived(!isConfirmed || (isMultiplayer ? ($activePlayerId === $socket?.id) : !isEnemyTurn));
-
     let hoveredHex = $state(null);
     let selectedGroup = $state([]);
     let targetingMode = $state('focus');
@@ -42,18 +39,21 @@
     let friendlySearchedHexes = $state([]);
     let enemySearchedHexes = $state([]);    
     let isRevealed = $state(false);
-    let enemyFleets = $state([]); 
+    let enemyFleets = $state([ 
+        { q: 4, r: -1, name: "IJN Yamato", health: 2 }, { q: 2, r: 1, name: "IJN Musashi", health: 2 }]);
+    let overlay = $state({ show : false, text:'', mode: 'fail'});
 
     let sourceFleet = $state(null);
     let targetEnemy = $state(null);
     let attackRange = $derived.by(() => {
         if (!sourceFleet || !targetEnemy) return null;
+        
 
         let dist = (Math.abs(sourceFleet.q - targetEnemy.q) + 
                     Math.abs(sourceFleet.r - targetEnemy.r) + 
                     Math.abs((-sourceFleet.q - sourceFleet.r) - (-targetEnemy.q - targetEnemy.r))) / 2;
 
-        const lineOfSight = grid.traverse(grid.line({ start: sourceFleet, end: targetEnemy }));
+        const lineOfSight = grid.traverse(line({ start: sourceFleet, stop: targetEnemy }));
         let landPenalty = 0;
         
         const pathArray = [...lineOfSight].slice(1, -1);
@@ -84,11 +84,17 @@
     ];
 
     // Gets highlighted hexes & automatically filters out land!
-    let highlightedHexes = $derived(
-        targetingMode === 'move' ? [] :
-        getTargetHexes(hoveredHex, targetingMode, rotation, gridHexes)
+    let highlightedHexes = $derived.by(() => {
+        if (!hoveredHex || targetingMode === 'move') return [];
+
+        if (targetEnemy) {
+            const isLand = specialTiles.some(t => t.col === hoveredHex.col && t.row === hoveredHex.row);
+            return isLand ? [] : [hoveredHex];
+        }
+
+        return getTargetHexes(hoveredHex, targetingMode, rotation, gridHexes)
         .filter(hex => !specialTiles.some(t => t.col === hex.col && t.row === hex.row))
-    );
+    });
 
     // --- SOCKET LISTENERS (Only runs if Multiplayer) ---
     $effect(() => {
@@ -142,6 +148,19 @@
     function handleHexClick(event, hex) {
         if (isConfirmed && !isMyTurn) return;
 
+        // TARGET ACQUIRED 
+        if(targetEnemy){
+            const friendlyFleet = fleetSelections.find(f => f.q === hex.q && f.r === hex.r);
+
+            if(friendlyFleet){
+                sourceFleet = friendlyFleet;
+                showWarning(event.clientX, event.clientY, `ATTACKER: ${sourceFleet.name}`);
+            }else {
+            showWarning(event.clientX, event.clientY, "Select a friendly fleet to engage!");
+            }
+
+            return;
+        }
         // GLOBAL LAND CHECK
         const isSpecial = specialTiles.some(t => t.col === hex.col && t.row === hex.row);
         if (isSpecial) {
@@ -238,26 +257,28 @@
             if (friendlyFleet) {
                 sourceFleet = friendlyFleet;
                 showWarning(event.clientX, event.clientY, `Source: ${sourceFleet.name}`);
-                return;
             }
 
             // 2. Select Target (Detected Enemy)
             if (isDetectedEnemy) {
                 targetEnemy = hex;
-                return;
             }
         }
 
         // TARGETING PHASE
-        else if (targetingMode === 'directional') {
+        if (targetingMode === 'directional') {
             // highlightedHexes is already land-free, so we just use it directly!
-            selectedGroup = selectedGroup.some(h => highlightedHexes.includes(h)) 
-                ? [] 
-                : [...highlightedHexes];
+            const isAlreadySelected = selectedGroup.length > 0 && 
+                selectedGroup.some(s => s.q === highlightedHexes[0]?.q && s.r === highlightedHexes[0]?.r);
+            if (isAlreadySelected) {
+                selectedGroup = []; 
+            } else {
+                selectedGroup = [...highlightedHexes]; 
+            }
             return;
         }
 
-        const idx = selectedGroup.indexOf(hex);
+        const idx = selectedGroup.findIndex(s => s.q === hex.q && s.r === hex.r);
         if (idx > -1) {
             if (targetingMode === 'area') {
                 const testGroup = selectedGroup.filter(h => h !== hex);
@@ -325,65 +346,96 @@
 
     function confirmFleets() {
         if (fleetSelections.length === 2) {
-<<<<<<<<< Temporary merge branch 1
-            const fleetPositions = {
-                alpha: { q: fleetSelections[0].q, r: fleetSelections[0].r },
-                beta: { q: fleetSelections[1].q, r: fleetSelections[1].r }
-            };
-            $socket.once('place_fleets', { gameId: $gameId, fleetPositions });
-=========
-            console.log("Fleets locked:", fleetSelections.map(f => ({ q: f.q, r: f.r })));
-            isConfirmed = true;
-            // Clear any previous selections and default to focus mode
+            if (isMultiplayer) {
+                const fleetPositions = { alpha: { q: fleetSelections[0].q, r: fleetSelections[0].r }, beta: { q: fleetSelections[1].q, r: fleetSelections[1].r } };
+                $socket.emit('place_fleets', { gameId: $gameId, fleetPositions });
+                $socket.once('fleets_placed_confirmation', () => { $socket.emit('ready_check', {gameId: $gameId}); });
+            } else {
+                isConfirmed = true;
+            }
             selectedGroup = [];
             targetingMode = 'focus';
         }
     }
 
-    /********************ARTIFICIAL INTELLIGENCE*/
-    /* Simulate an enemy AI, not going to be final implementation of AI*/ 
-    function testSearchHex() {
-        if (gridHexes.length > 0) {
-            const randomHex = gridHexes[Math.floor(Math.random() * gridHexes.length)];
->>>>>>>>> Temporary merge branch 2
+    function handlePlayerSearch() {
+        if (isMultiplayer) {
+            const rawPos = selectedGroup;
+            const formattedPositions = {};
+            rawPos.forEach((h, index) => { 
+                formattedPositions[index] = { q: h.q, r: h.r }; 
+            });
+
+            $socket.emit('die_roll', { gameId: $gameId });
+            return false; 
+        } else {
+            if (selectedGroup.length === 0) return false;
+
+            const newSearches = selectedGroup.filter(selected => !friendlySearchedHexes.some(searched => searched.q === selected.q && searched.r === selected.r));
+            const detected = selectedGroup.find(hex => enemyFleets.some(e => e.q === hex.q && e.r === hex.r));
+            friendlySearchedHexes = [...friendlySearchedHexes, ...newSearches];
+
+            if(detected){
+                targetEnemy = detected;
+                sourceFleet = null;
+                selectedGroup = []; 
+                return true; 
+            }
+            selectedGroup = []; 
+            return false;
+        }
+    }
+
+    function handleTurnEnd() {
+
+        targetEnemy = null;
+        sourceFleet = null;
+        selectedGroup = [];
+
+        if (!isMultiplayer) executeEnemyTurn(); 
+    }
+
+    function resolveAttack(roll1, roll2) {
+        if (!sourceFleet || !targetEnemy) return;
+
+        if (isMultiplayer) {
+            $socket.emit('attack', { gameId: $gameId, source: sourceFleet, target: targetEnemy });
+            targetEnemy = null;
+        } else {
+            const hit1 = roll1 >= requiredRoll;
+            const hit2 = roll2 >= requiredRoll;
+            const totalHits = (hit1 ? 1 : 0) + (hit2 ? 1 : 0);
             
-            $socket.on('fleets_placed_confirmation', () =>
-            {
-                $socket.emit('ready_check', {gameId: $gameId})
-            });
+            if (totalHits === 2) {
+                triggerOverlay("CRITICAL STRIKE: 2 HITS", "success");
+            } else if (totalHits === 1) {
+                triggerOverlay("TARGET HIT", "success");
+            } else {
+                triggerOverlay("STRIKE FAILED: 0 HITS", "fail");
+            }
+            
+            const enemyIndex = enemyFleets.findIndex(e => e.q === targetEnemy.q && e.r === targetEnemy.r);
+            if (enemyIndex !== -1 && totalHits > 0){
+                enemyFleets[enemyIndex].health -= totalHits;
+                if(enemyFleets[enemyIndex].health <= 0){
+                    enemyFleets = enemyFleets.filter((_, i) => i !== enemyIndex);
+                }
+            }
+
+            setTimeout(() => {
+                targetEnemy = null;
+                sourceFleet = null;
+                selectedGroup = [];
+                executeEnemyTurn();
+            }, 2000);
         }
     }
 
-    function activate(){
-        if (!isMyTurn) return;
 
-        if(targetingMode === 'focus'){
-            $socket.emit('focus', {
-                gameId:$gameId,
-                positions: selectedGroup.map(h => ({ q: h.q, r: h.r }))
-            });
-        }
-        else{
-            $socket.emit('die_roll', {gameId:$gameId});
-        }
-        
-    }
+    // --- ARTIFICIAL INTELLIGENCE ---
 
-/* Simulate an enemy AI, not going to be final implementation of AI*/ 
-function testSearchHex() {
-    if (gridHexes.length > 0) {
-        const randomHex = gridHexes[Math.floor(Math.random() * gridHexes.length)];
-        
-        // Push to ENEMY searched list
-        if (!enemySearchedHexes.some(s => s.q === randomHex.q && s.r === randomHex.r)) {
-            enemySearchedHexes = [...enemySearchedHexes, randomHex];
-        }
-    }
-}
-
-// Logic for the enemy to select a hex in an attack.
-function triggerEnemyAI() {
-    if (gridHexes.length === 0) return;
+    function triggerEnemyAI() {
+        if (gridHexes.length === 0) return;
 
         const modes = ['focus', 'directional', 'area'];
         const randomMode = modes[Math.floor(Math.random() * modes.length)];
@@ -424,6 +476,14 @@ function triggerEnemyAI() {
         }, 3000); // 3-second suspense timer!
     }
 
+    function triggerOverlay(message, mode = 'fail'){
+        overlay = {show: true, text:message, mode};
+
+        setTimeout(() => {
+            overlay.show = false;
+        }, 2000);
+    }
+
 </script>
 
 <!--MAP HTML-->
@@ -434,11 +494,13 @@ function triggerEnemyAI() {
         bind:isConfirmed 
         bind:rotation
         bind:targetEnemy
+        bind:sourceFleet
         {fleetSelections} 
         {selectedGroup} 
         {attackRange}
         {requiredRoll}
         {isMyTurn}
+        onScanResult={triggerOverlay}
         onConfirm={confirmFleets}
         onSearch={handlePlayerSearch} 
         onTurnEnd={handleTurnEnd} 
@@ -503,6 +565,9 @@ function triggerEnemyAI() {
 
             <g transform="translate(30, 40)"> 
                 {#each grid as hex}
+                    <!-- CHEAT MODE: SHOWS ENEMEY LOCATION -->
+                    {@const isEnemyFleet = enemyFleets.some(e => e.q === hex.q && e.r === hex.r)} /* ADD THIS CONSTANT */
+
                     {@const config = specialTiles.find(t => t.col === hex.col && t.row === hex.row)}
                     {@const isFleet = fleetSelections.some(f => f.q === hex.q && f.r === hex.r)}
                     
@@ -527,6 +592,31 @@ function triggerEnemyAI() {
                             stroke-width="0.5"
                         />
                         
+                        {#if isEnemyFleet}
+                            <polygon
+                                points={pointsStr}
+                                fill="#000000" 
+                                fill-opacity="0.6" 
+                                stroke="#4ade80" 
+                                stroke-width="2"
+                                pointer-events="none" 
+                            />
+                            
+                            <text 
+                                x={hex.x} 
+                                y={hex.y} 
+                                dy="5" 
+                                text-anchor="middle" 
+                                fill="#4ade80" 
+                                font-family="'Chakra Petch', sans-serif"
+                                font-size="12" 
+                                font-weight="bold" 
+                                pointer-events="none"
+                            >
+                                ENEMY
+                            </text>
+                        {/if}
+
                         {#if isFleet && isRevealed}
                             <polygon
                                 points={pointsStr}
@@ -571,8 +661,8 @@ function triggerEnemyAI() {
                 {/each}
 
                 {#each grid as hex}
-                    {@const isActive = highlightedHexes.includes(hex)}
-                    {@const isSelected = selectedGroup.includes(hex)}
+                    {@const isActive = highlightedHexes.some(h => h.q === hex.q && h.r === hex.r)}
+                    {@const isSelected = selectedGroup.some(s => s.q === hex.q && s.r === hex.r)}
                     {@const isSelectedToMove = selectedFleetToMove && selectedFleetToMove.q === hex.q && selectedFleetToMove.r === hex.r}
                     {@const isFleet = fleetSelections.some(f => f.q === hex.q && f.r === hex.r)}
                     
@@ -582,18 +672,18 @@ function triggerEnemyAI() {
                                 points={hex.corners.map(({ x, y }) => `${x},${y}`).join(' ')}
                                 fill={
                                     isSelectedToMove ? 'rgba(59, 130, 246, 0.3)' : 
-                                    (isConfirmed && isSelected ? 'rgba(200, 74, 74, 0.6)' : 
-                                    (isConfirmed && isActive ? 'rgba(59, 130, 246, 0.4)' : 'transparent'))
+                                    isSelected ? 'rgba(226, 74, 74, 0.6)' :   /* Red takes priority */
+                                    isActive ? 'rgba(59, 130, 246, 0.4)' : 'transparent'
                                 }
                                 stroke={
                                     isSelectedToMove ? "#3b82f6" : 
-                                    (isConfirmed && isSelected ? "#e24a4a" : 
-                                    (isConfirmed && isActive ? "#3b82f6" : 
+                                    (isConfirmed && isSelected ? "#e24a4a" :                 /* PRIORITY 1: RED */
+                                    (isConfirmed && isActive ? "#3b82f6" :                   /* PRIORITY 2: BLUE */
                                     (isFleet ? "#22c55e" : "transparent")))
                                 }
                                 stroke-width={
                                     isSelectedToMove ? 4 : 
-                                    (isConfirmed && isSelected ? 4 : 
+                                    (isConfirmed && isSelected ? 5 :                         /* BOLDER FOR SELECTION */
                                     (isConfirmed && isActive ? 2 : 
                                     (isFleet ? 4 : 0)))
                                 }
@@ -651,6 +741,21 @@ function triggerEnemyAI() {
             {/key}
         {/if}
     </div>
+
+    {#if overlay.show}
+    <div class="fullscreen-lock-overlay" class:overlay-success={overlay.mode === 'success'}>
+        <div class="failure-content">
+            <div class="glitch-text">
+                {overlay.text}
+            </div>
+            <div class="sub-text">
+                {overlay.mode === 'success' ? 'FIRE CONTROL INITIALIZED...' : 'RECALIBRATING SENSORS...'}
+            </div>
+        </div>
+    </div>
+    {/if}
+
+ 
 
     <!--RIGHT-->
     <StatusBar 
@@ -752,4 +857,54 @@ function triggerEnemyAI() {
         color: #abbbd1;
         margin-top: 2px;
     }
+
+    .hex-cell polygon {
+        transition: fill 0.1s ease, stroke 0.1s ease;
+    }
+
+    [fill*="rgba(200, 74, 74, 0.6)"] {
+        stroke-width: 5px !important;
+        filter: drop-shadow(0 0 5px rgba(226, 74, 74, 0.5));
+    }
+
+    .fullscreen-lock-overlay {
+        position: fixed;
+        top: 0; left: 0;
+        width: 100vw; height: 100vh;
+        background: rgba(15, 20, 30, 0.7);
+        backdrop-filter: blur(4px);
+        display: flex; justify-content: center; align-items: center;
+        z-index: 9999;
+        pointer-events: all;
+        animation: fadeInOut 2s forwards;
+    }
+
+    /* Default (Fail) Color */
+    .glitch-text {
+        font-size: 4rem;
+        font-weight: 900;
+        color: #e24a4a; /* Red */
+        text-shadow: 0 0 20px rgba(226, 74, 74, 0.5);
+        text-transform: uppercase;
+        letter-spacing: 10px;
+    }
+
+    /* Success Mode Override */
+    .overlay-success .glitch-text {
+        color: #4ade80; /* Tactical Green */
+        text-shadow: 0 0 20px rgba(74, 222, 128, 0.5);
+    }
+
+    .overlay-success .sub-text {
+        color: #4ade80;
+        opacity: 1;
+    }
+
+    @keyframes fadeInOut {
+        0% { opacity: 0; transform: scale(1.1); }
+        15% { opacity: 1; transform: scale(1); }
+        85% { opacity: 1; transform: scale(1); }
+        100% { opacity: 0; transform: scale(0.9); }
+    }
+    
 </style>

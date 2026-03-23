@@ -13,20 +13,6 @@
         button { background: #00ff00; color: #000; border: none; padding: 8px 15px; cursor: pointer; font-weight: bold; margin: 5px 0; }
         input { background: #333; color: #fff; border: 1px solid #555; padding: 5px; }
         .status { color: yellow; }
-        .spinner {
-            display: inline-block;
-            width: 15px;
-            height: 15px;
-            border: 2px solid rgba(0,255,0,0.3);
-            border-radius: 50%;
-            border-top-color: #00ff00;
-            animation: spin 1s ease-in-out infinite;
-            vertical-align: middle;
-            margin-left: 5px;
-        }
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
     </style>
 </head>
 <body>
@@ -36,10 +22,6 @@
     <div class="grid">
         <div class="panel">
             <h3>1. Connection & Lobby</h3>
-            <select id="modeSelect" style="background: #333; color: #fff; border: 1px solid #555; padding: 5px;">
-                <option value="multi">Multiplayer</option>
-                <option value="single">Single Player</option>
-            </select>
             <button onclick="createLobby()">Create New Lobby (HTTP)</button>
             <br>
             <input type="text" id="roomIdInput" placeholder="Enter Room ID">
@@ -57,23 +39,11 @@
             <button onclick="executeStrike()">Execute Strike</button>
             <br>
             <button onclick="readyCheck()">Ready Up</button>
-            <br>
-            <select id="fleetSelector" style="background: #333; color: #fff; border: 1px solid #555; padding: 5px;">
-                <option value="alpha">Alpha</option>
-                <option value="beta">Beta</option>
-            </select>
-            <input type="number" id="moveQ" placeholder="Q" style="width:40px">
-            <input type="number" id="moveR" placeholder="R" style="width:40px">
-            <button onclick="submitMoveFleet()">Move Fleet</button>
-            <br>
-            <button onclick="rollDie()">Roll Die</button>
-            <br>
-            <hr>
-            <strong>Focus ISR</strong><br>
-            1: <input type="number" id="focusQ1" placeholder="Q" style="width:40px"> <input type="number" id="focusR1" placeholder="R" style="width:40px"><br>
-            2: <input type="number" id="focusQ2" placeholder="Q" style="width:40px"> <input type="number" id="focusR2" placeholder="R" style="width:40px"><br>
-            3: <input type="number" id="focusQ3" placeholder="Q" style="width:40px"> <input type="number" id="focusR3" placeholder="R" style="width:40px"><br>
-            <button onclick="submitFocus()">Execute Focus</button>
+            <!-- Future feature: Move Fleet -->
+            <!-- <br>
+            <input type="text" id="fleetName" placeholder="Fleet Name">
+            <input type="text" id="newPosition" placeholder="New Position (q,r)">
+            <button onclick="move_fleet(document.getElementById('fleetName').value, document.getElementById('newPosition').value)">Move Fleet</button> -->    
         </div>
     </div>
 
