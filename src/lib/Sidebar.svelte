@@ -57,42 +57,61 @@
         const finalResult1 = Math.floor(Math.random() * 6) + 1;
         const finalResult2 = Math.floor(Math.random() * 6) + 1;
 
-        const interval = setInterval(() => {
+        let iterations = 0;
+        const maxIterations = 8;
+        let speed = 40;
+
+        function animate(){
+            iterations ++;
+            
             currentRollDisplay1 = Math.floor(Math.random() * 6) + 1;
             if (isAttack) currentRollDisplay2 = Math.floor(Math.random() * 6) + 1;
-        }, 50);
-
-        setTimeout(() => {
-            clearInterval(interval);
-            currentRollDisplay1 = finalResult1;
-
-            if(isAttack) currentRollDisplay2 = finalResult2;
-            isRolling = false;
-
-            if(isAttack){
-                onFireResolve(finalResult1, finalResult2);
+    
+            if(iterations < maxIterations){
+                speed += iterations * 15;
+                setTimeout(animate, speed);
             }
             else{
-                const threshold = targetingMode === 'directional' ? 4 : 3;
-                const isRollSuccess = finalResult1 <= threshold;
-                const hasDetectedEnemy = onSearch(); 
+                currentRollDisplay1 = finalResult1;
+                if(isAttack) currentRollDisplay2 = finalResult2;
 
-                if (!isRollSuccess) {
-                    currentRollDisplay1 = 0;
-                    onScanResult(`SCAN FAILED: ROLLED ${finalResult1}`);
-                    onTurnEnd();
-                } else {
-                    if(hasDetectedEnemy){
-                        onScanResult("TARGET FOUND", 'success');
-                    }
-                    else {
-                        onScanResult("AREA CLEAR: NO TARGETS FOUND", 'success');
-                        currentRollDisplay1 = 0;
-                        onTurnEnd(); 
-                    }
+                isRolling = false;
+                setTimeout(() => {
+                    finalizeResult(isAttack, finalResult1, finalResult2);
+                }, 2000);
+            }
+        }
+
+        animate();
+    }
+
+    function finalizeResult(isAttack, result1, result2){
+        if(isAttack) currentRollDisplay2 = result2;
+        isRolling = false;
+
+        if(isAttack){
+            currentRollDisplay1 = 0;
+            onFireResolve(result1, result2);
+        }
+        else{
+            const threshold = targetingMode === 'directional' ? 4 : 3;
+            const isRollSuccess = result1 <= threshold;
+            const hasDetectedEnemy = onSearch(); 
+
+            if (!isRollSuccess) {
+                onScanResult(`SCAN FAILED: ROLLED ${result1}`);
+                onTurnEnd();
+            } else {
+                if(hasDetectedEnemy){
+                    onScanResult("TARGET FOUND", 'success');
+                }
+                else {
+                    onScanResult("AREA CLEAR: NO TARGETS FOUND", 'success');
+                    onTurnEnd(); 
                 }
             }
-        }, 1000); 
+        }
+        currentRollDisplay1 = 0;
     }
 </script>
 
@@ -217,21 +236,29 @@
                     </button>
                 </div>
             {/if}
-
-            {#if currentRollDisplay1 !== 0}
-                <div class="roll-display" class:is-rolling={isRolling}>
-                    <span class="roll-label">{targetEnemy ? 'BATTERY FIRE' : 'SCAN RESULT'}</span>
-                    <div style="display: flex; gap: 15px;">
-                        <span class="roll-number">{currentRollDisplay1}</span>
-                        {#if targetEnemy} <span class="roll-number" style="border-left: 1px solid #22c55e; padding-left: 15px;">
-                                {currentRollDisplay2}
-                            </span>
-                        {/if}
-                    </div>
-                </div>
-            {/if}
         {/if}
     </div>
+
+    {#if currentRollDisplay1 !== 0}
+        <div class="dice-popup-overlay">
+            <div class="dice-box" class:is-stopping={!isRolling}>
+                <span class="dice-header">
+                    {targetEnemy ? '--READYING WEAPON--' : '--SCANNING--'}
+                </span>
+                
+                <div class="dice-row">
+                    <div class="die-face">{currentRollDisplay1}</div>
+                    {#if targetEnemy}
+                        <div class="die-face">{currentRollDisplay2}</div>
+                    {/if}
+                </div>
+
+                {#if !isRolling}
+                    <div class="lock-indicator">RESULT LOCKED</div>
+                {/if}
+            </div>
+        </div>
+    {/if}
 {/if}
 
 <!--SIDEBAR APPEARANCE-->
@@ -409,6 +436,80 @@
         0% { opacity: 1; }
         50% { opacity: 0.5; }
         100% { opacity: 1; }
+    }
+
+    .dice-popup-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        background: rgba(0, 0, 0, 0.6);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 10000;
+        backdrop-filter: blur(2px);
+    }
+
+    .dice-box {
+        background: #0a0f1e;
+        border: 2px solid #3b82f6;
+        padding: 40px;
+        text-align: center;
+        box-shadow: 0 0 30px rgba(59, 130, 246, 0.4);
+        clip-path: polygon(10% 0, 100% 0, 100% 90%, 90% 100%, 0 100%, 0 10%);
+        animation: popIn 0.3s ease-out;
+    }
+
+    .dice-box.is-stopping {
+        border-color: #22c55e;
+        box-shadow: 0 0 30px rgba(34, 197, 94, 0.4);
+    }
+
+    .dice-row {
+        display: flex;
+        gap: 20px;
+        justify-content: center;
+        margin: 20px 0;
+    }
+
+    .die-face {
+        width: 100px;
+        height: 100px;
+        background: #000;
+        border: 2px solid currentColor;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 4rem;
+        font-weight: bold;
+        color: #3b82f6;
+        font-family: 'Chakra Petch', sans-serif;
+    }
+
+    .is-stopping .die-face {
+        color: #22c55e;
+    }
+
+    .dice-header {
+        font-family: 'Chakra Petch', sans-serif;
+        color: #abbbd1;
+        letter-spacing: 3px;
+        font-size: 1rem;
+    }
+
+    .lock-indicator {
+        font-size: 0.8rem;
+        color: #22c55e;
+        letter-spacing: 5px;
+        margin-top: 10px;
+        font-weight: bold;
+    }
+
+    @keyframes popIn {
+        0% { transform: scale(0.8); opacity: 0; }
+        100% { transform: scale(1); opacity: 1; }
     }
 
 
