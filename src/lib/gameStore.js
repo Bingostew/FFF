@@ -83,7 +83,6 @@ export function setupGameListeners() {
 // function addLog(msg) {
 //     gameState.update(s => ({ ...s, logs: [...s.logs, msg] }));
 // }
-=========
 import { writable } from 'svelte/store';
 import { io } from 'socket.io-client';
 import { PUBLIC_SERVER_URL } from '$env/static/public'; // Import the variable
@@ -102,4 +101,3 @@ export function initSocket() {
 
     return socketInstance;
 }
->>>>>>>>> Temporary merge branch 2

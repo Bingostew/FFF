@@ -1,15 +1,10 @@
 /** handle socket.io logic */
-
 const BotAI = require('./botAI');
+const BOT_ID = 'CPU_BOT_123'; // ADD THIS LINE!
 
 // game 'brain': will handle socket.io messages
 module.exports = (io, lobbies) => {
 
-<<<<<<< HEAD
-    const BOT_ID = 'CPU_COMMANDER';
-
-=======
->>>>>>> origin/ui
     //function to ensure that each player can perform an action only when it is its turn
     const switchTurn = (gameId) => {
         const lobby = lobbies[gameId];
