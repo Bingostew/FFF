@@ -251,6 +251,7 @@
                         $socket.emit('move_fleet', { gameId: $gameId, fleet: selectedFleetToMove, target: hex });
                     } else {
                         executeEnemyTurn(); 
+                        setTimeout(() => executeEnemyTurn(), 2000);
                     }
                 } else {
                     showWarning(event.clientX, event.clientY, `${selectedFleetToMove.name} is out of fuel!`);
@@ -548,7 +549,10 @@
         }, 3000); 
     }
 
+    let overlayTimeout;
+
     function triggerOverlay(message, mode = 'fail'){
+        clearTimeout(overlayTimeout);
         overlay = {show: true, text:message, mode};
 
         setTimeout(() => {
@@ -827,8 +831,7 @@
     {/if}
 
     {#if gameOver}
-    <div class="fullscreen-lock-overlay" style="background: rgba(10, 15, 30, 0.95); flex-direction: column;">
-        <div class="failure-content" style="text-align: center;">
+    <div class="fullscreen-lock-overlay" style="background: rgba(10, 15, 30, 0.95); flex-direction: column; animation: fadeInStay 0.5s forwards; opacity: 1;">        <div class="failure-content" style="text-align: center;">
             <div class="glitch-text" style="color: {gameResult === 'VICTORY' ? '#4ade80' : '#e24a4a'}; animation: none;">
                 {gameResult}
             </div>
@@ -837,8 +840,22 @@
             </div>
             
             <div style="display: flex; gap: 20px; justify-content: center;">
-                <button class="nav-btn" onclick={() => window.location.href = '/'}>MAIN MENU</button>
-                <button class="nav-btn" onclick={() => window.location.reload()}>PLAY AGAIN</button>
+                <button 
+                    class="nav-btn" 
+                    onclick={() => window.location.href = '/'}
+                    onmouseenter={() => $isHovering = true} 
+                    onmouseleave={() => $isHovering = false}
+                >
+                    MAIN MENU
+                </button>
+                <button 
+                    class="nav-btn" 
+                    onclick={() => window.location.reload()}
+                    onmouseenter={() => $isHovering = true} 
+                    onmouseleave={() => $isHovering = false}
+                >
+                    PLAY AGAIN
+                </button>
             </div>
         </div>
     </div>
@@ -966,6 +983,7 @@
         z-index: 9999;
         pointer-events: all;
         animation: fadeInOut 2s forwards;
+        cursor: none; 
     }
 
     /* Default (Fail) Color */
@@ -998,7 +1016,7 @@
         font-family: 'Chakra Petch', sans-serif;
         font-size: 1.2rem;
         font-weight: bold;
-        cursor: pointer;
+        cursor: none; /* <-- CHANGE THIS FROM 'pointer' TO 'none' */
         transition: all 0.2s;
         clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
     }
@@ -1015,6 +1033,11 @@
         15% { opacity: 1; transform: scale(1); }
         85% { opacity: 1; transform: scale(1); }
         100% { opacity: 0; transform: scale(0.9); }
+    }
+
+    @keyframes fadeInStay {
+        0% { opacity: 0; transform: scale(1.05); }
+        100% { opacity: 1; transform: scale(1); }
     }
     
 </style>
