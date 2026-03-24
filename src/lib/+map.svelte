@@ -486,28 +486,66 @@
     }
 
     function executeEnemyTurn() {
-        isEnemyTurn = true; // Tells the Status Bar to turn RED
+        if (gameOver) return; // Stop the AI if the game is over!
+        isEnemyTurn = true; 
 
         setTimeout(() => {
-            if (gridHexes.length > 0) {
+            if (gridHexes.length > 0 && !gameOver) {
                 const modes = ['focus', 'directional', 'area'];
                 const randomMode = modes[Math.floor(Math.random() * modes.length)];
                 const randomRotation = Math.floor(Math.random() * 6);
-                const randomHex = gridHexes[Math.floor(Math.random() * gridHexes.length)];
                 
-                const targetHexes = getTargetHexes(randomHex, randomMode, randomRotation, gridHexes);
+                // Pick a random WATER hex for the scan epicenter
+                const waterHexes = gridHexes.filter(h => h && !specialTiles.some(t => t.col === h.col && t.row === h.row));
+                const randomHex = waterHexes[Math.floor(Math.random() * waterHexes.length)];
                 
-                // Filters out hexes already attacked by the AI OR the Player
-                const newSearches = targetHexes.filter(target => 
-                    !enemySearchedHexes.some(searched => searched.q === target.q && searched.r === target.r) &&
-                    !friendlySearchedHexes.some(searched => searched.q === target.q && searched.r === target.r)
-                );
-                enemySearchedHexes = [...enemySearchedHexes, ...newSearches];
+                if (randomHex) {
+                    const targetHexes = getTargetHexes(randomHex, randomMode, randomRotation, gridHexes) || [];
+                    
+                    // FIX 1: Added 'target &&' to prevent crashes if the scan goes off the edge of the map!
+                    const newSearches = targetHexes.filter(target => 
+                        target && 
+                        !specialTiles.some(t => t.col === target.col && t.row === target.row) &&
+                        !enemySearchedHexes.some(searched => searched.q === target.q && searched.r === target.r) &&
+                        !friendlySearchedHexes.some(searched => searched.q === target.q && searched.r === target.r)
+                    );
+                    
+                    enemySearchedHexes = [...enemySearchedHexes, ...newSearches];
+
+                    // Did the AI hit a player ship? (Added 's &&' safety check here too)
+                    let hitFriendlyFleet = fleetSelections.find(f => newSearches.some(s => s && s.q === f.q && s.r === f.r));
+                    
+                    if (hitFriendlyFleet) {
+                        // AI Rolls 2 Dice (Assume AI hits on 3+ for standard difficulty)
+                        const roll1 = Math.floor(Math.random() * 6) + 1;
+                        const roll2 = Math.floor(Math.random() * 6) + 1;
+                        const aiRequiredRoll = 3; 
+                        const hits = (roll1 >= aiRequiredRoll ? 1 : 0) + (roll2 >= aiRequiredRoll ? 1 : 0);
+
+                        // Show the player what the AI rolled
+                        triggerOverlay(`ENEMY ENGAGED: ROLLED ${roll1} & ${roll2}. ${hits} HITS!`, hits > 0 ? "fail" : "success");
+
+                        // FIX 2: Update Player Health safely without mutating Svelte 5 state directly
+                        if (hits > 0) {
+                            fleetSelections = fleetSelections.map(f => {
+                                if (f.id === hitFriendlyFleet.id) {
+                                    // Return a pure clone of the ship with the new health
+                                    return { ...f, health: f.health - hits };
+                                }
+                                return f;
+                            }).filter(f => f.health > 0); // Destroy ship if HP hits 0
+                        }
+                        
+                        checkWinCondition();
+                    } else {
+                        triggerOverlay("ENEMY SCAN DETECTED NOTHING", "success");
+                    }
+                }
             }
             
             currentTurn += 1;
-            isEnemyTurn = false; // Turns the Status Bar back to BLUE
-        }, 3000); // 3-second suspense timer!
+            isEnemyTurn = false; 
+        }, 3000); 
     }
 
     function triggerOverlay(message, mode = 'fail'){
@@ -788,6 +826,24 @@
     </div>
     {/if}
 
+    {#if gameOver}
+    <div class="fullscreen-lock-overlay" style="background: rgba(10, 15, 30, 0.95); flex-direction: column;">
+        <div class="failure-content" style="text-align: center;">
+            <div class="glitch-text" style="color: {gameResult === 'VICTORY' ? '#4ade80' : '#e24a4a'}; animation: none;">
+                {gameResult}
+            </div>
+            <div class="sub-text" style="color: #abbbd1; margin-bottom: 40px; font-size: 1.5rem; letter-spacing: 5px;">
+                {gameResult === 'VICTORY' ? 'ALL ENEMY FLEETS DESTROYED' : 'ALL FRIENDLY FLEETS LOST'}
+            </div>
+            
+            <div style="display: flex; gap: 20px; justify-content: center;">
+                <button class="nav-btn" onclick={() => window.location.href = '/'}>MAIN MENU</button>
+                <button class="nav-btn" onclick={() => window.location.reload()}>PLAY AGAIN</button>
+            </div>
+        </div>
+    </div>
+    {/if}
+
  
 
     <!--RIGHT-->
@@ -931,6 +987,27 @@
     .overlay-success .sub-text {
         color: #4ade80;
         opacity: 1;
+    }
+
+    /* Navigation buttons on game over screen */
+    .nav-btn {
+        background: transparent;
+        border: 2px solid #3b82f6;
+        color: #3b82f6;
+        padding: 15px 30px;
+        font-family: 'Chakra Petch', sans-serif;
+        font-size: 1.2rem;
+        font-weight: bold;
+        cursor: pointer;
+        transition: all 0.2s;
+        clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
+    }
+
+    .nav-btn:hover {
+        background: rgba(59, 130, 246, 0.2);
+        color: white;
+        border-color: white;
+        transform: translateY(-2px);
     }
 
     @keyframes fadeInOut {
