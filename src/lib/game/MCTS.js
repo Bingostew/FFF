@@ -14,57 +14,66 @@ export default class MCTS {
     }
 
     search(realGameState) {
-        // 1. DETERMINIZE
-        // We do not start with the real state because it contains hidden info.
-        // We create a "Guessed State" where hidden enemies are placed randomly
-        // but validly (according to our Intel).
-        const determinizedState = realGameState.determinize();
+        // We will store the combined results of all simulated "universes" here
+        const aggregatedMoves = {};
 
-        // 2. ROOT CREATION
-        let root = new Node(determinizedState);
+        // 1. MULTI-UNIVERSE SETUP
+        // Instead of 1 universe with 1000 iterations, we do 20 universes with 50 iterations each.
+        // This forces the AI to pick new random spots for the player 20 different times.
+        const numUniverses = 20;
+        const iterationsPerUniverse = Math.floor(this.iterations / numUniverses);
 
-        // 3. MAIN LOOP
-        for (let i = 0; i < this.iterations; i++) {
-            // A. SELECT: Drill down to a node that needs expanding
-            let node = this.select(root);
+        // 2. MAIN LOOP: Cycle through the parallel universes
+        for (let u = 0; u < numUniverses; u++) {
             
-            // B. EXPAND: Add one new child node from that position
-            node = this.expand(node);
-            
-            // C. SIMULATE: Play random moves until the game ends
-            let winner = this.simulate(node);
-            
-            // D. BACKPROPAGATE: Update scores up the tree
-            this.backpropagate(node, winner);
+            // A. DETERMINIZE: Pick random spots for the hidden enemies for THIS universe
+            const determinizedState = realGameState.determinize();
+            let root = new Node(determinizedState);
+
+            // B. MCTS LOOP: Run the simulations for this specific layout
+            for (let i = 0; i < iterationsPerUniverse; i++) {
+                let node = this.select(root);
+                node = this.expand(node);
+                let winner = this.simulate(node);
+                this.backpropagate(node, winner);
+            }
+
+            // C. AGGREGATE: Collect the results from this universe
+            for (const child of root.children) {
+                if (!aggregatedMoves[child.move]) {
+                    aggregatedMoves[child.move] = { move: child.move, visits: 0, score: 0 };
+                }
+                aggregatedMoves[child.move].visits += child.visits;
+                aggregatedMoves[child.move].score += child.score;
+            }
         }
 
-        // 4. RESULT & DEBUG LOGGING
-        if (root.children.length === 0) return null;
+        // 3. RESULT EVALUATION
+        const sortedMoves = Object.values(aggregatedMoves).sort((a, b) => b.visits - a.visits);
 
-        // Sort all possible moves by how many times the AI investigated them (Visits)
-        const sortedChildren = [...root.children].sort((a, b) => b.visits - a.visits);
+        if (sortedMoves.length === 0) return null;
 
         // --- X-RAY DEBUG OUTPUT ---
-        console.log("\n🧠 --- AI INTERNAL THOUGHT PROCESS ---");
-        console.log(`Simulations Run: ${this.iterations}`);
-        console.log("Top 5 Evaluated Moves:");
+        console.log("\n🧠 --- AI INTERNAL THOUGHT PROCESS (MULTI-UNIVERSE) ---");
+        console.log(`Universes Simulated: ${numUniverses}`);
+        console.log(`Total Simulations Run: ${numUniverses * iterationsPerUniverse}`);
+        console.log("Top 5 Evaluated Moves Across All Universes:");
         
-        sortedChildren.slice(0, 5).forEach((child, index) => {
+        sortedMoves.slice(0, 5).forEach((moveData, index) => {
             // Calculate win probability for this specific move
-            const winRate = ((child.score / child.visits) * 100).toFixed(1);
+            const winRate = ((moveData.score / moveData.visits) * 100).toFixed(1);
             
             // Format the text so it lines up nicely in the terminal
-            const moveStr = child.move.padEnd(18);
-            const visitsStr = child.visits.toString().padStart(4);
-            const scoreStr = child.score.toFixed(1).padStart(6);
+            const moveStr = moveData.move.padEnd(18);
+            const visitsStr = moveData.visits.toString().padStart(4);
+            const scoreStr = moveData.score.toFixed(1).padStart(6);
             
             console.log(`  ${index + 1}. ${moveStr} | Visits: ${visitsStr} | Score: ${scoreStr} | Win Rate: ${winRate}%`);
         });
-        console.log("--------------------------------------\n");
+        console.log("-------------------------------------------------------\n");
 
-        // The move with the most visits is the most statistically robust choice
-        const bestChild = sortedChildren[0];
-        return bestChild.move;
+        // The move with the most visits across ALL universes is statistically the safest bet
+        return sortedMoves[0].move;
     }
 
     // --- PHASE 1: SELECTION ---

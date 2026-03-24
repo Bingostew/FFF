@@ -9,6 +9,8 @@
     import Sidebar from './Sidebar.svelte';
     import StatusBar from './StatusBar.svelte';
 
+    let lockedSelectionForSocket = [];
+
     // Grid Config
     const Tile = defineHex({ 
         dimensions: 50, 
@@ -96,7 +98,7 @@
         .filter(hex => !specialTiles.some(t => t.col === hex.col && t.row === hex.row))
     });
 
-    // --- SOCKET LISTENERS (Only runs if Multiplayer) ---
+    // --- SOCKET LISTENERS ---
     $effect(() => {
         if ($socket) {
             $socket.on('game_start', ({ activePlayer }) => {
@@ -120,25 +122,64 @@
                 }
             });
 
+            // 1. UPDATED ISR LISTENER (Now knows when the Bot scans you)
             const ISREvents = ['focus_result', 'directional_result', 'area_result'];
             const onISRResult = ({playerName, revealPos, positions}) => {
                 let posArray = Object.values(positions);
-                if(isMyTurn){
-                    const newSearches = posArray.map(p => grid.getHex(p)).filter(Boolean);
-                    friendlySearchedHexes = [...friendlySearchedHexes, ...newSearches];
-                } else {
-                    const scannedHexes = posArray.map(p => grid.getHex(p)).filter(Boolean);
+                const scannedHexes = posArray.map(p => gridHexes.find(h => h.q === p.q && h.r === p.r)).filter(Boolean);
+                
+                // If the player name is the Bot, draw the scan as red.
+                if (playerName === 'CPU Commander') {
                     enemySearchedHexes = [...enemySearchedHexes, ...scannedHexes];
+                    triggerOverlay(`ENEMY CONDUCTED SCAN`, "fail");
+                    if (revealPos) triggerOverlay(`WARNING: YOU WERE DETECTED!`, "fail");
+                } else {
+                    friendlySearchedHexes = [...friendlySearchedHexes, ...scannedHexes];
                 }
             };
-
             ISREvents.forEach(evt => $socket.on(evt, onISRResult));
+
+            // 2. NEW: FLEET MOVED LISTENER (Draws enemy ships moving)
+            $socket.on('fleet_moved', ({ playerId, fleetKey, newPosition }) => {
+                if (playerId !== $socket.id) {
+                    const targetHex = gridHexes.find(h => h.q === newPosition.q && h.r === newPosition.r);
+                    if (targetHex) {
+                        enemyFleets = enemyFleets.map(f => {
+                            // Map backend's 'alpha/beta' to frontend's 'B1/B2'
+                            const idMatch = fleetKey === 'alpha' ? 'B1' : 'B2';
+                            if (f.id === idMatch) {
+                                return { ...f, q: targetHex.q, r: targetHex.r };
+                            }
+                            return f;
+                        });
+                        triggerOverlay(`ENEMY MOVED`, "fail");
+                    }
+                }
+            });
+
+            // 3. NEW: STRIKE LISTENER (Calculates damage when enemy attacks)
+            $socket.on('strike_result', ({ attacker, hit, targetHex, fleetKey, hpRemaining, isDestroyed }) => {
+                if (attacker !== $socket.id) {
+                    if (hit) {
+                        triggerOverlay("WARNING: YOU HAVE BEEN HIT!", "fail");
+                        fleetSelections = fleetSelections.map((f, i) => {
+                            const isTarget = (fleetKey === 'alpha' && i === 0) || (fleetKey === 'beta' && i === 1);
+                            if (isTarget) return { ...f, health: hpRemaining };
+                            return f;
+                        });
+                    } else {
+                        triggerOverlay("ENEMY STRIKE MISSED", "success");
+                    }
+                }
+            });
 
             return () => {
                 $socket.off("room_update");
                 $socket.off('game_start');
                 $socket.off('turn_change');
                 $socket.off('die_result');
+                $socket.off('fleet_moved');
+                $socket.off('strike_result');
                 ISREvents.forEach(evt => $socket.off(evt));
             };
         }
@@ -360,12 +401,8 @@
 
     function handlePlayerSearch() {
         if (isMultiplayer) {
-            const rawPos = selectedGroup;
-            const formattedPositions = {};
-            rawPos.forEach((h, index) => { 
-                formattedPositions[index] = { q: h.q, r: h.r }; 
-            });
-
+            // FIX: Save the coordinates before the Sidebar wipes them!
+            lockedSelectionForSocket = [...selectedGroup]; 
             $socket.emit('die_roll', { gameId: $gameId });
             return false; 
         } else {
@@ -379,20 +416,29 @@
                 targetEnemy = detected;
                 sourceFleet = null;
                 selectedGroup = []; 
+                targetingMode = 'focus'; // <-- NEW: Resets your cursor
                 return true; 
             }
             selectedGroup = []; 
+            targetingMode = 'focus'; // <-- NEW: Resets your cursor
             return false;
         }
     }
 
     function handleTurnEnd() {
-
         targetEnemy = null;
         sourceFleet = null;
         selectedGroup = [];
+        targetingMode = 'focus'; // Resets your cursor
 
-        if (!isMultiplayer) executeEnemyTurn(); 
+        if (!isMultiplayer) {
+            // FIX: Wait 1.5 seconds before triggering the AI's turn.
+            // This gives you time to click "Close" on the Dice overlay 
+            // before the CSS locks your mouse out!
+            setTimeout(() => {
+                executeEnemyTurn();
+            }, 1500); 
+        } 
     }
 
     function resolveAttack(roll1, roll2) {
@@ -433,55 +479,97 @@
 
 
     // --- ARTIFICIAL INTELLIGENCE ---
-
-    function triggerEnemyAI() {
-        if (gridHexes.length === 0) return;
-
-        const modes = ['focus', 'directional', 'area'];
-        const randomMode = modes[Math.floor(Math.random() * modes.length)];
-        const randomRotation = Math.floor(Math.random() * 6);
-        const randomHex = gridHexes[Math.floor(Math.random() * gridHexes.length)];
-        
-        const targetHexes = getTargetHexes(randomHex, randomMode, randomRotation, gridHexes);
-        
-        const newSearches = targetHexes.filter(target => 
-            !enemySearchedHexes.some(searched => searched.q === target.q && searched.r === target.r) 
-        );
-        
-        enemySearchedHexes = [...enemySearchedHexes, ...newSearches];
-    }
-
-    function executeEnemyTurn() {
-        isEnemyTurn = true; // Tells the Status Bar to turn RED
-
-        setTimeout(() => {
-            if (gridHexes.length > 0) {
-                const modes = ['focus', 'directional', 'area'];
-                const randomMode = modes[Math.floor(Math.random() * modes.length)];
-                const randomRotation = Math.floor(Math.random() * 6);
-                const randomHex = gridHexes[Math.floor(Math.random() * gridHexes.length)];
-                
-                const targetHexes = getTargetHexes(randomHex, randomMode, randomRotation, gridHexes);
-                
-                // Filters out hexes already attacked by the AI OR the Player
-                const newSearches = targetHexes.filter(target => 
-                    !enemySearchedHexes.some(searched => searched.q === target.q && searched.r === target.r) &&
-                    !friendlySearchedHexes.some(searched => searched.q === target.q && searched.r === target.r)
-                );
-                enemySearchedHexes = [...enemySearchedHexes, ...newSearches];
-            }
-            
-            currentTurn += 1;
-            isEnemyTurn = false; // Turns the Status Bar back to BLUE
-        }, 3000); // 3-second suspense timer!
-    }
-
     function triggerOverlay(message, mode = 'fail'){
         overlay = {show: true, text:message, mode};
 
         setTimeout(() => {
             overlay.show = false;
         }, 2000);
+    }
+
+    function executeEnemyTurn() {
+        // ALERT 1: Did Svelte successfully hand the turn to the AI?
+        console.log("🔥 DEBUG: executeEnemyTurn triggered!");
+
+        isEnemyTurn = true; 
+        const aiGameState = syncStateToAI();
+
+        setTimeout(() => {
+            try {
+                // ALERT 2: Is the AI starting its math?
+                console.log("🔥 DEBUG: Starting MCTS search...");
+                
+                const mcts = new MCTS(300); 
+                const bestMove = mcts.search(aiGameState);
+                
+                // ALERT 3: Did the AI finish its math?
+                console.log("🔥 DEBUG: MCTS Finished. Best Move ->", bestMove);
+
+                if (!bestMove) {
+                    triggerOverlay("AI HAS NO VALID MOVES", "success");
+                    endEnemyTurn();
+                    return;
+                }
+
+                const parts = bestMove.split('_');
+                const command = parts[0]; 
+
+                if (command === "MOVE") {
+                    const fleetId = parts[1];
+                    const targetOffset = HexUtils.parsePos(parts[2]); 
+                    const targetHex = gridHexes.find(h => h.col === targetOffset.col && h.row === targetOffset.row);
+
+                    enemyFleets = enemyFleets.map(f => {
+                        if (f.id === fleetId) { 
+                            return { ...f, q: targetHex.q, r: targetHex.r, fuel: f.fuel - 1 };
+                        }
+                        return f;
+                    });
+                    triggerOverlay(`ENEMY MOVED`, "fail");
+                } 
+                else if (command === "ISR") {
+                    const scanType = parts[1]; 
+                    let scannedHexes = parts.slice(2).map(posStr => {
+                        const offset = HexUtils.parsePos(posStr);
+                        if (!offset) return null; 
+                        return gridHexes.find(h => h.col === offset.col && h.row === offset.row);
+                    }).filter(Boolean); 
+
+                    enemySearchedHexes = [...enemySearchedHexes, ...scannedHexes];
+                    
+                    const detectedFriendly = scannedHexes.find(hex => 
+                        fleetSelections.some(f => f.q === hex.q && f.r === hex.r)
+                    );
+
+                    if (detectedFriendly) {
+                        isRevealed = true; 
+                        triggerOverlay(`WARNING: ${scanType} SCAN DETECTED YOU!`, "fail");
+                        
+                        fleetSelections = fleetSelections.map(f => {
+                            if (f.q === detectedFriendly.q && f.r === detectedFriendly.r) {
+                                return { ...f, health: f.health - 1 };
+                            }
+                            return f;
+                        });
+                    } else {
+                        triggerOverlay(`ENEMY CONDUCTED ${scanType} SCAN`, "fail");
+                    }
+                }
+
+                endEnemyTurn();
+
+            } catch (error) {
+                console.error("🔥 CRITICAL AI FAILURE:", error);
+                alert("AI Crashed! The error is: " + error.message);
+                endEnemyTurn(); 
+            }
+
+        }, 300); 
+    }
+
+    function endTurnRoutine() {
+        currentTurn += 1;
+        isEnemyTurn = false; // Turns Status Bar back to BLUE
     }
 
 </script>
