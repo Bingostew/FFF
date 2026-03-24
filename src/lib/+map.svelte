@@ -41,6 +41,8 @@
     let isRevealed = $state(false);
     let enemyFleets = $state([ 
         { q: 4, r: -1, name: "IJN Yamato", health: 2 }, { q: 2, r: 1, name: "IJN Musashi", health: 2 }]);
+    let gameOver = $state(false);
+    let gameResult = $state("");
     let overlay = $state({ show : false, text:'', mode: 'fail'});
 
     let sourceFleet = $state(null);
@@ -82,6 +84,17 @@
         { col: 4, row: 3, img: 'peak.jpg' },
         { col: 5, row: 2, img: 'mountain.jpg' }
     ];
+
+    //Checks the state of the game, presents Victory or Defeat screen. 
+    function checkWinCondition() {
+        if (enemyFleets.length === 0) {
+            gameOver = true;
+            gameResult = "VICTORY";
+        } else if (fleetSelections.length === 0) {
+            gameOver = true;
+            gameResult = "DEFEAT";
+        }
+    }
 
     // Gets highlighted hexes & automatically filters out land!
     let highlightedHexes = $derived.by(() => {
@@ -352,6 +365,20 @@
                 $socket.once('fleets_placed_confirmation', () => { $socket.emit('ready_check', {gameId: $gameId}); });
             } else {
                 isConfirmed = true;
+
+                // Randomize Enemy Fleets
+                const waterHexes = gridHexes.filter(h => !specialTiles.some(t => t.col === h.col && t.row === h.row));
+                
+                const r1 = waterHexes[Math.floor(Math.random() * waterHexes.length)];
+                let r2 = waterHexes[Math.floor(Math.random() * waterHexes.length)];
+                while (r1.q === r2.q && r1.r === r2.r) {
+                    r2 = waterHexes[Math.floor(Math.random() * waterHexes.length)];
+                }
+
+                enemyFleets = [ 
+                    { q: r1.q, r: r1.r, name: "IJN Yamato", health: 2 }, 
+                    { q: r2.q, r: r2.r, name: "IJN Musashi", health: 2 }
+                ];
             }
             selectedGroup = [];
             targetingMode = 'focus';
@@ -399,7 +426,13 @@
         if (!sourceFleet || !targetEnemy) return;
 
         if (isMultiplayer) {
-            $socket.emit('attack', { gameId: $gameId, source: sourceFleet, target: targetEnemy });
+            $socket.emit('attack', { 
+                gameId: $gameId, 
+                source: sourceFleet, 
+                target: targetEnemy,
+                roll1: roll1,
+                roll2: roll2
+            });
             targetEnemy = null;
         } else {
             const hit1 = roll1 >= requiredRoll;
@@ -407,11 +440,11 @@
             const totalHits = (hit1 ? 1 : 0) + (hit2 ? 1 : 0);
             
             if (totalHits === 2) {
-                triggerOverlay("CRITICAL STRIKE: 2 HITS", "success");
+                triggerOverlay("TARGET DESTROYED: 2 HITS", "success");
             } else if (totalHits === 1) {
                 triggerOverlay("TARGET HIT", "success");
             } else {
-                triggerOverlay("STRIKE FAILED: 0 HITS", "fail");
+                triggerOverlay("TARGET MISSED: 0 HITS", "fail");
             }
             
             const enemyIndex = enemyFleets.findIndex(e => e.q === targetEnemy.q && e.r === targetEnemy.r);
@@ -420,6 +453,7 @@
                 if(enemyFleets[enemyIndex].health <= 0){
                     enemyFleets = enemyFleets.filter((_, i) => i !== enemyIndex);
                 }
+                checkWinCondition(); //Check if all enemy vessels are destroyed. 
             }
 
             setTimeout(() => {
@@ -484,10 +518,22 @@
         }, 2000);
     }
 
+    // --- DEV TOOLS ---
+    function handleDevShortcut(e) {
+        // Press Ctrl + Shift + E to toggle the enemy reveal!
+        if (e.ctrlKey && e.shiftKey && (e.key === 'e' || e.key === 'E')) {
+            isRevealed = !isRevealed;
+            showWarning(mousePos.x || window.innerWidth/2, mousePos.y || window.innerHeight/2, 
+                isRevealed ? "DEV MODE: ENEMY REVEALED" : "DEV MODE: HIDDEN");
+        }
+    }
+
 </script>
 
 <!--MAP HTML-->
+<svelte:window onkeydown={handleDevShortcut} />
 <div class="layout-container" class:not-my-turn={isConfirmed && !isMyTurn}>
+    
     <!--LEFT-->
     <Sidebar 
         bind:targetingMode 
@@ -566,7 +612,7 @@
             <g transform="translate(30, 40)"> 
                 {#each grid as hex}
                     <!-- CHEAT MODE: SHOWS ENEMEY LOCATION -->
-                    {@const isEnemyFleet = enemyFleets.some(e => e.q === hex.q && e.r === hex.r)} /* ADD THIS CONSTANT */
+                    {@const isEnemyFleet = enemyFleets.some(e => e.q === hex.q && e.r === hex.r)}
 
                     {@const config = specialTiles.find(t => t.col === hex.col && t.row === hex.row)}
                     {@const isFleet = fleetSelections.some(f => f.q === hex.q && f.r === hex.r)}
@@ -592,7 +638,7 @@
                             stroke-width="0.5"
                         />
                         
-                        {#if isEnemyFleet}
+                        {#if isEnemyFleet && isRevealed}
                             <polygon
                                 points={pointsStr}
                                 fill="#000000" 
@@ -615,19 +661,6 @@
                             >
                                 ENEMY
                             </text>
-                        {/if}
-
-                        {#if isFleet && isRevealed}
-                            <polygon
-                                points={pointsStr}
-                                fill="rgba(226, 74, 74, 0.3)"
-                                stroke="#e24a4a"
-                                stroke-width="4"
-                                stroke-dasharray="8,4"
-                                pointer-events="none"
-                            >
-                                <animate attributeName="opacity" values="0.3;1;0.3" dur="1.5s" repeatCount="indefinite" />
-                            </polygon>
                         {/if}
 
                         <polygon
