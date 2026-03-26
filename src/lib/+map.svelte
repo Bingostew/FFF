@@ -2,12 +2,14 @@
 <!--SCRIPTS FOR MAP-->
 <script>
     // @ts-nocheck
+    import { onDestroy } from 'svelte';
     import { defineHex, Grid, rectangle, Orientation, line } from 'honeycomb-grid';
     import { isHovering } from '$lib/store';
     import { socket, gameId, activePlayerId } from '$lib/gameStore';   
     import { getTargetHexes, isGroupConnected, getS } from './gridUtils.js';
     import Sidebar from './Sidebar.svelte';
     import StatusBar from './StatusBar.svelte';
+    import { goto } from '$app/navigation';
 
     // Grid Config
     const Tile = defineHex({ 
@@ -250,8 +252,9 @@
                     if (isMultiplayer) {
                         $socket.emit('move_fleet', { gameId: $gameId, fleet: selectedFleetToMove, target: hex });
                     } else {
-                        executeEnemyTurn(); 
-                        setTimeout(() => executeEnemyTurn(), 2000);
+                        triggerOverlay("FLEET REPOSITIONED", "success");
+                        // Wait 2 seconds for the overlay to clear, THEN start the AI
+                        setTimeout(() => executeEnemyTurn(), 2000); 
                     }
                 } else {
                     showWarning(event.clientX, event.clientY, `${selectedFleetToMove.name} is out of fuel!`);
@@ -265,7 +268,8 @@
 
         if (isConfirmed) {
             const friendlyFleet = fleetSelections.find(f => f.q === hex.q && f.r === hex.r);
-            const isDetectedEnemy = enemySearchedHexes.some(e => e.q === hex.q && e.r === hex.r);
+            const isDetectedEnemy = enemyFleets.some(e => e.q === hex.q && e.r === hex.r) && 
+                                    friendlySearchedHexes.some(s => s.q === hex.q && s.r === hex.r);
 
             // 1. Select Source (Your Fleet)
             if (friendlyFleet) {
@@ -404,8 +408,6 @@
             friendlySearchedHexes = [...friendlySearchedHexes, ...newSearches];
 
             if(detected){
-                targetEnemy = detected;
-                sourceFleet = null;
                 selectedGroup = []; 
                 return true; 
             }
@@ -420,7 +422,11 @@
         sourceFleet = null;
         selectedGroup = [];
 
-        if (!isMultiplayer) executeEnemyTurn(); 
+        if (!isMultiplayer){
+            turnTimeout = setTimeout(() => { // <-- Assign to turnTimeout
+                executeEnemyTurn(); 
+            }, 1500);
+        } 
     }
 
     function resolveAttack(roll1, roll2) {
@@ -438,14 +444,13 @@
         } else {
             const hit1 = roll1 >= requiredRoll;
             const hit2 = roll2 >= requiredRoll;
-            const totalHits = (hit1 ? 1 : 0) + (hit2 ? 1 : 0);
+            const totalHits = (hit1 || hit2) ? 1 : 0;
             
-            if (totalHits === 2) {
-                triggerOverlay("TARGET DESTROYED: 2 HITS", "success");
-            } else if (totalHits === 1) {
-                triggerOverlay("TARGET HIT", "success");
+            let overlayMsg = "";
+            if (totalHits > 0) {
+                overlayMsg = "TARGET HIT: 1 DAMAGE";
             } else {
-                triggerOverlay("TARGET MISSED: 0 HITS", "fail");
+                overlayMsg = "TARGET MISSED: 0 DAMAGE";
             }
             
             const enemyIndex = enemyFleets.findIndex(e => e.q === targetEnemy.q && e.r === targetEnemy.r);
@@ -455,6 +460,16 @@
                     enemyFleets = enemyFleets.filter((_, i) => i !== enemyIndex);
                 }
                 checkWinCondition(); //Check if all enemy vessels are destroyed. 
+            }
+
+            // Counter detection roll. 
+            const counterRoll = Math.floor(Math.random() * 6) + 1;
+            if (counterRoll >= 3) {
+                // The enemy successfully traced your attack! Add your ship to their radar.
+                enemySearchedHexes = [...enemySearchedHexes, { q: sourceFleet.q, r: sourceFleet.r }];
+                triggerOverlay(`${overlayMsg} | WARNING: LOCATION COMPROMISED!`, "fail");
+            } else {
+                triggerOverlay(overlayMsg, totalHits > 0 ? "success" : "fail");
             }
 
             setTimeout(() => {
@@ -490,7 +505,7 @@
         if (gameOver) return; // Stop the AI if the game is over!
         isEnemyTurn = true; 
 
-        setTimeout(() => {
+        aiTimeout = setTimeout(() => {
             if (gridHexes.length > 0 && !gameOver) {
                 const modes = ['focus', 'directional', 'area'];
                 const randomMode = modes[Math.floor(Math.random() * modes.length)];
@@ -521,20 +536,32 @@
                         const roll1 = Math.floor(Math.random() * 6) + 1;
                         const roll2 = Math.floor(Math.random() * 6) + 1;
                         const aiRequiredRoll = 3; 
-                        const hits = (roll1 >= aiRequiredRoll ? 1 : 0) + (roll2 >= aiRequiredRoll ? 1 : 0);
-
-                        // Show the player what the AI rolled
-                        triggerOverlay(`ENEMY ENGAGED: ROLLED ${roll1} & ${roll2}. ${hits} HITS!`, hits > 0 ? "fail" : "success");
-
-                        // FIX 2: Update Player Health safely without mutating Svelte 5 state directly
+                        const hits = (roll1 >= aiRequiredRoll || roll2 >= aiRequiredRoll) ? 1 : 0;
+                        
+                        // Update Player Health
                         if (hits > 0) {
                             fleetSelections = fleetSelections.map(f => {
                                 if (f.id === hitFriendlyFleet.id) {
-                                    // Return a pure clone of the ship with the new health
                                     return { ...f, health: f.health - hits };
                                 }
                                 return f;
-                            }).filter(f => f.health > 0); // Destroy ship if HP hits 0
+                            }).filter(f => f.health > 0); 
+                        }
+
+                        // --- NEW: PLAYER COUNTER-DETECTION ROLL ---
+                        const counterRoll = Math.floor(Math.random() * 6) + 1;
+                        
+                        // Only trace if we rolled 3+ AND the enemy actually has ships left to trace!
+                        if (counterRoll >= 3 && enemyFleets.length > 0) {
+                            // Randomly pick which enemy ship fired the shot
+                            const attacker = enemyFleets[Math.floor(Math.random() * enemyFleets.length)];
+                            
+                            // Add it to friendlySearchedHexes so it pops up on your radar!
+                            friendlySearchedHexes = [...friendlySearchedHexes, { q: attacker.q, r: attacker.r }];
+                            
+                            triggerOverlay(`ENEMY ROLLED ${roll1} & ${roll2}. WE TRACED THEIR SIGNAL!`, hits > 0 ? "fail" : "success");
+                        } else {
+                            triggerOverlay(`ENEMY ROLLED ${roll1} & ${roll2}. ${hits} HITS!`, hits > 0 ? "fail" : "success");
                         }
                         
                         checkWinCondition();
@@ -549,7 +576,9 @@
         }, 3000); 
     }
 
-    let overlayTimeout;
+    let overlayTimeout; // [cite: 853]
+    let aiTimeout;
+    let turnTimeout;
 
     function triggerOverlay(message, mode = 'fail'){
         clearTimeout(overlayTimeout);
@@ -569,6 +598,13 @@
                 isRevealed ? "DEV MODE: ENEMY REVEALED" : "DEV MODE: HIDDEN");
         }
     }
+
+    onDestroy(() => {
+        clearTimeout(overlayTimeout);
+        clearTimeout(warningTimeout);
+        clearTimeout(aiTimeout);
+        clearTimeout(turnTimeout);
+    });
 
 </script>
 
@@ -680,7 +716,7 @@
                             stroke-width="0.5"
                         />
                         
-                        {#if isEnemyFleet && isRevealed}
+                        {#if isEnemyFleet && (isRevealed || isFriendlySearched)}
                             <polygon
                                 points={pointsStr}
                                 fill="#000000" 
@@ -842,7 +878,7 @@
             <div style="display: flex; gap: 20px; justify-content: center;">
                 <button 
                     class="nav-btn" 
-                    onclick={() => window.location.href = '/'}
+                    onclick={() => { $isHovering = false; goto('/');}}
                     onmouseenter={() => $isHovering = true} 
                     onmouseleave={() => $isHovering = false}
                 >
@@ -850,7 +886,7 @@
                 </button>
                 <button 
                     class="nav-btn" 
-                    onclick={() => window.location.reload()}
+                    onclick={() => { $isHovering = false; window.location.reload(); }}
                     onmouseenter={() => $isHovering = true} 
                     onmouseleave={() => $isHovering = false}
                 >
@@ -980,7 +1016,7 @@
         background: rgba(15, 20, 30, 0.7);
         backdrop-filter: blur(4px);
         display: flex; justify-content: center; align-items: center;
-        z-index: 9999;
+        z-index: 9998;
         pointer-events: all;
         animation: fadeInOut 2s forwards;
         cursor: none; 

@@ -7,17 +7,20 @@
     const coords = new Spring({ x: 0, y: 0 }, { stiffness: 0.1, damping: 0.25 });
     const size = new Spring(4, { stiffness: 0.2, damping: 0.4 });
 
-    // Update cursor position
-    /**
-     * @param {{ clientX: any; clientY: any; }} e
-     */
+    // @ts-ignore
     function handleMove(e) {
         coords.target = { x: e.clientX, y: e.clientY };
     }
 
-    // React to the shared 'isHovering' store
     $effect(() => {
         size.target = $isHovering ? 8 : 4;
+    });
+
+    // --- CRITICAL FIX: SAFE PATH TRACKER ---
+    // This prevents the mouse-move from spamming the SvelteKit router!
+    let currentPath = $state('/');
+    $effect(() => {
+        currentPath = $page.url.pathname;
     });
 </script>
 
@@ -36,7 +39,7 @@
 
 <div class="global-background"></div>
 
-{#if $page.url.pathname !== '/'}
+{#if currentPath !== '/'}
     <a 
         href="/" 
         class="return-btn"

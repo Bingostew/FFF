@@ -46,9 +46,10 @@
         if(!needsRoll && !isAttack){
             const detected = onSearch(); 
             if(detected){
+                onScanResult("TARGET FOUND", 'success');
                 return;
             }
-            onTurnEnd();
+            onScanResult("AREA CLEAR: NO TARGETS FOUND", 'success');
             setTimeout(() => onTurnEnd(), 2000);
             return;
         }
@@ -98,20 +99,17 @@
         else{
             const threshold = targetingMode === 'directional' ? 4 : 3;
             const isRollSuccess = result1 <= threshold;
-            const hasDetectedEnemy = onSearch(); 
 
             if (!isRollSuccess) {
-                onScanResult(`SCAN FAILED: ROLLED ${result1}`);
-                onTurnEnd();
+                onScanResult(`SCAN FAILED: ROLLED ${result1}`, 'fail');
                 setTimeout(() => onTurnEnd(), 2000);
             } else {
+                const hasDetectedEnemy = onSearch(); 
                 if(hasDetectedEnemy){
                     onScanResult("TARGET FOUND", 'success');
-                    setTimeout(() => onTurnEnd(), 2000);
                 }
                 else {
                     onScanResult("AREA CLEAR: NO TARGETS FOUND", 'success');
-                    onTurnEnd(); 
                     setTimeout(() => onTurnEnd(), 2000);
                 }
             }
