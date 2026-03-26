@@ -37,16 +37,12 @@
     let enemySearchedHexes = $state([]);    
     let isRevealed = $state(false);
     
-<<<<<<< HEAD
     // Added AI-required properties (id, fuel) that were missing in the UI branch
     let enemyFleets = $state([ 
         { id: 'B1', q: 4, r: -1, name: "IJN Yamato", health: 2, fuel: 3 }, 
         { id: 'B2', q: 2, r: 1, name: "IJN Musashi", health: 2, fuel: 3 }
     ]);
     
-=======
-    let enemyFleets = $state([]);
->>>>>>> 3c37d7f2c6ebff289d5de02f1fbfc81abe9f3894
     let gameOver = $state(false);
     let gameResult = $state("");
     let overlay = $state({ show : false, text:'', mode: 'fail'});
@@ -55,15 +51,11 @@
     let targetEnemy = $state(null);
     let attackRange = $derived.by(() => {
         if (!sourceFleet || !targetEnemy) return null;
-<<<<<<< HEAD
         
         let dist = (Math.abs(sourceFleet.q - targetEnemy.q) + 
                     Math.abs(sourceFleet.r - targetEnemy.r) + 
                     Math.abs((-sourceFleet.q - sourceFleet.r) - (-targetEnemy.q - targetEnemy.r))) / 2;
 
-=======
-        let dist = (Math.abs(sourceFleet.q - targetEnemy.q) + Math.abs(sourceFleet.r - targetEnemy.r) + Math.abs((-sourceFleet.q - sourceFleet.r) - (-targetEnemy.q - targetEnemy.r))) / 2;
->>>>>>> 3c37d7f2c6ebff289d5de02f1fbfc81abe9f3894
         const lineOfSight = grid.traverse(line({ start: sourceFleet, stop: targetEnemy }));
         let landPenalty = 0;
         const pathArray = [...lineOfSight].slice(1, -1);
@@ -83,10 +75,6 @@
         { col: 4, row: 3, img: 'peak.jpg' }, { col: 5, row: 2, img: 'mountain.jpg' }
     ];
 
-<<<<<<< HEAD
-    //Checks the state of the game, presents Victory or Defeat screen. 
-=======
->>>>>>> 3c37d7f2c6ebff289d5de02f1fbfc81abe9f3894
     function checkWinCondition() {
         if (enemyFleets.length === 0) {
             gameOver = true;
@@ -97,10 +85,6 @@
         }
     }
 
-<<<<<<< HEAD
-    // Gets highlighted hexes & automatically filters out land!
-=======
->>>>>>> 3c37d7f2c6ebff289d5de02f1fbfc81abe9f3894
     let highlightedHexes = $derived.by(() => {
         if (!hoveredHex || targetingMode === 'move') return [];
         if (targetEnemy) {
@@ -111,11 +95,7 @@
         .filter(hex => !specialTiles.some(t => t.col === hex.col && t.row === hex.row))
     });
 
-<<<<<<< HEAD
-    // --- SOCKET LISTENERS (Only runs if Multiplayer) ---
-=======
     // --- SOCKET LISTENERS (ONLY FOR MULTIPLAYER) ---
->>>>>>> 3c37d7f2c6ebff289d5de02f1fbfc81abe9f3894
     $effect(() => {
         if ($socket) {
             $socket.on('game_start', ({ activePlayer }) => {
@@ -134,18 +114,7 @@
                     selectedGroup = [];
                 }
             });
-<<<<<<< HEAD
 
-            const ISREvents = ['focus_result', 'directional_result', 'area_result'];
-            const onISRResult = ({playerName, revealPos, positions}) => {
-                let posArray = Object.values(positions);
-                if(isMyTurn){
-                    const newSearches = posArray.map(p => grid.getHex(p)).filter(Boolean);
-                    friendlySearchedHexes = [...friendlySearchedHexes, ...newSearches];
-                } else {
-                    const scannedHexes = posArray.map(p => grid.getHex(p)).filter(Boolean);
-                    enemySearchedHexes = [...enemySearchedHexes, ...scannedHexes];
-=======
             const ISREvents = ['focus_result', 'directional_result', 'area_result'];
             const onISRResult = ({playerName, revealPos, positions}) => {
                 let posArray = Object.values(positions);
@@ -158,19 +127,11 @@
                     enemySearchedHexes = [...enemySearchedHexes, ...scannedHexes];
                     triggerOverlay(`ENEMY CONDUCTED SCAN`, "fail");
                     if (revealPos) { isRevealed = true; triggerOverlay(`WARNING: YOU WERE DETECTED!`, "fail"); }
->>>>>>> 3c37d7f2c6ebff289d5de02f1fbfc81abe9f3894
                 }
             };
 
             ISREvents.forEach(evt => $socket.on(evt, onISRResult));
-<<<<<<< HEAD
 
-            return () => {
-                $socket.off("room_update");
-                $socket.off('game_start');
-                $socket.off('turn_change');
-                $socket.off('die_result');
-=======
             $socket.on('fleet_moved', ({ playerId, fleetKey, newPosition }) => {
                 if (playerId !== $socket.id) {
                     const targetHex = gridHexes.find(h => h.q === newPosition.q && h.r === newPosition.r);
@@ -184,6 +145,7 @@
                     }
                 }
             });
+
             $socket.on('strike_result', ({ attacker, hit, targetHex, fleetKey, hpRemaining, isDestroyed }) => {
                 if (attacker !== $socket.id) {
                     if (hit) {
@@ -196,10 +158,10 @@
                     } else { triggerOverlay("ENEMY STRIKE MISSED", "success"); }
                 }
             });
+
             return () => {
                 $socket.off("room_update"); $socket.off('game_start'); $socket.off('turn_change');
                 $socket.off('die_result'); $socket.off('fleet_moved'); $socket.off('strike_result');
->>>>>>> 3c37d7f2c6ebff289d5de02f1fbfc81abe9f3894
                 ISREvents.forEach(evt => $socket.off(evt));
             };
         }
@@ -246,18 +208,11 @@
                 if (selectedFleetToMove.fuel > 0) {
                     fleetSelections = fleetSelections.map(f => (f.q === selectedFleetToMove.q && f.r === selectedFleetToMove.r) ? { ...f, q: hex.q, r: hex.r, fuel: f.fuel - 1 } : f);
                     if (isMultiplayer) {
-<<<<<<< HEAD
-                        const fleetKey = selectedFleetToMove.id === 1 ? 'alpha' : 'beta';
-                        $socket.emit('move_fleet', { gameId: $gameId, fleetKey: fleetKey, newPosition: {q: hex.q, r: hex.r} });
-=======
                         $socket.emit('move_fleet', { gameId: $gameId, fleet: selectedFleetToMove, target: hex });
                     } else {
-                        executeEnemyTurn(); 
-                        setTimeout(() => executeEnemyTurn(), 2000);
->>>>>>> ui
+                        selectedFleetToMove = null; targetingMode = 'focus'; 
+                        handleTurnEnd(); // Switch turn to AI after moving
                     }
-                    selectedFleetToMove = null; targetingMode = 'focus'; 
-                    if (!isMultiplayer) handleTurnEnd(); // Switch turn to AI after moving
                 } else { showWarning(event.clientX, event.clientY, `${selectedFleetToMove.name} is out of fuel!`); }
             } else { showWarning(event.clientX, event.clientY, "Select a fleet to jump first!"); }
             return;
@@ -318,25 +273,12 @@
                 $socket.emit('place_fleets', { gameId: $gameId, fleetPositions });
                 $socket.once('fleets_placed_confirmation', () => { $socket.emit('ready_check', {gameId: $gameId}); });
             } else {
-<<<<<<< HEAD
-                isConfirmed = true;
-
-                // Randomize Enemy Fleets (Added AI properties)
-                const waterHexes = gridHexes.filter(h => !specialTiles.some(t => t.col === h.col && t.row === h.row));
-                
-                const r1 = waterHexes[Math.floor(Math.random() * waterHexes.length)];
-                let r2 = waterHexes[Math.floor(Math.random() * waterHexes.length)];
-                while (r1.q === r2.q && r1.r === r2.r) {
-                    r2 = waterHexes[Math.floor(Math.random() * waterHexes.length)];
-                }
-=======
                 isConfirmed = true; 
                 // Randomize Local AI Fleets
                 const waterHexes = gridHexes.filter(h => !specialTiles.some(t => t.col === h.col && t.row === h.row));
                 const r1 = waterHexes[Math.floor(Math.random() * waterHexes.length)];
                 let r2 = waterHexes[Math.floor(Math.random() * waterHexes.length)];
                 while (r1.q === r2.q && r1.r === r2.r) { r2 = waterHexes[Math.floor(Math.random() * waterHexes.length)]; }
->>>>>>> 3c37d7f2c6ebff289d5de02f1fbfc81abe9f3894
 
                 enemyFleets = [ 
                     { id: 'B1', q: r1.q, r: r1.r, name: "IJN Yamato", health: 2, fuel: 3 }, 
@@ -350,16 +292,7 @@
 
     function handlePlayerSearch() {
         if (isMultiplayer) {
-<<<<<<< HEAD
-            const rawPos = selectedGroup;
-            const formattedPositions = {};
-            rawPos.forEach((h, index) => { 
-                formattedPositions[index] = { q: h.q, r: h.r }; 
-            });
-
-=======
             lockedSelectionForSocket = [...selectedGroup];
->>>>>>> 3c37d7f2c6ebff289d5de02f1fbfc81abe9f3894
             $socket.emit('die_roll', { gameId: $gameId });
             return false; 
         } else {
@@ -372,30 +305,14 @@
             if(detected){
                 targetEnemy = detected;
                 sourceFleet = null;
-<<<<<<< HEAD
-                selectedGroup = []; 
-                return true; 
-            }
-            selectedGroup = []; 
-            return false;
-=======
                 selectedGroup = []; targetingMode = 'focus'; return true; 
             }
             selectedGroup = []; targetingMode = 'focus'; return false;
->>>>>>> 3c37d7f2c6ebff289d5de02f1fbfc81abe9f3894
         }
     }
 
     function handleTurnEnd() {
-<<<<<<< HEAD
-
-        targetEnemy = null;
-        sourceFleet = null;
-        selectedGroup = [];
-
-=======
         targetEnemy = null; sourceFleet = null; selectedGroup = []; targetingMode = 'focus';
->>>>>>> 3c37d7f2c6ebff289d5de02f1fbfc81abe9f3894
         if (!isMultiplayer) setTimeout(() => { executeEnemyTurn(); }, 1500); 
     }
 
@@ -403,7 +320,6 @@
         if (!sourceFleet || !targetEnemy) return;
 
         if (isMultiplayer) {
-<<<<<<< HEAD
             $socket.emit('attack', { 
                 gameId: $gameId, 
                 source: sourceFleet, 
@@ -412,148 +328,27 @@
                 roll2: roll2
             });
             targetEnemy = null;
-=======
-            $socket.emit('execute_strike', { gameId: $gameId, targetHex: targetEnemy, dieResult: roll1 });
->>>>>>> 3c37d7f2c6ebff289d5de02f1fbfc81abe9f3894
         } else {
             // Local Attack Logic
             const hit1 = roll1 >= requiredRoll; const hit2 = roll2 >= requiredRoll;
             const totalHits = (hit1 ? 1 : 0) + (hit2 ? 1 : 0);
             
-<<<<<<< HEAD
-            if (totalHits === 2) {
-                triggerOverlay("TARGET DESTROYED: 2 HITS", "success");
-            } else if (totalHits === 1) {
-                triggerOverlay("TARGET HIT", "success");
-            } else {
-                triggerOverlay("TARGET MISSED: 0 HITS", "fail");
-            }
-=======
             if (totalHits === 2) triggerOverlay("TARGET DESTROYED: 2 HITS", "success");
             else if (totalHits === 1) triggerOverlay("TARGET HIT", "success");
             else triggerOverlay("TARGET MISSED: 0 HITS", "fail");
->>>>>>> 3c37d7f2c6ebff289d5de02f1fbfc81abe9f3894
             
             const enemyIndex = enemyFleets.findIndex(e => e.q === targetEnemy.q && e.r === targetEnemy.r);
             if (enemyIndex !== -1 && totalHits > 0){
                 enemyFleets[enemyIndex].health -= totalHits;
-<<<<<<< HEAD
-                if(enemyFleets[enemyIndex].health <= 0){
-                    enemyFleets = enemyFleets.filter((_, i) => i !== enemyIndex);
-                }
-                checkWinCondition(); //Check if all enemy vessels are destroyed. 
-=======
                 if(enemyFleets[enemyIndex].health <= 0) enemyFleets = enemyFleets.filter((_, i) => i !== enemyIndex);
                 checkWinCondition(); 
->>>>>>> 3c37d7f2c6ebff289d5de02f1fbfc81abe9f3894
             }
             setTimeout(() => { targetEnemy = null; sourceFleet = null; selectedGroup = []; executeEnemyTurn(); }, 2000);
         }
     }
 
-<<<<<<< HEAD
     let overlayTimeout;
 
-    function triggerOverlay(message, mode = 'fail'){
-        clearTimeout(overlayTimeout);
-        overlay = {show: true, text:message, mode};
-=======
-<<<<<<< HEAD
-=======
-
-    // --- ARTIFICIAL INTELLIGENCE ---
->>>>>>> 3c37d7f2c6ebff289d5de02f1fbfc81abe9f3894
-
-    function triggerEnemyAI() {
-        if (gridHexes.length === 0) return;
-
-        const modes = ['focus', 'directional', 'area'];
-        const randomMode = modes[Math.floor(Math.random() * modes.length)];
-        const randomRotation = Math.floor(Math.random() * 6);
-        const randomHex = gridHexes[Math.floor(Math.random() * gridHexes.length)];
-        
-        const targetHexes = getTargetHexes(randomHex, randomMode, randomRotation, gridHexes);
-        
-        const newSearches = targetHexes.filter(target => 
-            !enemySearchedHexes.some(searched => searched.q === target.q && searched.r === target.r) 
-        );
-        
-        enemySearchedHexes = [...enemySearchedHexes, ...newSearches];
-    }
-
-<<<<<<< HEAD
-    // --- ARTIFICIAL INTELLIGENCE ---
-    function syncStateToAI() {
-        const aiGame = new F3Game();
-        aiGame.currentPlayer = 'BLUE'; 
-
-=======
-    function executeEnemyTurn() {
-        if (gameOver) return; // Stop the AI if the game is over!
-        isEnemyTurn = true; 
-
-        setTimeout(() => {
-            if (gridHexes.length > 0 && !gameOver) {
-                const modes = ['focus', 'directional', 'area'];
-                const randomMode = modes[Math.floor(Math.random() * modes.length)];
-                const randomRotation = Math.floor(Math.random() * 6);
-                
-                // Pick a random WATER hex for the scan epicenter
-                const waterHexes = gridHexes.filter(h => h && !specialTiles.some(t => t.col === h.col && t.row === h.row));
-                const randomHex = waterHexes[Math.floor(Math.random() * waterHexes.length)];
-                
-                if (randomHex) {
-                    const targetHexes = getTargetHexes(randomHex, randomMode, randomRotation, gridHexes) || [];
-                    
-                    // FIX 1: Added 'target &&' to prevent crashes if the scan goes off the edge of the map!
-                    const newSearches = targetHexes.filter(target => 
-                        target && 
-                        !specialTiles.some(t => t.col === target.col && t.row === target.row) &&
-                        !enemySearchedHexes.some(searched => searched.q === target.q && searched.r === target.r) &&
-                        !friendlySearchedHexes.some(searched => searched.q === target.q && searched.r === target.r)
-                    );
-                    
-                    enemySearchedHexes = [...enemySearchedHexes, ...newSearches];
-
-                    // Did the AI hit a player ship? (Added 's &&' safety check here too)
-                    let hitFriendlyFleet = fleetSelections.find(f => newSearches.some(s => s && s.q === f.q && s.r === f.r));
-                    
-                    if (hitFriendlyFleet) {
-                        // AI Rolls 2 Dice (Assume AI hits on 3+ for standard difficulty)
-                        const roll1 = Math.floor(Math.random() * 6) + 1;
-                        const roll2 = Math.floor(Math.random() * 6) + 1;
-                        const aiRequiredRoll = 3; 
-                        const hits = (roll1 >= aiRequiredRoll ? 1 : 0) + (roll2 >= aiRequiredRoll ? 1 : 0);
-
-                        // Show the player what the AI rolled
-                        triggerOverlay(`ENEMY ENGAGED: ROLLED ${roll1} & ${roll2}. ${hits} HITS!`, hits > 0 ? "fail" : "success");
-
-                        // FIX 2: Update Player Health safely without mutating Svelte 5 state directly
-                        if (hits > 0) {
-                            fleetSelections = fleetSelections.map(f => {
-                                if (f.id === hitFriendlyFleet.id) {
-                                    // Return a pure clone of the ship with the new health
-                                    return { ...f, health: f.health - hits };
-                                }
-                                return f;
-                            }).filter(f => f.health > 0); // Destroy ship if HP hits 0
-                        }
-                        
-                        checkWinCondition();
-                    } else {
-                        triggerOverlay("ENEMY SCAN DETECTED NOTHING", "success");
-                    }
-                }
-            }
-            
-            currentTurn += 1;
-            isEnemyTurn = false; 
-        }, 3000); 
-    }
-
-    let overlayTimeout;
-
->>>>>>> ui
     function triggerOverlay(message, mode = 'fail'){
         clearTimeout(overlayTimeout);
         overlay = {show: true, text:message, mode};
@@ -565,7 +360,6 @@
         const aiGame = new F3Game();
         aiGame.currentPlayer = 'BLUE'; 
 
->>>>>>> 3c37d7f2c6ebff289d5de02f1fbfc81abe9f3894
         aiGame.redFleets = fleetSelections.map((f, i) => {
             const hex = gridHexes.find(h => h.q === f.q && h.r === f.r);
             return { id: `R${i + 1}`, pos: HexUtils.posToString({ col: hex.col, row: hex.row }), hp: f.health, fuel: f.fuel, isHidden: !isRevealed };
@@ -586,10 +380,7 @@
     }
 
     function executeEnemyTurn() {
-<<<<<<< HEAD
         if (gameOver) return; // Stop the AI if the game is over!
-=======
->>>>>>> 3c37d7f2c6ebff289d5de02f1fbfc81abe9f3894
         isEnemyTurn = true; 
         const aiGameState = syncStateToAI();
 
@@ -628,7 +419,6 @@
                     if (detectedFriendly) {
                         isRevealed = true; 
                         triggerOverlay(`WARNING: YOU WERE DETECTED!`, "fail");
-<<<<<<< HEAD
                         // Safely apply damage to player ship based on UI rules
                         fleetSelections = fleetSelections.map(f => {
                             if (f.q === detectedFriendly.q && f.r === detectedFriendly.r) {
@@ -640,11 +430,6 @@
                     } else { 
                         triggerOverlay(`ENEMY CONDUCTED ${scanType} SCAN`, "fail"); 
                     }
-=======
-                        fleetSelections = fleetSelections.map(f => (f.q === detectedFriendly.q && f.r === detectedFriendly.r) ? { ...f, health: f.health - 1 } : f);
-                        checkWinCondition();
-                    } else { triggerOverlay(`ENEMY CONDUCTED ${scanType} SCAN`, "fail"); }
->>>>>>> 3c37d7f2c6ebff289d5de02f1fbfc81abe9f3894
                 }
                 endEnemyTurn();
             } catch (error) {
@@ -659,19 +444,6 @@
             currentTurn += 1;
             isEnemyTurn = false; 
         }, 2500); 
-<<<<<<< HEAD
-    }
-
-    // --- DEV TOOLS ---
-    function handleDevShortcut(e) {
-        // Press Ctrl + Shift + E to toggle the enemy reveal!
-        if (e.ctrlKey && e.shiftKey && (e.key === 'e' || e.key === 'E')) {
-            isRevealed = !isRevealed;
-            showWarning(mousePos.x || window.innerWidth/2, mousePos.y || window.innerHeight/2, 
-                isRevealed ? "DEV MODE: ENEMY REVEALED" : "DEV MODE: HIDDEN");
-        }
-=======
->>>>>>> 3c37d7f2c6ebff289d5de02f1fbfc81abe9f3894
     }
 
     function handleDevShortcut(e) {
@@ -730,15 +502,12 @@
             <g transform="translate(30, 40)"> 
                 {#each grid as hex}
                     {@const isEnemyFleet = enemyFleets.some(e => e.q === hex.q && e.r === hex.r)}
-<<<<<<< HEAD
-
-=======
->>>>>>> 3c37d7f2c6ebff289d5de02f1fbfc81abe9f3894
                     {@const config = specialTiles.find(t => t.col === hex.col && t.row === hex.row)}
                     {@const isFleet = fleetSelections.some(f => f.q === hex.q && f.r === hex.r)}
                     {@const isFriendlySearched = friendlySearchedHexes.some(s => s.q === hex.q && s.r === hex.r)}
                     {@const isEnemySearched = enemySearchedHexes.some(s => s.q === hex.q && s.r === hex.r)}
-                    {@const isSelectedToMove = selectedFleetToMove && selectedFleetToMove.q === hex.q && selectedFleetToMove.r === hex.r} {@const pointsStr = hex.corners.map(({ x, y }) => `${x},${y}`).join(' ')}
+                    {@const isSelectedToMove = selectedFleetToMove && selectedFleetToMove.q === hex.q && selectedFleetToMove.r === hex.r} 
+                    {@const pointsStr = hex.corners.map(({ x, y }) => `${x},${y}`).join(' ')}
                     
                     <g 
                         class="hex-cell" role="button" tabindex="0" onclick={(e) => handleHexClick(e, hex)}
@@ -750,44 +519,11 @@
                         <polygon points={pointsStr} fill={config ? `url(#pattern-${hex.col}-${hex.row})` : "url(#water-pattern)"} stroke="black" stroke-width="0.5"/>
                         
                         {#if isEnemyFleet && isRevealed}
-<<<<<<< HEAD
-                            <polygon
-                                points={pointsStr}
-                                fill="#000000" 
-                                fill-opacity="0.6" 
-                                stroke="#4ade80" 
-                                stroke-width="2"
-                                pointer-events="none" 
-                            />
-                            
-                            <text 
-                                x={hex.x} 
-                                y={hex.y} 
-                                dy="5" 
-                                text-anchor="middle" 
-                                fill="#4ade80" 
-                                font-family="'Chakra Petch', sans-serif"
-                                font-size="12" 
-                                font-weight="bold" 
-                                pointer-events="none"
-                            >
-                                ENEMY
-                            </text>
-                        {/if}
-
-                        <polygon
-                            points={pointsStr}
-                            fill="url(#ship-pattern)"
-                            style="opacity: {isFleet ? 1 : 0}; transition: opacity 0.2s;"
-                            pointer-events="none"
-                        />
-=======
                             <polygon points={pointsStr} fill="#000000" fill-opacity="0.6" stroke="#4ade80" stroke-width="2" pointer-events="none" />
                             <text x={hex.x} y={hex.y} dy="5" text-anchor="middle" fill="#4ade80" font-family="'Chakra Petch', sans-serif" font-size="12" font-weight="bold" pointer-events="none">ENEMY</text>
                         {/if}
 
                         <polygon points={pointsStr} fill="url(#ship-pattern)" style="opacity: {isFleet ? 1 : 0}; transition: opacity 0.2s;" pointer-events="none"/>
->>>>>>> 3c37d7f2c6ebff289d5de02f1fbfc81abe9f3894
 
                         {#if isFriendlySearched}
                             <g pointer-events="none" opacity="1">
@@ -867,11 +603,9 @@
     </div>
     {/if}
 
-<<<<<<< HEAD
-    <StatusBar bind:currentTurn bind:isRevealed {isMyTurn} {isMultiplayer} {fleetSelections} />
-=======
     {#if gameOver}
-    <div class="fullscreen-lock-overlay" style="background: rgba(10, 15, 30, 0.95); flex-direction: column; animation: fadeInStay 0.5s forwards; opacity: 1;">        <div class="failure-content" style="text-align: center;">
+    <div class="fullscreen-lock-overlay" style="background: rgba(10, 15, 30, 0.95); flex-direction: column; animation: fadeInStay 0.5s forwards; opacity: 1;">        
+        <div class="failure-content" style="text-align: center;">
             <div class="glitch-text" style="color: {gameResult === 'VICTORY' ? '#4ade80' : '#e24a4a'}; animation: none;">
                 {gameResult}
             </div>
@@ -900,39 +634,6 @@
         </div>
     </div>
     {/if}
-
-    {#if gameOver}
-    <div class="fullscreen-lock-overlay" style="background: rgba(10, 15, 30, 0.95); flex-direction: column; animation: fadeInStay 0.5s forwards; opacity: 1;">        <div class="failure-content" style="text-align: center;">
-            <div class="glitch-text" style="color: {gameResult === 'VICTORY' ? '#4ade80' : '#e24a4a'}; animation: none;">
-                {gameResult}
-            </div>
-            <div class="sub-text" style="color: #abbbd1; margin-bottom: 40px; font-size: 1.5rem; letter-spacing: 5px;">
-                {gameResult === 'VICTORY' ? 'ALL ENEMY FLEETS DESTROYED' : 'ALL FRIENDLY FLEETS LOST'}
-            </div>
-            
-            <div style="display: flex; gap: 20px; justify-content: center;">
-                <button 
-                    class="nav-btn" 
-                    onclick={() => window.location.href = '/'}
-                    onmouseenter={() => $isHovering = true} 
-                    onmouseleave={() => $isHovering = false}
-                >
-                    MAIN MENU
-                </button>
-                <button 
-                    class="nav-btn" 
-                    onclick={() => window.location.reload()}
-                    onmouseenter={() => $isHovering = true} 
-                    onmouseleave={() => $isHovering = false}
-                >
-                    PLAY AGAIN
-                </button>
-            </div>
-        </div>
-    </div>
-    {/if}
-
- 
 
     <StatusBar 
         bind:currentTurn
@@ -941,28 +642,9 @@
         {isMultiplayer}
         {fleetSelections}
     />
->>>>>>> ui
 </div>
 
 <style>
-<<<<<<< HEAD
-    .layout-container { display: flex; flex-direction: row; width: 100%; height: 100%; overflow: hidden; background: #0b0e14; }
-    .layout-container.not-my-turn :global(.sidebar_targeting) { pointer-events: none; user-select: none; opacity: 0.5; transition: all 0.4s ease; }
-    .map-area { flex: 1; display: flex; justify-content: center; align-items: center; position: relative; padding: 1vw; min-width: 0; min-height: 0; }
-    .tactical-grid { width: 100%; height: 100%; filter: drop-shadow(0 0 20px rgba(0,0,0,0.5)); }
-    .cursor-warning { position: fixed; pointer-events: none; color: #e45c5c; font-family: 'Chakra Petch', sans-serif; font-size: 24px; font-weight: 600; text-shadow: 0 0 10px black; animation: popAndFade 1.5s forwards; }
-    @keyframes popAndFade { 0% { opacity: 0; transform: translate(15px, 0) scale(0.5); } 15% { opacity: 1; transform: translate(15px, -25px) scale(1.1); } 100% { opacity: 0; transform: translate(15px, -40px); } }
-    .fleet-tooltip { position: fixed; background: rgba(10, 15, 30, 0.95); border: 1px solid #4ade80; padding: 10px 15px; color: white; font-family: 'Chakra Petch', sans-serif; pointer-events: none; z-index: 100; box-shadow: 0 0 15px rgba(74, 222, 128, 0.2); border-radius: 4px; }
-    .tooltip-header { font-weight: bold; color: #4ade80; border-bottom: 1px solid rgba(74, 222, 128, 0.3); margin-bottom: 5px; padding-bottom: 5px; letter-spacing: 1px; }
-    .tooltip-stat { font-size: 0.9rem; color: #abbbd1; margin-top: 2px; }
-    .hex-cell polygon { transition: fill 0.1s ease, stroke 0.1s ease; }
-    [fill*="rgba(200, 74, 74, 0.6)"] { stroke-width: 5px !important; filter: drop-shadow(0 0 5px rgba(226, 74, 74, 0.5)); }
-    .fullscreen-lock-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(15, 20, 30, 0.7); backdrop-filter: blur(4px); display: flex; justify-content: center; align-items: center; z-index: 9999; pointer-events: all; animation: fadeInOut 2s forwards; }
-    .glitch-text { font-size: 4rem; font-weight: 900; color: #e24a4a; text-shadow: 0 0 20px rgba(226, 74, 74, 0.5); text-transform: uppercase; letter-spacing: 10px; }
-    .overlay-success .glitch-text { color: #4ade80; text-shadow: 0 0 20px rgba(74, 222, 128, 0.5); }
-    .overlay-success .sub-text { color: #4ade80; opacity: 1; }
-    @keyframes fadeInOut { 0% { opacity: 0; transform: scale(1.1); } 15% { opacity: 1; transform: scale(1); } 85% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: scale(0.9); } }
-=======
     .layout-container {     
         display: flex; 
         flex-direction: row; 
@@ -979,7 +661,6 @@
         transition: all 0.4s ease;
     }
 
-    /*Layout of the map*/
     .map-area { 
         flex: 1;
         display: flex; 
@@ -991,14 +672,12 @@
         min-height: 0;
     }
     
-    /*Map sizing along with the SVG viewbox*/ 
     .tactical-grid { 
         width: 100%; 
         height: 100%; 
         filter: drop-shadow(0 0 20px rgba(0,0,0,0.5)); 
     }
 
-    /*Appearance of the warnings for land, # of selected hexes.*/
     .cursor-warning {
         position: fixed; 
         pointer-events: none; 
@@ -1010,20 +689,10 @@
         animation: popAndFade 1.5s forwards;
     }
 
-    /*Animation for cursor-warnings*/
     @keyframes popAndFade {
-        0% { 
-            opacity: 0; 
-            transform: translate(15px, 0) scale(0.5); 
-        }
-        15% { 
-            opacity: 1; 
-            transform: translate(15px, -25px) scale(1.1); 
-        }
-        100% { 
-            opacity: 0; 
-            transform: translate(15px, -40px); 
-        }
+        0% { opacity: 0; transform: translate(15px, 0) scale(0.5); }
+        15% { opacity: 1; transform: translate(15px, -25px) scale(1.1); }
+        100% { opacity: 0; transform: translate(15px, -40px); }
     }
 
     .fleet-tooltip {
@@ -1038,6 +707,7 @@
         box-shadow: 0 0 15px rgba(74, 222, 128, 0.2);
         border-radius: 4px;
     }
+    
     .tooltip-header {
         font-weight: bold;
         color: #4ade80;
@@ -1046,6 +716,7 @@
         padding-bottom: 5px;
         letter-spacing: 1px;
     }
+    
     .tooltip-stat {
         font-size: 0.9rem;
         color: #abbbd1;
@@ -1074,19 +745,17 @@
         cursor: none; 
     }
 
-    /* Default (Fail) Color */
     .glitch-text {
         font-size: 4rem;
         font-weight: 900;
-        color: #e24a4a; /* Red */
+        color: #e24a4a; 
         text-shadow: 0 0 20px rgba(226, 74, 74, 0.5);
         text-transform: uppercase;
         letter-spacing: 10px;
     }
 
-    /* Success Mode Override */
     .overlay-success .glitch-text {
-        color: #4ade80; /* Tactical Green */
+        color: #4ade80; 
         text-shadow: 0 0 20px rgba(74, 222, 128, 0.5);
     }
 
@@ -1095,7 +764,6 @@
         opacity: 1;
     }
 
-    /* Navigation buttons on game over screen */
     .nav-btn {
         background: transparent;
         border: 2px solid #3b82f6;
@@ -1104,7 +772,7 @@
         font-family: 'Chakra Petch', sans-serif;
         font-size: 1.2rem;
         font-weight: bold;
-        cursor: none; /* <-- CHANGE THIS FROM 'pointer' TO 'none' */
+        cursor: none;
         transition: all 0.2s;
         clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
     }
@@ -1127,6 +795,4 @@
         0% { opacity: 0; transform: scale(1.05); }
         100% { opacity: 1; transform: scale(1); }
     }
-    
->>>>>>> ui
 </style>
