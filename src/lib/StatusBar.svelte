@@ -5,7 +5,6 @@
     /*Game states, will be handled by a server in the future*/
     let { 
         currentTurn = $bindable(1),
-        isRevealed = $bindable(false),
         isMyTurn = true,
         isMultiplayer = false,
         fleetSelections = [] /* Now imports the array of ships */
@@ -13,9 +12,7 @@
 
     /*Methods update the basic health and fuel data for the player*/ 
     /* (Global move/damage test buttons removed: stats are now per-ship!) */
-    function toggleReveal() { 
-        isRevealed = !isRevealed;
-    }
+    
 </script>
 
 <div class="status-bar">
@@ -42,7 +39,7 @@
                 <div class="stat-group">
                     <span class="stat-label">HEALTH</span>
                     <div class="icons">
-                        {#each Array(fleet.health).fill(0) as _}
+                        {#each Array(Math.max(0, fleet.health)).fill(0) as _}
                             <img 
                                 src="/blue_damage.png" 
                                 alt="health" 
@@ -50,7 +47,7 @@
                                 draggable="false" 
                             />
                         {/each}
-                        {#each Array(2 - fleet.health).fill(0) as _}
+                        {#each Array(2 - Math.max(0, fleet.health)).fill(0) as _}
                             <div class="empty-icon hp"></div>
                         {/each}
                     </div>
@@ -59,7 +56,7 @@
                 <div class="stat-group">
                     <span class="stat-label">FUEL</span>
                     <div class="icons">
-                        {#each Array(fleet.fuel).fill(0) as _}
+                        {#each Array(Math.max(0, fleet.fuel)).fill(0) as _}
                             <img 
                                 src="/fuel.png" 
                                 alt="fuel" 
@@ -67,26 +64,13 @@
                                 draggable="false" 
                             />
                         {/each}
-                        {#each Array(3 - fleet.fuel).fill(0) as _}
+                        {#each Array(3 - Math.max(0, fleet.fuel)).fill(0) as _}
                             <div class="empty-icon"></div>
                         {/each}
                     </div>
                 </div>
             </div>
         {/each}
-    </div>
-
-    <div class="test-controls">
-        <span class="test-header">// TESTING SPACE</span>
-        
-        <button 
-            class="test-btn danger" 
-            onclick={toggleReveal} 
-            onmouseenter={() => $isHovering = true} 
-            onmouseleave={() => $isHovering = false}
-        >
-            TOGGLE REVEAL
-        </button>
     </div>
 </div>
 
@@ -266,69 +250,9 @@
         border-radius: 0; 
     }
 
-    /* TEST CONTROLS*/
-    /* Test Controls Section */
-    .test-controls {
-        margin-top: auto;
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-        border-top: 1px dashed #555;
-        padding-top: 10px;
-    }
-
-    .test-header {
-        font-family: 'Chakra Petch', sans-serif;
-        color: #555;
-        font-size: 0.8rem;
-        margin-bottom: 5px;
-    }
-
-    .test-btn {
-        background: transparent;
-        border: 1px solid #555;
-        color: #abbbd1;
-        padding: 8px;
-        font-family: 'Chakra Petch', sans-serif;
-        font-size: clamp(0.7rem, 1.2vh, 0.9rem);
-        cursor: none;
-        transition: all 0.2s;
-    }
-    
-    .test-btn:hover { 
-        background: #333;
-        color: white; 
-        border-color: white; 
-    }
-
-    .test-btn.danger:hover { 
-        background: rgba(226, 74, 74, 0.2);
-        border-color: #e24a4a; 
-        color: #e24a4a; 
-    }
-
     @keyframes pulse {
         0% { box-shadow: 0 0 0 0 rgba(226, 74, 74, 0.4); }
         70% { box-shadow: 0 0 0 10px rgba(226, 74, 74, 0); }
         100% { box-shadow: 0 0 0 0 rgba(226, 74, 74, 0); }
     }
-
-    /* For Chrome, Edge, and Safari */
-    /*::-webkit-scrollbar {
-        width: 6px;
-    }
-
-    ::-webkit-scrollbar-track {
-        background: rgba(10, 15, 30, 0.5);
-        border-left: 1px solid rgba(59, 130, 246, 0.1); 
-    }
-
-    ::-webkit-scrollbar-thumb {
-        background: rgba(59, 130, 246, 0.5);
-        border-radius: 0px; 
-    }
-
-    ::-webkit-scrollbar-thumb:hover {
-        background: rgba(59, 130, 246, 0.9);
-    }*/
 </style>

@@ -49,6 +49,8 @@
                 return;
             }
             onTurnEnd();
+            setTimeout(() => onTurnEnd(), 2000);
+            return;
         }
 
         isRolling = true;
@@ -101,13 +103,16 @@
             if (!isRollSuccess) {
                 onScanResult(`SCAN FAILED: ROLLED ${result1}`);
                 onTurnEnd();
+                setTimeout(() => onTurnEnd(), 2000);
             } else {
                 if(hasDetectedEnemy){
                     onScanResult("TARGET FOUND", 'success');
+                    setTimeout(() => onTurnEnd(), 2000);
                 }
                 else {
                     onScanResult("AREA CLEAR: NO TARGETS FOUND", 'success');
                     onTurnEnd(); 
+                    setTimeout(() => onTurnEnd(), 2000);
                 }
             }
         }
@@ -356,46 +361,6 @@
         font-size: 0.7rem; 
         color: #a4afae; 
         margin-top: 4px; 
-    }
-
-    /*DICE ROLLING DISPLAY*/
-    /*Layout and organization of dice roll display content*/
-    .roll-display {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        background: rgba(0, 0, 0, 0.8);
-        border: 1px solid #22c55e;
-        padding: clamp(5px, 1.5vh, 15px);
-        margin-top: 10px;
-        clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
-        transition: all 0.2s ease;
-    }
-    
-    /*Roll Result*/
-    .roll-label { 
-        font-family: 'Chakra Petch', sans-serif; 
-        font-size: clamp(0.7rem, 1.4vh, 1rem); 
-        color: #abbbd1; 
-        letter-spacing: 2px; 
-        margin-bottom: 5px;
-    }    
-
-    /*Appearance of the rolled number*/
-    .roll-number { 
-        font-family: 'Chakra Petch', sans-serif; 
-        font-size: clamp(2.5rem, 6vh, 4.5rem); 
-        font-weight: 700; 
-        color: #22c55e; 
-    }
-    
-    /*Appearance of the number while it is rolling, enable a reactive sizing change*/ 
-    .is-rolling .roll-number { 
-        color: #e24a4a; 
-        opacity: 0.8; 
-        transform: scale(1.2); 
-        transition: transform 0.10s ease; 
     }
 
     
