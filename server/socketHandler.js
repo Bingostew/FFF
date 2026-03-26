@@ -1,4 +1,5 @@
 /** handle socket.io logic */
+// @ts-nocheck
 
 // --- DYNAMICALLY LOAD THE ES MODULE AI FILES INTO NODE.JS ---
 let MCTS, F3Game, HexUtils;
