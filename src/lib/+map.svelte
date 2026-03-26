@@ -194,8 +194,15 @@
                 if (selectedFleetToMove.fuel > 0) {
                     fleetSelections = fleetSelections.map(f => (f.q === selectedFleetToMove.q && f.r === selectedFleetToMove.r) ? { ...f, q: hex.q, r: hex.r, fuel: f.fuel - 1 } : f);
                     if (isMultiplayer) {
+<<<<<<< HEAD
                         const fleetKey = selectedFleetToMove.id === 1 ? 'alpha' : 'beta';
                         $socket.emit('move_fleet', { gameId: $gameId, fleetKey: fleetKey, newPosition: {q: hex.q, r: hex.r} });
+=======
+                        $socket.emit('move_fleet', { gameId: $gameId, fleet: selectedFleetToMove, target: hex });
+                    } else {
+                        executeEnemyTurn(); 
+                        setTimeout(() => executeEnemyTurn(), 2000);
+>>>>>>> ui
                     }
                     selectedFleetToMove = null; targetingMode = 'focus'; 
                     if (!isMultiplayer) handleTurnEnd(); // Switch turn to AI after moving
@@ -326,7 +333,96 @@
         }
     }
 
+<<<<<<< HEAD
+=======
+
+    // --- ARTIFICIAL INTELLIGENCE ---
+
+    function triggerEnemyAI() {
+        if (gridHexes.length === 0) return;
+
+        const modes = ['focus', 'directional', 'area'];
+        const randomMode = modes[Math.floor(Math.random() * modes.length)];
+        const randomRotation = Math.floor(Math.random() * 6);
+        const randomHex = gridHexes[Math.floor(Math.random() * gridHexes.length)];
+        
+        const targetHexes = getTargetHexes(randomHex, randomMode, randomRotation, gridHexes);
+        
+        const newSearches = targetHexes.filter(target => 
+            !enemySearchedHexes.some(searched => searched.q === target.q && searched.r === target.r) 
+        );
+        
+        enemySearchedHexes = [...enemySearchedHexes, ...newSearches];
+    }
+
+    function executeEnemyTurn() {
+        if (gameOver) return; // Stop the AI if the game is over!
+        isEnemyTurn = true; 
+
+        setTimeout(() => {
+            if (gridHexes.length > 0 && !gameOver) {
+                const modes = ['focus', 'directional', 'area'];
+                const randomMode = modes[Math.floor(Math.random() * modes.length)];
+                const randomRotation = Math.floor(Math.random() * 6);
+                
+                // Pick a random WATER hex for the scan epicenter
+                const waterHexes = gridHexes.filter(h => h && !specialTiles.some(t => t.col === h.col && t.row === h.row));
+                const randomHex = waterHexes[Math.floor(Math.random() * waterHexes.length)];
+                
+                if (randomHex) {
+                    const targetHexes = getTargetHexes(randomHex, randomMode, randomRotation, gridHexes) || [];
+                    
+                    // FIX 1: Added 'target &&' to prevent crashes if the scan goes off the edge of the map!
+                    const newSearches = targetHexes.filter(target => 
+                        target && 
+                        !specialTiles.some(t => t.col === target.col && t.row === target.row) &&
+                        !enemySearchedHexes.some(searched => searched.q === target.q && searched.r === target.r) &&
+                        !friendlySearchedHexes.some(searched => searched.q === target.q && searched.r === target.r)
+                    );
+                    
+                    enemySearchedHexes = [...enemySearchedHexes, ...newSearches];
+
+                    // Did the AI hit a player ship? (Added 's &&' safety check here too)
+                    let hitFriendlyFleet = fleetSelections.find(f => newSearches.some(s => s && s.q === f.q && s.r === f.r));
+                    
+                    if (hitFriendlyFleet) {
+                        // AI Rolls 2 Dice (Assume AI hits on 3+ for standard difficulty)
+                        const roll1 = Math.floor(Math.random() * 6) + 1;
+                        const roll2 = Math.floor(Math.random() * 6) + 1;
+                        const aiRequiredRoll = 3; 
+                        const hits = (roll1 >= aiRequiredRoll ? 1 : 0) + (roll2 >= aiRequiredRoll ? 1 : 0);
+
+                        // Show the player what the AI rolled
+                        triggerOverlay(`ENEMY ENGAGED: ROLLED ${roll1} & ${roll2}. ${hits} HITS!`, hits > 0 ? "fail" : "success");
+
+                        // FIX 2: Update Player Health safely without mutating Svelte 5 state directly
+                        if (hits > 0) {
+                            fleetSelections = fleetSelections.map(f => {
+                                if (f.id === hitFriendlyFleet.id) {
+                                    // Return a pure clone of the ship with the new health
+                                    return { ...f, health: f.health - hits };
+                                }
+                                return f;
+                            }).filter(f => f.health > 0); // Destroy ship if HP hits 0
+                        }
+                        
+                        checkWinCondition();
+                    } else {
+                        triggerOverlay("ENEMY SCAN DETECTED NOTHING", "success");
+                    }
+                }
+            }
+            
+            currentTurn += 1;
+            isEnemyTurn = false; 
+        }, 3000); 
+    }
+
+    let overlayTimeout;
+
+>>>>>>> ui
     function triggerOverlay(message, mode = 'fail'){
+        clearTimeout(overlayTimeout);
         overlay = {show: true, text:message, mode};
         setTimeout(() => { overlay.show = false; }, 2000);
     }
@@ -569,10 +665,55 @@
     </div>
     {/if}
 
+<<<<<<< HEAD
     <StatusBar bind:currentTurn bind:isRevealed {isMyTurn} {isMultiplayer} {fleetSelections} />
+=======
+    {#if gameOver}
+    <div class="fullscreen-lock-overlay" style="background: rgba(10, 15, 30, 0.95); flex-direction: column; animation: fadeInStay 0.5s forwards; opacity: 1;">        <div class="failure-content" style="text-align: center;">
+            <div class="glitch-text" style="color: {gameResult === 'VICTORY' ? '#4ade80' : '#e24a4a'}; animation: none;">
+                {gameResult}
+            </div>
+            <div class="sub-text" style="color: #abbbd1; margin-bottom: 40px; font-size: 1.5rem; letter-spacing: 5px;">
+                {gameResult === 'VICTORY' ? 'ALL ENEMY FLEETS DESTROYED' : 'ALL FRIENDLY FLEETS LOST'}
+            </div>
+            
+            <div style="display: flex; gap: 20px; justify-content: center;">
+                <button 
+                    class="nav-btn" 
+                    onclick={() => window.location.href = '/'}
+                    onmouseenter={() => $isHovering = true} 
+                    onmouseleave={() => $isHovering = false}
+                >
+                    MAIN MENU
+                </button>
+                <button 
+                    class="nav-btn" 
+                    onclick={() => window.location.reload()}
+                    onmouseenter={() => $isHovering = true} 
+                    onmouseleave={() => $isHovering = false}
+                >
+                    PLAY AGAIN
+                </button>
+            </div>
+        </div>
+    </div>
+    {/if}
+
+ 
+
+    <!--RIGHT-->
+    <StatusBar 
+        bind:currentTurn
+        bind:isRevealed
+        {isMyTurn}
+        {isMultiplayer}
+        {fleetSelections}
+    />
+>>>>>>> ui
 </div>
 
 <style>
+<<<<<<< HEAD
     .layout-container { display: flex; flex-direction: row; width: 100%; height: 100%; overflow: hidden; background: #0b0e14; }
     .layout-container.not-my-turn :global(.sidebar_targeting) { pointer-events: none; user-select: none; opacity: 0.5; transition: all 0.4s ease; }
     .map-area { flex: 1; display: flex; justify-content: center; align-items: center; position: relative; padding: 1vw; min-width: 0; min-height: 0; }
@@ -589,4 +730,171 @@
     .overlay-success .glitch-text { color: #4ade80; text-shadow: 0 0 20px rgba(74, 222, 128, 0.5); }
     .overlay-success .sub-text { color: #4ade80; opacity: 1; }
     @keyframes fadeInOut { 0% { opacity: 0; transform: scale(1.1); } 15% { opacity: 1; transform: scale(1); } 85% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: scale(0.9); } }
+=======
+    .layout-container {     
+        display: flex; 
+        flex-direction: row; 
+        width: 100%; 
+        height: 100%; 
+        overflow: hidden; 
+        background: #0b0e14; 
+    }
+
+    .layout-container.not-my-turn :global(.sidebar_targeting) {
+        pointer-events: none;
+        user-select: none;
+        opacity: 0.5;
+        transition: all 0.4s ease;
+    }
+
+    /*Layout of the map*/
+    .map-area { 
+        flex: 1;
+        display: flex; 
+        justify-content: center; 
+        align-items: center; 
+        position: relative; 
+        padding: 1vw; 
+        min-width: 0; 
+        min-height: 0;
+    }
+    
+    /*Map sizing along with the SVG viewbox*/ 
+    .tactical-grid { 
+        width: 100%; 
+        height: 100%; 
+        filter: drop-shadow(0 0 20px rgba(0,0,0,0.5)); 
+    }
+
+    /*Appearance of the warnings for land, # of selected hexes.*/
+    .cursor-warning {
+        position: fixed; 
+        pointer-events: none; 
+        color: #e45c5c; 
+        font-family: 'Chakra Petch', sans-serif;
+        font-size: 24px; 
+        font-weight: 600; 
+        text-shadow: 0 0 10px black; 
+        animation: popAndFade 1.5s forwards;
+    }
+
+    /*Animation for cursor-warnings*/
+    @keyframes popAndFade {
+        0% { 
+            opacity: 0; 
+            transform: translate(15px, 0) scale(0.5); 
+        }
+        15% { 
+            opacity: 1; 
+            transform: translate(15px, -25px) scale(1.1); 
+        }
+        100% { 
+            opacity: 0; 
+            transform: translate(15px, -40px); 
+        }
+    }
+
+    .fleet-tooltip {
+        position: fixed;
+        background: rgba(10, 15, 30, 0.95);
+        border: 1px solid #4ade80;
+        padding: 10px 15px;
+        color: white;
+        font-family: 'Chakra Petch', sans-serif;
+        pointer-events: none;
+        z-index: 100;
+        box-shadow: 0 0 15px rgba(74, 222, 128, 0.2);
+        border-radius: 4px;
+    }
+    .tooltip-header {
+        font-weight: bold;
+        color: #4ade80;
+        border-bottom: 1px solid rgba(74, 222, 128, 0.3);
+        margin-bottom: 5px;
+        padding-bottom: 5px;
+        letter-spacing: 1px;
+    }
+    .tooltip-stat {
+        font-size: 0.9rem;
+        color: #abbbd1;
+        margin-top: 2px;
+    }
+
+    .hex-cell polygon {
+        transition: fill 0.1s ease, stroke 0.1s ease;
+    }
+
+    [fill*="rgba(200, 74, 74, 0.6)"] {
+        stroke-width: 5px !important;
+        filter: drop-shadow(0 0 5px rgba(226, 74, 74, 0.5));
+    }
+
+    .fullscreen-lock-overlay {
+        position: fixed;
+        top: 0; left: 0;
+        width: 100vw; height: 100vh;
+        background: rgba(15, 20, 30, 0.7);
+        backdrop-filter: blur(4px);
+        display: flex; justify-content: center; align-items: center;
+        z-index: 9999;
+        pointer-events: all;
+        animation: fadeInOut 2s forwards;
+        cursor: none; 
+    }
+
+    /* Default (Fail) Color */
+    .glitch-text {
+        font-size: 4rem;
+        font-weight: 900;
+        color: #e24a4a; /* Red */
+        text-shadow: 0 0 20px rgba(226, 74, 74, 0.5);
+        text-transform: uppercase;
+        letter-spacing: 10px;
+    }
+
+    /* Success Mode Override */
+    .overlay-success .glitch-text {
+        color: #4ade80; /* Tactical Green */
+        text-shadow: 0 0 20px rgba(74, 222, 128, 0.5);
+    }
+
+    .overlay-success .sub-text {
+        color: #4ade80;
+        opacity: 1;
+    }
+
+    /* Navigation buttons on game over screen */
+    .nav-btn {
+        background: transparent;
+        border: 2px solid #3b82f6;
+        color: #3b82f6;
+        padding: 15px 30px;
+        font-family: 'Chakra Petch', sans-serif;
+        font-size: 1.2rem;
+        font-weight: bold;
+        cursor: none; /* <-- CHANGE THIS FROM 'pointer' TO 'none' */
+        transition: all 0.2s;
+        clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
+    }
+
+    .nav-btn:hover {
+        background: rgba(59, 130, 246, 0.2);
+        color: white;
+        border-color: white;
+        transform: translateY(-2px);
+    }
+
+    @keyframes fadeInOut {
+        0% { opacity: 0; transform: scale(1.1); }
+        15% { opacity: 1; transform: scale(1); }
+        85% { opacity: 1; transform: scale(1); }
+        100% { opacity: 0; transform: scale(0.9); }
+    }
+
+    @keyframes fadeInStay {
+        0% { opacity: 0; transform: scale(1.05); }
+        100% { opacity: 1; transform: scale(1); }
+    }
+    
+>>>>>>> ui
 </style>

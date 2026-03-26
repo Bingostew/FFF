@@ -49,6 +49,8 @@
                 return;
             }
             onTurnEnd();
+            setTimeout(() => onTurnEnd(), 2000);
+            return;
         }
 
         isRolling = true;
@@ -101,13 +103,16 @@
             if (!isRollSuccess) {
                 onScanResult(`SCAN FAILED: ROLLED ${result1}`);
                 onTurnEnd();
+                setTimeout(() => onTurnEnd(), 2000);
             } else {
                 if(hasDetectedEnemy){
                     onScanResult("TARGET FOUND", 'success');
+                    setTimeout(() => onTurnEnd(), 2000);
                 }
                 else {
                     onScanResult("AREA CLEAR: NO TARGETS FOUND", 'success');
                     onTurnEnd(); 
+                    setTimeout(() => onTurnEnd(), 2000);
                 }
             }
         }
