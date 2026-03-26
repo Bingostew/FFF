@@ -5,7 +5,7 @@
 
     // Import custom cursor
     import { isHovering } from '$lib/store';
-    
+    import { socket, gameId, activePlayerId } from '$lib/gameStore';   
     // Used for API calls to server
     let isSubmitted = $state(false);
     
@@ -14,6 +14,7 @@
     let currentRollDisplay2 = $state(0);
 
     let isRolling = $state(false);
+    let pendingAttack = $state(false);
 
     // Standard JS props (using defaults to prevent crashes)
     let { 
@@ -44,79 +45,71 @@
 
 
         if(!needsRoll && !isAttack){
-            const detected = onSearch(); 
-            if(detected){
-                return;
-            }
-            onTurnEnd();
-            setTimeout(() => onTurnEnd(), 2000);
+            onSearch();
             return;
         }
 
         isRolling = true;
-        
-        // Execute the search logic in the parent Map component
-        const finalResult1 = Math.floor(Math.random() * 6) + 1;
-        const finalResult2 = Math.floor(Math.random() * 6) + 1;
+        pendingAttack = isAttack;
 
-        let iterations = 0;
-        const maxIterations = 8;
+        currentRollDisplay1 = Math.floor(Math.random() * 6) + 1;
+        if (isAttack) currentRollDisplay2 = Math.floor(Math.random() * 6) + 1;
         let speed = 40;
 
         function animate(){
-            iterations ++;
-            
+
+            if(!isRolling) return;
+
             currentRollDisplay1 = Math.floor(Math.random() * 6) + 1;
             if (isAttack) currentRollDisplay2 = Math.floor(Math.random() * 6) + 1;
     
-            if(iterations < maxIterations){
-                speed += iterations * 15;
-                setTimeout(animate, speed);
-            }
-            else{
-                currentRollDisplay1 = finalResult1;
-                if(isAttack) currentRollDisplay2 = finalResult2;
-
-                isRolling = false;
-                setTimeout(() => {
-                    finalizeResult(isAttack, finalResult1, finalResult2);
-                }, 2000);
-            }
+            setTimeout(animate, speed);
         }
 
         animate();
+        $socket.emit('die_roll', { gameId: $gameId });
+
+    }
+
+    export function handleDiceResult(res){
+        isRolling = false; 
+        
+        currentRollDisplay1 = res;
+
+        let secondDie = 0;
+        if (pendingAttack) {
+            secondDie = Math.floor(Math.random() * 6) + 1;
+            currentRollDisplay2 = secondDie;
+        }
+
+        setTimeout(() => {
+            finalizeResult(pendingAttack, res, secondDie);
+            pendingAttack = false; // Reset for next time
+        }, 1200);
     }
 
     function finalizeResult(isAttack, result1, result2){
-        if(isAttack) currentRollDisplay2 = result2;
-        isRolling = false;
 
-        if(isAttack){
-            currentRollDisplay1 = 0;
+        const isScan = !isAttack;
+        const currentMode = targetingMode; 
+
+        if (isAttack) {
             onFireResolve(result1, result2);
-        }
-        else{
-            const threshold = targetingMode === 'directional' ? 4 : 3;
+        } else {
+            const threshold = currentMode === 'directional' ? 4 : 3;
             const isRollSuccess = result1 <= threshold;
-            const hasDetectedEnemy = onSearch(); 
 
-            if (!isRollSuccess) {
-                onScanResult(`SCAN FAILED: ROLLED ${result1}`);
-                onTurnEnd();
-                setTimeout(() => onTurnEnd(), 2000);
+            if (isRollSuccess) {
+                onSearch(); 
             } else {
-                if(hasDetectedEnemy){
-                    onScanResult("TARGET FOUND", 'success');
-                    setTimeout(() => onTurnEnd(), 2000);
-                }
-                else {
-                    onScanResult("AREA CLEAR: NO TARGETS FOUND", 'success');
-                    onTurnEnd(); 
-                    setTimeout(() => onTurnEnd(), 2000);
-                }
+                onScanResult(`SCAN FAILED: ROLLED ${result1}`, 'fail');
+                onTurnEnd();
             }
         }
+
         currentRollDisplay1 = 0;
+        currentRollDisplay2 = 0;
+        pendingAttack = false;
     }
 </script>
 
@@ -199,47 +192,49 @@
                 </div>
 
             {:else}
-                <h3 class="panel-header" style="color: #e24a4a; border-color: #e24a4a;">FIRE MISSION</h3>
+                {#if isMyTurn}
+                    <h3 class="panel-header" style="color: #e24a4a; border-color: #e24a4a;">FIRE MISSION</h3>
                 
-                {#if !sourceFleet}
-                    <div class="status-panel" style="border-color: #e24a4a; animation: pulse 2s infinite;">
-                        <span style="color: #e24a4a; font-weight: bold;">SELECT SOURCE FLEET</span>
-                    </div>
-                    <p class="btn-sub" style="text-align: center; margin-top: 10px;">Click one of your ships on the map to calculate firing solution.</p>
-                {:else}
-                    <div class="attack-stats">
-                        <div class="stat-row">
-                            <span>SOURCE:</span>
-                            <span class="val">{sourceFleet.name}</span>
+                    {#if !sourceFleet}
+                        <div class="status-panel" style="border-color: #e24a4a; animation: pulse 2s infinite;">
+                            <span style="color: #e24a4a; font-weight: bold;">SELECT SOURCE FLEET</span>
                         </div>
-                        <div class="stat-row">
-                            <span>RANGE:</span>
-                            <span class="val">{attackRange} HEXES</span>
+                        <p class="btn-sub" style="text-align: center; margin-top: 10px;">Click one of your ships on the map to calculate firing solution.</p>
+                    {:else}
+                        <div class="attack-stats">
+                            <div class="stat-row">
+                                <span>SOURCE:</span>
+                                <span class="val">{sourceFleet.name}</span>
+                            </div>
+                            <div class="stat-row">
+                                <span>RANGE:</span>
+                                <span class="val">{attackRange} HEXES</span>
+                            </div>
+                            <div class="stat-row">
+                                <span>DIFFICULTY:</span>
+                                <span class="val" style="color: #e24a4a;">{requiredRoll}+ NEEDED</span>
+                            </div>
                         </div>
-                        <div class="stat-row">
-                            <span>DIFFICULTY:</span>
-                            <span class="val" style="color: #e24a4a;">{requiredRoll}+ NEEDED</span>
-                        </div>
+                    {/if}
+
+                    <div class="button-group">
+                        <button 
+                            class="fire-button"
+                            onclick={() => diceRoll(true)}
+                            disabled={isRolling || !sourceFleet}
+                        >
+                            <span class="btn-text">ENGAGE</span>
+                            <span class="btn-sub">{sourceFleet ? "EXECUTE ATTACK VECTOR" : "WAITING FOR SOURCE..."}</span>
+                        </button>
+
+                        <button 
+                            class="cancel-btn"
+                            onclick={() => { targetEnemy = null; sourceFleet = null; }}
+                        >
+                            <span class="btn-text" style="font-size: 0.8rem; text-align: center;">ABORT MISSION</span>
+                        </button>
                     </div>
                 {/if}
-
-                <div class="button-group">
-                    <button 
-                        class="fire-button"
-                        onclick={() => diceRoll(true)}
-                        disabled={isRolling || !sourceFleet}
-                    >
-                        <span class="btn-text">ENGAGE</span>
-                        <span class="btn-sub">{sourceFleet ? "EXECUTE ATTACK VECTOR" : "WAITING FOR SOURCE..."}</span>
-                    </button>
-
-                    <button 
-                        class="cancel-btn"
-                        onclick={() => { targetEnemy = null; sourceFleet = null; }}
-                    >
-                        <span class="btn-text" style="font-size: 0.8rem; text-align: center;">ABORT MISSION</span>
-                    </button>
-                </div>
             {/if}
         {/if}
     </div>

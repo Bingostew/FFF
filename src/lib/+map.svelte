@@ -44,6 +44,7 @@
     let gameOver = $state(false);
     let gameResult = $state("");
     let overlay = $state({ show : false, text:'', mode: 'fail'});
+    let sidebarRef;
 
     let sourceFleet = $state(null);
     let targetEnemy = $state(null);
@@ -123,26 +124,45 @@
                 activePlayerId.set(activePlayer);
             });
 
-            $socket.on('die_result', ({playerId, number}) => {
+            $socket.on('die_result', ({playerId, die}) => {
                 if(isMyTurn){
-                    let rawPos = selectedGroup;
-                    const formattedPositions = {};
-                    rawPos.forEach((h, index) => { formattedPositions[index] = { q: h.q, r: h.r }; });
-                    $socket.emit(targetingMode, { gameId: $gameId, Positions: formattedPositions, dieResult: number });
-                    selectedGroup = [];
+                    sidebarRef.handleDiceResult(die);
                 }
             });
 
+            $socket.on('strike_result', ({attacker, hit, targetHex, fleetKey, hpRemaining, isDetroyed, distance}) => {
+                handleTurnEnd();
+            });
+
+            // Map.svelte -> inside socket listeners effect
             const ISREvents = ['focus_result', 'directional_result', 'area_result'];
-            const onISRResult = ({playerName, revealPos, positions}) => {
-                let posArray = Object.values(positions);
-                if(isMyTurn){
-                    const newSearches = posArray.map(p => grid.getHex(p)).filter(Boolean);
-                    friendlySearchedHexes = [...friendlySearchedHexes, ...newSearches];
-                } else {
-                    const scannedHexes = posArray.map(p => grid.getHex(p)).filter(Boolean);
-                    enemySearchedHexes = [...enemySearchedHexes, ...scannedHexes];
+
+            const onISRResult = (data) => {
+                const { playerName, revealPos } = data;
+                
+                if (!revealPos || revealPos.length === 0) {
+                    triggerOverlay("AREA CLEAR", 'success');
+                    handleTurnEnd();
+                    return;
                 }
+
+                revealPos.forEach(hit => {
+                    const hex = grid.getHex({ q: hit.q, r: hit.r });
+                    if (!hex) return;
+
+                    // Add to our "discovered" list so they stay visible on the map
+                    if (!friendlySearchedHexes.some(s => s.q === hex.q && s.r === hex.r)) {
+                        friendlySearchedHexes = [...friendlySearchedHexes, hex];
+                    }
+
+                    // 3. Set the Fire Mission target
+                    // We take the first non-destroyed ship as the primary target
+                    if (!hit.isDestroyed && !targetEnemy) {
+                        targetEnemy = hex;
+                        sourceFleet = null;
+                        triggerOverlay("TARGET ACQUIRED", 'success');
+                    }
+                });
             };
 
             ISREvents.forEach(evt => $socket.on(evt, onISRResult));
@@ -152,7 +172,6 @@
                 $socket.off('game_start');
                 $socket.off('turn_change');
                 $socket.off('die_result');
-                ISREvents.forEach(evt => $socket.off(evt));
             };
         }
     });
@@ -386,16 +405,27 @@
         }
     }
 
-    function handlePlayerSearch() {
+    function handlePlayerSearch(die=0) {
         if (isMultiplayer) {
+            if (selectedGroup.length === 0) return false;
+
             const rawPos = selectedGroup;
             const formattedPositions = {};
             rawPos.forEach((h, index) => { 
                 formattedPositions[index] = { q: h.q, r: h.r }; 
             });
 
-            $socket.emit('die_roll', { gameId: $gameId });
-            return false; 
+
+            const eventName = `${targetingMode}`; // e.g., 'focus', 'directional', or 'area'
+            
+            $socket.emit(eventName, { 
+                gameId: $gameId, 
+                Positions: formattedPositions,
+                dieResult: die
+            });
+
+            selectedGroup = []; 
+            return false;
         } else {
             if (selectedGroup.length === 0) return false;
 
@@ -427,12 +457,9 @@
         if (!sourceFleet || !targetEnemy) return;
 
         if (isMultiplayer) {
-            $socket.emit('attack', { 
+            $socket.emit('execute_strike', { 
                 gameId: $gameId, 
-                source: sourceFleet, 
-                target: targetEnemy,
-                roll1: roll1,
-                roll2: roll2
+                targetHex: { q: targetEnemy.q, r: targetEnemy.r }
             });
             targetEnemy = null;
         } else {
@@ -578,6 +605,7 @@
     
     <!--LEFT-->
     <Sidebar 
+        bind:this={sidebarRef}
         bind:targetingMode 
         bind:isConfirmed 
         bind:rotation

@@ -454,7 +454,6 @@ module.exports = (io, lobbies) => {
                     postitions:Positions
                 });
             }
-            switchTurn(gameId);
         });
 
         socket.on('directional', ({gameId, Positions, dieResult}) => {
@@ -498,7 +497,6 @@ module.exports = (io, lobbies) => {
                     positions: Positions
                 });
             }
-            switchTurn(gameId);
         });
 
         socket.on('area', ({gameId, Positions, dieResult}) => {
@@ -544,7 +542,6 @@ module.exports = (io, lobbies) => {
                     positions: Positions
                 });
             }
-            switchTurn(gameId);
         });
 
 
