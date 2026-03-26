@@ -1,5 +1,3 @@
-<!--MAP, INTERACTIVELY DISPLAYS GRIDS, ALL DATA SURROUNDING GRIDS, FLEET LOCATIONS-->
-<!--SCRIPTS FOR MAP-->
 <script>
     // @ts-nocheck
     import { defineHex, Grid, rectangle, Orientation, line } from 'honeycomb-grid';
@@ -9,7 +7,10 @@
     import Sidebar from './Sidebar.svelte';
     import StatusBar from './StatusBar.svelte';
 
-    let lockedSelectionForSocket = [];
+    // --- BRINGING THE AI BACK HOME FOR SINGLEPLAYER ---
+    import MCTS from './game/MCTS.js';
+    import { F3Game } from './game/F3Game.js';
+    import { HexUtils } from './game/HexUtils.js';
 
     // Grid Config
     const Tile = defineHex({ 
@@ -41,8 +42,15 @@
     let friendlySearchedHexes = $state([]);
     let enemySearchedHexes = $state([]);    
     let isRevealed = $state(false);
+    
+    // Added AI-required properties (id, fuel) that were missing in the UI branch
     let enemyFleets = $state([ 
-        { q: 4, r: -1, name: "IJN Yamato", health: 2 }, { q: 2, r: 1, name: "IJN Musashi", health: 2 }]);
+        { id: 'B1', q: 4, r: -1, name: "IJN Yamato", health: 2, fuel: 3 }, 
+        { id: 'B2', q: 2, r: 1, name: "IJN Musashi", health: 2, fuel: 3 }
+    ]);
+    
+    let gameOver = $state(false);
+    let gameResult = $state("");
     let overlay = $state({ show : false, text:'', mode: 'fail'});
 
     let sourceFleet = $state(null);
@@ -50,7 +58,6 @@
     let attackRange = $derived.by(() => {
         if (!sourceFleet || !targetEnemy) return null;
         
-
         let dist = (Math.abs(sourceFleet.q - targetEnemy.q) + 
                     Math.abs(sourceFleet.r - targetEnemy.r) + 
                     Math.abs((-sourceFleet.q - sourceFleet.r) - (-targetEnemy.q - targetEnemy.r))) / 2;
@@ -85,6 +92,17 @@
         { col: 5, row: 2, img: 'mountain.jpg' }
     ];
 
+    //Checks the state of the game, presents Victory or Defeat screen. 
+    function checkWinCondition() {
+        if (enemyFleets.length === 0) {
+            gameOver = true;
+            gameResult = "VICTORY";
+        } else if (fleetSelections.length === 0) {
+            gameOver = true;
+            gameResult = "DEFEAT";
+        }
+    }
+
     // Gets highlighted hexes & automatically filters out land!
     let highlightedHexes = $derived.by(() => {
         if (!hoveredHex || targetingMode === 'move') return [];
@@ -98,7 +116,7 @@
         .filter(hex => !specialTiles.some(t => t.col === hex.col && t.row === hex.row))
     });
 
-    // --- SOCKET LISTENERS ---
+    // --- SOCKET LISTENERS (Only runs if Multiplayer) ---
     $effect(() => {
         if ($socket) {
             $socket.on('game_start', ({ activePlayer }) => {
@@ -122,64 +140,25 @@
                 }
             });
 
-            // 1. UPDATED ISR LISTENER (Now knows when the Bot scans you)
             const ISREvents = ['focus_result', 'directional_result', 'area_result'];
             const onISRResult = ({playerName, revealPos, positions}) => {
                 let posArray = Object.values(positions);
-                const scannedHexes = posArray.map(p => gridHexes.find(h => h.q === p.q && h.r === p.r)).filter(Boolean);
-                
-                // If the player name is the Bot, draw the scan as red.
-                if (playerName === 'CPU Commander') {
-                    enemySearchedHexes = [...enemySearchedHexes, ...scannedHexes];
-                    triggerOverlay(`ENEMY CONDUCTED SCAN`, "fail");
-                    if (revealPos) triggerOverlay(`WARNING: YOU WERE DETECTED!`, "fail");
+                if(isMyTurn){
+                    const newSearches = posArray.map(p => grid.getHex(p)).filter(Boolean);
+                    friendlySearchedHexes = [...friendlySearchedHexes, ...newSearches];
                 } else {
-                    friendlySearchedHexes = [...friendlySearchedHexes, ...scannedHexes];
+                    const scannedHexes = posArray.map(p => grid.getHex(p)).filter(Boolean);
+                    enemySearchedHexes = [...enemySearchedHexes, ...scannedHexes];
                 }
             };
+
             ISREvents.forEach(evt => $socket.on(evt, onISRResult));
-
-            // 2. NEW: FLEET MOVED LISTENER (Draws enemy ships moving)
-            $socket.on('fleet_moved', ({ playerId, fleetKey, newPosition }) => {
-                if (playerId !== $socket.id) {
-                    const targetHex = gridHexes.find(h => h.q === newPosition.q && h.r === newPosition.r);
-                    if (targetHex) {
-                        enemyFleets = enemyFleets.map(f => {
-                            // Map backend's 'alpha/beta' to frontend's 'B1/B2'
-                            const idMatch = fleetKey === 'alpha' ? 'B1' : 'B2';
-                            if (f.id === idMatch) {
-                                return { ...f, q: targetHex.q, r: targetHex.r };
-                            }
-                            return f;
-                        });
-                        triggerOverlay(`ENEMY MOVED`, "fail");
-                    }
-                }
-            });
-
-            // 3. NEW: STRIKE LISTENER (Calculates damage when enemy attacks)
-            $socket.on('strike_result', ({ attacker, hit, targetHex, fleetKey, hpRemaining, isDestroyed }) => {
-                if (attacker !== $socket.id) {
-                    if (hit) {
-                        triggerOverlay("WARNING: YOU HAVE BEEN HIT!", "fail");
-                        fleetSelections = fleetSelections.map((f, i) => {
-                            const isTarget = (fleetKey === 'alpha' && i === 0) || (fleetKey === 'beta' && i === 1);
-                            if (isTarget) return { ...f, health: hpRemaining };
-                            return f;
-                        });
-                    } else {
-                        triggerOverlay("ENEMY STRIKE MISSED", "success");
-                    }
-                }
-            });
 
             return () => {
                 $socket.off("room_update");
                 $socket.off('game_start');
                 $socket.off('turn_change');
                 $socket.off('die_result');
-                $socket.off('fleet_moved');
-                $socket.off('strike_result');
                 ISREvents.forEach(evt => $socket.off(evt));
             };
         }
@@ -393,6 +372,20 @@
                 $socket.once('fleets_placed_confirmation', () => { $socket.emit('ready_check', {gameId: $gameId}); });
             } else {
                 isConfirmed = true;
+
+                // Randomize Enemy Fleets (Added AI properties)
+                const waterHexes = gridHexes.filter(h => !specialTiles.some(t => t.col === h.col && t.row === h.row));
+                
+                const r1 = waterHexes[Math.floor(Math.random() * waterHexes.length)];
+                let r2 = waterHexes[Math.floor(Math.random() * waterHexes.length)];
+                while (r1.q === r2.q && r1.r === r2.r) {
+                    r2 = waterHexes[Math.floor(Math.random() * waterHexes.length)];
+                }
+
+                enemyFleets = [ 
+                    { id: 'B1', q: r1.q, r: r1.r, name: "IJN Yamato", health: 2, fuel: 3 }, 
+                    { id: 'B2', q: r2.q, r: r2.r, name: "IJN Musashi", health: 2, fuel: 3 }
+                ];
             }
             selectedGroup = [];
             targetingMode = 'focus';
@@ -401,8 +394,12 @@
 
     function handlePlayerSearch() {
         if (isMultiplayer) {
-            // FIX: Save the coordinates before the Sidebar wipes them!
-            lockedSelectionForSocket = [...selectedGroup]; 
+            const rawPos = selectedGroup;
+            const formattedPositions = {};
+            rawPos.forEach((h, index) => { 
+                formattedPositions[index] = { q: h.q, r: h.r }; 
+            });
+
             $socket.emit('die_roll', { gameId: $gameId });
             return false; 
         } else {
@@ -416,36 +413,33 @@
                 targetEnemy = detected;
                 sourceFleet = null;
                 selectedGroup = []; 
-                targetingMode = 'focus'; // <-- NEW: Resets your cursor
                 return true; 
             }
             selectedGroup = []; 
-            targetingMode = 'focus'; // <-- NEW: Resets your cursor
             return false;
         }
     }
 
     function handleTurnEnd() {
+
         targetEnemy = null;
         sourceFleet = null;
         selectedGroup = [];
-        targetingMode = 'focus'; // Resets your cursor
 
-        if (!isMultiplayer) {
-            // FIX: Wait 1.5 seconds before triggering the AI's turn.
-            // This gives you time to click "Close" on the Dice overlay 
-            // before the CSS locks your mouse out!
-            setTimeout(() => {
-                executeEnemyTurn();
-            }, 1500); 
-        } 
+        if (!isMultiplayer) setTimeout(() => { executeEnemyTurn(); }, 1500); 
     }
 
     function resolveAttack(roll1, roll2) {
         if (!sourceFleet || !targetEnemy) return;
 
         if (isMultiplayer) {
-            $socket.emit('attack', { gameId: $gameId, source: sourceFleet, target: targetEnemy });
+            $socket.emit('attack', { 
+                gameId: $gameId, 
+                source: sourceFleet, 
+                target: targetEnemy,
+                roll1: roll1,
+                roll2: roll2
+            });
             targetEnemy = null;
         } else {
             const hit1 = roll1 >= requiredRoll;
@@ -453,11 +447,11 @@
             const totalHits = (hit1 ? 1 : 0) + (hit2 ? 1 : 0);
             
             if (totalHits === 2) {
-                triggerOverlay("CRITICAL STRIKE: 2 HITS", "success");
+                triggerOverlay("TARGET DESTROYED: 2 HITS", "success");
             } else if (totalHits === 1) {
                 triggerOverlay("TARGET HIT", "success");
             } else {
-                triggerOverlay("STRIKE FAILED: 0 HITS", "fail");
+                triggerOverlay("TARGET MISSED: 0 HITS", "fail");
             }
             
             const enemyIndex = enemyFleets.findIndex(e => e.q === targetEnemy.q && e.r === targetEnemy.r);
@@ -466,6 +460,7 @@
                 if(enemyFleets[enemyIndex].health <= 0){
                     enemyFleets = enemyFleets.filter((_, i) => i !== enemyIndex);
                 }
+                checkWinCondition(); //Check if all enemy vessels are destroyed. 
             }
 
             setTimeout(() => {
@@ -477,9 +472,10 @@
         }
     }
 
+    let overlayTimeout;
 
-    // --- ARTIFICIAL INTELLIGENCE ---
     function triggerOverlay(message, mode = 'fail'){
+        clearTimeout(overlayTimeout);
         overlay = {show: true, text:message, mode};
 
         setTimeout(() => {
@@ -487,28 +483,43 @@
         }, 2000);
     }
 
-    function executeEnemyTurn() {
-        // ALERT 1: Did Svelte successfully hand the turn to the AI?
-        console.log("🔥 DEBUG: executeEnemyTurn triggered!");
+    // --- ARTIFICIAL INTELLIGENCE ---
+    function syncStateToAI() {
+        const aiGame = new F3Game();
+        aiGame.currentPlayer = 'BLUE'; 
 
+        aiGame.redFleets = fleetSelections.map((f, i) => {
+            const hex = gridHexes.find(h => h.q === f.q && h.r === f.r);
+            return { id: `R${i + 1}`, pos: HexUtils.posToString({ col: hex.col, row: hex.row }), hp: f.health, fuel: f.fuel, isHidden: !isRevealed };
+        });
+
+        aiGame.blueFleets = enemyFleets.map(f => {
+            const hex = gridHexes.find(h => h.q === f.q && h.r === f.r);
+            return { id: f.id, pos: HexUtils.posToString({ col: hex.col, row: hex.row }), hp: f.health, fuel: f.fuel, isHidden: false };
+        });
+
+        enemySearchedHexes.forEach(hex => {
+            const idx = aiGame.posToIndex(HexUtils.posToString({ col: hex.col, row: hex.row }));
+            const hit = fleetSelections.some(f => f.q === hex.q && f.r === hex.r);
+            aiGame.blueIntel[idx] = hit ? 'S' : 'E';
+        });
+
+        return aiGame;
+    }
+
+    function executeEnemyTurn() {
+        if (gameOver) return; // Stop the AI if the game is over!
         isEnemyTurn = true; 
         const aiGameState = syncStateToAI();
 
         setTimeout(() => {
             try {
-                // ALERT 2: Is the AI starting its math?
-                console.log("🔥 DEBUG: Starting MCTS search...");
-                
                 const mcts = new MCTS(300); 
                 const bestMove = mcts.search(aiGameState);
-                
-                // ALERT 3: Did the AI finish its math?
-                console.log("🔥 DEBUG: MCTS Finished. Best Move ->", bestMove);
 
                 if (!bestMove) {
-                    triggerOverlay("AI HAS NO VALID MOVES", "success");
-                    endEnemyTurn();
-                    return;
+                    triggerOverlay("AI PASSED TURN", "success");
+                    endEnemyTurn(); return;
                 }
 
                 const parts = bestMove.split('_');
@@ -519,64 +530,65 @@
                     const targetOffset = HexUtils.parsePos(parts[2]); 
                     const targetHex = gridHexes.find(h => h.col === targetOffset.col && h.row === targetOffset.row);
 
-                    enemyFleets = enemyFleets.map(f => {
-                        if (f.id === fleetId) { 
-                            return { ...f, q: targetHex.q, r: targetHex.r, fuel: f.fuel - 1 };
-                        }
-                        return f;
-                    });
+                    enemyFleets = enemyFleets.map(f => (f.id === fleetId) ? { ...f, q: targetHex.q, r: targetHex.r, fuel: f.fuel - 1 } : f);
                     triggerOverlay(`ENEMY MOVED`, "fail");
                 } 
                 else if (command === "ISR") {
                     const scanType = parts[1]; 
                     let scannedHexes = parts.slice(2).map(posStr => {
                         const offset = HexUtils.parsePos(posStr);
-                        if (!offset) return null; 
-                        return gridHexes.find(h => h.col === offset.col && h.row === offset.row);
+                        return offset ? gridHexes.find(h => h.col === offset.col && h.row === offset.row) : null;
                     }).filter(Boolean); 
 
                     enemySearchedHexes = [...enemySearchedHexes, ...scannedHexes];
                     
-                    const detectedFriendly = scannedHexes.find(hex => 
-                        fleetSelections.some(f => f.q === hex.q && f.r === hex.r)
-                    );
+                    const detectedFriendly = scannedHexes.find(hex => fleetSelections.some(f => f.q === hex.q && f.r === hex.r));
 
                     if (detectedFriendly) {
                         isRevealed = true; 
-                        triggerOverlay(`WARNING: ${scanType} SCAN DETECTED YOU!`, "fail");
-                        
+                        triggerOverlay(`WARNING: YOU WERE DETECTED!`, "fail");
+                        // Safely apply damage to player ship based on UI rules
                         fleetSelections = fleetSelections.map(f => {
                             if (f.q === detectedFriendly.q && f.r === detectedFriendly.r) {
                                 return { ...f, health: f.health - 1 };
                             }
                             return f;
-                        });
-                    } else {
-                        triggerOverlay(`ENEMY CONDUCTED ${scanType} SCAN`, "fail");
+                        }).filter(f => f.health > 0);
+                        checkWinCondition();
+                    } else { 
+                        triggerOverlay(`ENEMY CONDUCTED ${scanType} SCAN`, "fail"); 
                     }
                 }
-
                 endEnemyTurn();
-
             } catch (error) {
-                console.error("🔥 CRITICAL AI FAILURE:", error);
-                alert("AI Crashed! The error is: " + error.message);
+                console.error("AI Crash:", error);
                 endEnemyTurn(); 
             }
-
         }, 300); 
     }
 
-    function endTurnRoutine() {
-        currentTurn += 1;
-        isEnemyTurn = false; // Turns Status Bar back to BLUE
+    function endEnemyTurn() {
+        setTimeout(() => {
+            currentTurn += 1;
+            isEnemyTurn = false; 
+        }, 2500); 
+    }
+
+    // --- DEV TOOLS ---
+    function handleDevShortcut(e) {
+        // Press Ctrl + Shift + E to toggle the enemy reveal!
+        if (e.ctrlKey && e.shiftKey && (e.key === 'e' || e.key === 'E')) {
+            isRevealed = !isRevealed;
+            showWarning(mousePos.x || window.innerWidth/2, mousePos.y || window.innerHeight/2, 
+                isRevealed ? "DEV MODE: ENEMY REVEALED" : "DEV MODE: HIDDEN");
+        }
     }
 
 </script>
 
-<!--MAP HTML-->
+<svelte:window onkeydown={handleDevShortcut} />
 <div class="layout-container" class:not-my-turn={isConfirmed && !isMyTurn}>
-    <!--LEFT-->
+    
     <Sidebar 
         bind:targetingMode 
         bind:isConfirmed 
@@ -595,7 +607,6 @@
         onFireResolve={resolveAttack}
     />
 
-    <!--MIDDLE-->
     <div 
         class="map-area"
         role="application"
@@ -653,8 +664,7 @@
 
             <g transform="translate(30, 40)"> 
                 {#each grid as hex}
-                    <!-- CHEAT MODE: SHOWS ENEMEY LOCATION -->
-                    {@const isEnemyFleet = enemyFleets.some(e => e.q === hex.q && e.r === hex.r)} /* ADD THIS CONSTANT */
+                    {@const isEnemyFleet = enemyFleets.some(e => e.q === hex.q && e.r === hex.r)}
 
                     {@const config = specialTiles.find(t => t.col === hex.col && t.row === hex.row)}
                     {@const isFleet = fleetSelections.some(f => f.q === hex.q && f.r === hex.r)}
@@ -680,7 +690,7 @@
                             stroke-width="0.5"
                         />
                         
-                        {#if isEnemyFleet}
+                        {#if isEnemyFleet && isRevealed}
                             <polygon
                                 points={pointsStr}
                                 fill="#000000" 
@@ -703,19 +713,6 @@
                             >
                                 ENEMY
                             </text>
-                        {/if}
-
-                        {#if isFleet && isRevealed}
-                            <polygon
-                                points={pointsStr}
-                                fill="rgba(226, 74, 74, 0.3)"
-                                stroke="#e24a4a"
-                                stroke-width="4"
-                                stroke-dasharray="8,4"
-                                pointer-events="none"
-                            >
-                                <animate attributeName="opacity" values="0.3;1;0.3" dur="1.5s" repeatCount="indefinite" />
-                            </polygon>
                         {/if}
 
                         <polygon
@@ -843,9 +840,39 @@
     </div>
     {/if}
 
+    {#if gameOver}
+    <div class="fullscreen-lock-overlay" style="background: rgba(10, 15, 30, 0.95); flex-direction: column; animation: fadeInStay 0.5s forwards; opacity: 1;">        <div class="failure-content" style="text-align: center;">
+            <div class="glitch-text" style="color: {gameResult === 'VICTORY' ? '#4ade80' : '#e24a4a'}; animation: none;">
+                {gameResult}
+            </div>
+            <div class="sub-text" style="color: #abbbd1; margin-bottom: 40px; font-size: 1.5rem; letter-spacing: 5px;">
+                {gameResult === 'VICTORY' ? 'ALL ENEMY FLEETS DESTROYED' : 'ALL FRIENDLY FLEETS LOST'}
+            </div>
+            
+            <div style="display: flex; gap: 20px; justify-content: center;">
+                <button 
+                    class="nav-btn" 
+                    onclick={() => window.location.href = '/'}
+                    onmouseenter={() => $isHovering = true} 
+                    onmouseleave={() => $isHovering = false}
+                >
+                    MAIN MENU
+                </button>
+                <button 
+                    class="nav-btn" 
+                    onclick={() => window.location.reload()}
+                    onmouseenter={() => $isHovering = true} 
+                    onmouseleave={() => $isHovering = false}
+                >
+                    PLAY AGAIN
+                </button>
+            </div>
+        </div>
+    </div>
+    {/if}
+
  
 
-    <!--RIGHT-->
     <StatusBar 
         bind:currentTurn
         bind:isRevealed
@@ -855,7 +882,6 @@
     />
 </div>
 
-<!--MAP HTML APPEARANCE-->
 <style>
     .layout-container {     
         display: flex; 
@@ -965,6 +991,7 @@
         z-index: 9999;
         pointer-events: all;
         animation: fadeInOut 2s forwards;
+        cursor: none; 
     }
 
     /* Default (Fail) Color */
@@ -988,11 +1015,37 @@
         opacity: 1;
     }
 
+    /* Navigation buttons on game over screen */
+    .nav-btn {
+        background: transparent;
+        border: 2px solid #3b82f6;
+        color: #3b82f6;
+        padding: 15px 30px;
+        font-family: 'Chakra Petch', sans-serif;
+        font-size: 1.2rem;
+        font-weight: bold;
+        cursor: none; /* <-- CHANGE THIS FROM 'pointer' TO 'none' */
+        transition: all 0.2s;
+        clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
+    }
+
+    .nav-btn:hover {
+        background: rgba(59, 130, 246, 0.2);
+        color: white;
+        border-color: white;
+        transform: translateY(-2px);
+    }
+
     @keyframes fadeInOut {
         0% { opacity: 0; transform: scale(1.1); }
         15% { opacity: 1; transform: scale(1); }
         85% { opacity: 1; transform: scale(1); }
         100% { opacity: 0; transform: scale(0.9); }
+    }
+
+    @keyframes fadeInStay {
+        0% { opacity: 0; transform: scale(1.05); }
+        100% { opacity: 1; transform: scale(1); }
     }
     
 </style>
