@@ -96,15 +96,7 @@
         if (isAttack) {
             onFireResolve(result1, result2);
         } else {
-            const threshold = currentMode === 'directional' ? 4 : 3;
-            const isRollSuccess = result1 <= threshold;
-
-            if (isRollSuccess) {
-                onSearch(); 
-            } else {
-                onScanResult(`SCAN FAILED: ROLLED ${result1}`, 'fail');
-                onTurnEnd();
-            }
+            onSearch(result1);
         }
 
         currentRollDisplay1 = 0;

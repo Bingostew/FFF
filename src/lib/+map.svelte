@@ -131,14 +131,32 @@
             });
 
             $socket.on('strike_result', ({attacker, hit, targetHex, fleetKey, hpRemaining, isDetroyed, distance}) => {
+                
+                if (hit === 2) {
+                    triggerOverlay("TARGET DESTROYED: 2 HITS", "success");
+                } else if (hit === 1) {
+                    triggerOverlay("TARGET HIT", "success");
+                } else {
+                    triggerOverlay("TARGET MISSED: 0 HITS", "fail");
+                }
+                
                 handleTurnEnd();
+            });
+
+            $socket.on('fleet_moved', ({playerId, fleetKey, newPosition}) =>{
+                handleTurnEnd();
+            });
+
+            $socket.on('error', (message) => {
+                console.error("Server Error:", message);
+                alert(message); // This will show "Game does not exist"
             });
 
             // Map.svelte -> inside socket listeners effect
             const ISREvents = ['focus_result', 'directional_result', 'area_result'];
 
             const onISRResult = (data) => {
-                const { playerName, revealPos } = data;
+                const { playerName, revealPos, positions, rollSuccess } = data;
                 
                 if (!revealPos || revealPos.length === 0) {
                     triggerOverlay("AREA CLEAR", 'success');
@@ -157,7 +175,11 @@
 
                     // 3. Set the Fire Mission target
                     // We take the first non-destroyed ship as the primary target
-                    if (!hit.isDestroyed && !targetEnemy) {
+
+                    if(!rollSuccess){
+                        triggerOverlay("SCAN FAILED: ROLL FAILURE", 'fail');
+                    }
+                    else if (!hit.isDestroyed && !targetEnemy) {
                         targetEnemy = hex;
                         sourceFleet = null;
                         triggerOverlay("TARGET ACQUIRED", 'success');
@@ -264,10 +286,14 @@
                             ? { ...f, q: hex.q, r: hex.r, fuel: f.fuel - 1 } 
                             : f
                     );
-                    selectedFleetToMove = null; 
-                    targetingMode = 'focus'; 
+                   
                     if (isMultiplayer) {
-                        $socket.emit('move_fleet', { gameId: $gameId, fleet: selectedFleetToMove, target: hex });
+                        const fleetIndex = fleetSelections.findIndex(f => 
+                            f.q === selectedFleetToMove.q && f.r === selectedFleetToMove.r
+                        );
+
+                        let fleetStr = fleetIndex === 0 ? 'alpha' : 'beta';
+                        $socket.emit('move_fleet', { gameId: $gameId, fleetKey: fleetStr, newPosition: {q: selectedFleetToMove.q, r:selectedFleetToMove.r} });
                     } else {
                         executeEnemyTurn(); 
                         setTimeout(() => executeEnemyTurn(), 2000);
@@ -459,7 +485,9 @@
         if (isMultiplayer) {
             $socket.emit('execute_strike', { 
                 gameId: $gameId, 
-                targetHex: { q: targetEnemy.q, r: targetEnemy.r }
+                targetHex: { q: targetEnemy.q, r: targetEnemy.r },
+                dieResult1 :roll1,
+                dieResult2: roll2
             });
             targetEnemy = null;
         } else {

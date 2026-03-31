@@ -26,6 +26,7 @@ module.exports = (io, lobbies) => {
             fleetKey = 'beta';
         }
 
+
         if (fleetKey) {
             const fleet = opponentFleets[fleetKey];
             fleet.hp -= 1;
@@ -189,7 +190,7 @@ module.exports = (io, lobbies) => {
 
 
         // Handle the "Finish" - Strike Logic
-        socket.on('execute_strike', ({ gameId, targetHex, dieResult }) => {
+        socket.on('execute_strike', ({ gameId, targetHex, dieResult1, dieResult2 }) => {
             const lobby = lobbies[gameId];
             if (checkForActionConditions(lobby, socket) === false) {
                 return;
@@ -217,23 +218,17 @@ module.exports = (io, lobbies) => {
             }
             const opponentFleets = lobby.fleets[opponentId];
 
-            let hit = false;
+            let hits = 0;
             let fleetKey = null;
             let destroyed = false;
 
-            let rollSuccessful = false;
-            if (shortestDistance <= 2 && dieResult >= 2) {
-                rollSuccessful = true;
-            } else if ((shortestDistance >= 3 && shortestDistance <= 6) && dieResult >= 3) {
-                rollSuccessful = true;
-            } else if (shortestDistance > 6 && dieResult >= 4) {
-                rollSuccessful = true;
-            }
+            if (dieResult1 >= shortestDistance) hits++;
+            if (dieResult2 >= shortestDistance) hits++;
 
-            if (rollSuccessful) {
+            for (let i = 0; i < hits; i++) {
                 fleetKey = resolveStrikeHit(targetHex, opponentFleets);
+                
                 if (fleetKey) {
-                    hit = true;
                     destroyed = opponentFleets[fleetKey].isDestroyed;
                 }
             }
@@ -241,10 +236,10 @@ module.exports = (io, lobbies) => {
             // 2. Broadcast result to the room
             io.to(gameId).emit('strike_result', {
                 attacker: socket.id,
-                hit: hit,
+                hit: hits,
                 targetHex: targetHex,
                 fleetKey: fleetKey,
-                hpRemaining: hit ? opponentFleets[fleetKey].hp : null,
+                hpRemaining: hits > 0 ? opponentFleets[fleetKey].hp : null,
                 isDestroyed: destroyed,
                 distance: shortestDistance
             });
@@ -253,7 +248,7 @@ module.exports = (io, lobbies) => {
                 action: 'strike',
                 playerId: socket.id,
                 targetHex: targetHex,
-                hit: hit,
+                hit: hits,
                 fleetKey: fleetKey,
                 distance: shortestDistance,
                 timestamp: Date.now()
@@ -431,10 +426,10 @@ module.exports = (io, lobbies) => {
                     if (comparePositions(Positions[0],fleet)){
                         revealPos.push(fleet);
                     }
-                    else if (comparePositions(Positions[1],fleet)){
+                    else if (Positions.length > 1 && comparePositions(Positions[1],fleet)){
                         revealPos.push(fleet);
                     }
-                    else if (comparePositions(Positions[2],fleet)){
+                    else if (Positions.length > 2 && comparePositions(Positions[2],fleet)){
                         revealPos.push(fleet);
                     }
                 }
@@ -444,15 +439,19 @@ module.exports = (io, lobbies) => {
                 io.to(gameId).emit('focus_result', {
                     playerName: player.name,
                     revealPos: revealPos,
-                    positions:Positions
+                    positions:Positions,
+                    rollSuccess: true
                 });
             }
             else {
                 io.to(gameId).emit('focus_result', {
                     playerName: player.name,
                     revealPos: null,
-                    postitions:Positions
+                    postitions:Positions,
+                    rollSuccess: true
+
                 });
+                switchTurn(gameId);
             }
         });
 
@@ -483,19 +482,34 @@ module.exports = (io, lobbies) => {
                 }
             }
 
-            if ((revealPos.length > 0) && (dieResult <= 4)) {
+            if(dieResult > 4){
                 io.to(gameId).emit('directional_result', {
                     playerName: player.name,
                     revealPos: revealPos,
-                    positions: Positions
+                    positions: Positions,
+                    rollSuccess: false
+                });
+                switchTurn(gameId);
+
+            }
+            else if (revealPos.length > 0) {
+                io.to(gameId).emit('directional_result', {
+                    playerName: player.name,
+                    revealPos: revealPos,
+                    positions: Positions,
+                    rollSuccess: true
+
                 });
             }
             else {
                 io.to(gameId).emit('directional_result', {
                     playerName: player.name,
                     revealPos: null,
-                    positions: Positions
+                    positions: Positions,
+                    rollSuccess: true
+
                 });
+                switchTurn(gameId);
             }
         });
 
@@ -528,7 +542,17 @@ module.exports = (io, lobbies) => {
                 }
             }
 
-            if ((revealPos.length > 0) && (dieResult <= 3)) {
+            if(dieResult > 3){
+                io.to(gameId).emit('area_result', {
+                    playerName: player.name,
+                    revealPos: revealPos,
+                    positions: Positions,
+                    rollSuccess: false
+                });
+                switchTurn(gameId);
+
+            }
+            else if ((revealPos.length > 0) && (dieResult <= 3)) {
                 io.to(gameId).emit('area_result', {
                     playerName: player.name,
                     revealPos: revealPos,
@@ -541,6 +565,7 @@ module.exports = (io, lobbies) => {
                     revealPos: null,
                     positions: Positions
                 });
+                switchTurn(gameId);
             }
         });
 
