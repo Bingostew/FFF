@@ -190,7 +190,7 @@
             href="/map-editor"
             class ="select-link"
             draggable="false" 
-            onclick={(e) => { openMultiplayerModal(e); $isHovering = false; }} 
+            onclick={(e) => { $isHovering = false; }} 
             onmouseenter={() => $isHovering = true} 
             onmouseleave={() => $isHovering = false}
         >
