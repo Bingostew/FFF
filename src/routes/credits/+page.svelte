@@ -2,7 +2,7 @@
     let imageUrl = "/Find-Fix-and-Finish-2.jpg"; 
 
     // Store your paragraph text here
-    let missionText = "Find, Fix, Finish is a capstone project developed by 5 midshipmen from the United States Naval Academy. Midshipmen developers are listed below, and designer notes and credits can be found in the image to the right.";
+    let missionText = "Find, Fix, Finish is a capstone project designed by CNA and developed by 5 midshipmen from the United States Naval Academy. Midshipmen developers are listed below, and designer notes and credits can be found in the image to the right.";
     
     // Split the text into an array of words
     let words = missionText.split(" ");
@@ -14,7 +14,7 @@
         <div class="content-wrapper">
             <h1 class="typewriter" style="--delay: 0.2s; --duration: 1s;">FIND FIX FINISH CREDITS</h1>
             
-            <h2 class="typewriter" style="--delay: 1.2s; --duration: 1s;">Customer: Center for Naval Analyses</h2>
+            <h2 class="typewriter" style="--delay: 1.2s; --duration: 1s;"><a href="https://www.cna.org/centers-and-divisions/cna/ow/gaming-and-integration" target="_blank">Center for Naval Analyses</a></h2>
             
             <p class="animated-paragraph">
                 {#each words as word, i}
@@ -39,6 +39,11 @@
 </div>
 
 <style>
+    a:link, a:visited, a:hover, a:active {
+    color: #fff;
+    text-decoration: none; /* Optional: removes the default underline */
+    }
+
     /* --- LAYOUT STYLES --- */
     .split-container {
         display: flex;
