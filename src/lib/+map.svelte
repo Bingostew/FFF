@@ -31,6 +31,12 @@
     let selectedFleetToMove = $state(null);
     let warning = $state({ show: false, x: 0, y: 0, text: '', id: 0 });
     
+    // AI Memory for Hunt & Seek logic
+    let aiMemory = $state({
+        knownTargets: [],     // Hexes where we know a ship is sitting
+        suspectedHexes: []    // Adjacent hexes to search if the ship fled
+    });
+    
     let currentTurn = $state(1);
     let mousePos = $state({ x: 0, y: 0 }); 
     let friendlySearchedHexes = $state([]);
@@ -380,20 +386,45 @@
     }
 
     function executeEnemyTurn() {
-        if (gameOver) return; // Stop the AI if the game is over!
+        if (gameOver) return; 
         isEnemyTurn = true; 
         const aiGameState = syncStateToAI();
 
         setTimeout(() => {
             try {
-                const mcts = new MCTS(300); 
-                const bestMove = mcts.search(aiGameState);
+                // 1. --- THE HEURISTIC OVERRIDE: HUNT & DESTROY ---
+                let forcedMove = null;
+
+                // Cheat check: Remove destroyed ships from memory so it doesn't shoot ghosts
+                aiMemory.knownTargets = aiMemory.knownTargets.filter(targetHex => 
+                    fleetSelections.some(f => f.q === targetHex.q && f.r === targetHex.r)
+                );
+
+                if (aiMemory.knownTargets.length > 0) {
+                    // FIRE AT KNOWN TARGET
+                    const target = aiMemory.knownTargets[0];
+                    const posStr = HexUtils.posToString({ col: target.col, row: target.row });
+                    forcedMove = `ISR_focus_${posStr}`;
+                } else if (aiMemory.suspectedHexes.length > 0) {
+                    // HUNT FLEEING SHIP (Check adjacent hexes)
+                    const suspect = aiMemory.suspectedHexes.shift(); 
+                    const posStr = HexUtils.posToString({ col: suspect.col, row: suspect.row });
+                    forcedMove = `ISR_focus_${posStr}`;
+                }
+
+                // 2. --- GET MOVE (Use Override, or fallback to MCTS) ---
+                let bestMove = forcedMove;
+                if (!bestMove) {
+                    const mcts = new MCTS(300); 
+                    bestMove = mcts.search(aiGameState);
+                }
 
                 if (!bestMove) {
                     triggerOverlay("AI PASSED TURN", "success");
                     endEnemyTurn(); return;
                 }
 
+                // 3. --- EXECUTE MOVE & UPDATE MEMORY ---
                 const parts = bestMove.split('_');
                 const command = parts[0]; 
 
@@ -417,17 +448,29 @@
                     const detectedFriendly = scannedHexes.find(hex => fleetSelections.some(f => f.q === hex.q && f.r === hex.r));
 
                     if (detectedFriendly) {
+                        // HIT! Lock target into memory and clear suspected hexes
+                        aiMemory.knownTargets = [{ q: detectedFriendly.q, r: detectedFriendly.r, col: detectedFriendly.col, row: detectedFriendly.row }];
+                        aiMemory.suspectedHexes = []; 
+                        
                         isRevealed = true; 
                         triggerOverlay(`WARNING: YOU WERE DETECTED!`, "fail");
-                        // Safely apply damage to player ship based on UI rules
+                        
                         fleetSelections = fleetSelections.map(f => {
-                            if (f.q === detectedFriendly.q && f.r === detectedFriendly.r) {
-                                return { ...f, health: f.health - 1 };
-                            }
+                            if (f.q === detectedFriendly.q && f.r === detectedFriendly.r) return { ...f, health: f.health - 1 };
                             return f;
                         }).filter(f => f.health > 0);
                         checkWinCondition();
+
                     } else { 
+                        // MISS! Did we miss a known target? If so, they fled. Hunt them.
+                        const missedKnown = aiMemory.knownTargets.find(t => scannedHexes.some(s => s.q === t.q && s.r === t.r));
+                        if (missedKnown) {
+                            aiMemory.knownTargets = []; // Clear the old known spot
+                            // Generate adjacent hexes using 'area' mode, filter out land and already searched spots
+                            aiMemory.suspectedHexes = getTargetHexes(missedKnown, 'area', 0, gridHexes)
+                                .filter(h => !specialTiles.some(t => t.col === h.col && t.row === h.row))
+                                .filter(h => !enemySearchedHexes.some(s => s.q === h.q && s.r === h.r));
+                        }
                         triggerOverlay(`ENEMY CONDUCTED ${scanType} SCAN`, "fail"); 
                     }
                 }
@@ -438,7 +481,7 @@
             }
         }, 300); 
     }
-
+    
     function endEnemyTurn() {
         setTimeout(() => {
             currentTurn += 1;
