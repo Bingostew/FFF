@@ -187,6 +187,19 @@
 
     <li>
         <a 
+            href="/map-editor"
+            class ="select-link"
+            draggable="false" 
+            onclick={(e) => { $isHovering = false; }} 
+            onmouseenter={() => $isHovering = true} 
+            onmouseleave={() => $isHovering = false}
+        >
+            MAP EDITOR
+        </a>
+    </li>   
+
+    <li>
+        <a 
             href="/tutorial"
             class ="select-link"
             draggable="false" 
