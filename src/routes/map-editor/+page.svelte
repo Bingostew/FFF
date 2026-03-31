@@ -77,7 +77,7 @@
                 tiles: JSON.parse(exportedData)
             };
 
-            const res = await fetch(`http://${window.location.hostname}:3000/save-map`, {
+            const res = await fetch(`http://${window.location.hostname}:8000/save-map`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
@@ -97,7 +97,7 @@
 
     async function openLoadMapModal() {
         try {
-            const res = await fetch(`http://${window.location.hostname}:3000/list-maps`);
+            const res = await fetch(`http://${window.location.hostname}:8000/list-maps`);
             mapList = await res.json();
         } catch (e) {
             mapList = [];
@@ -108,7 +108,7 @@
 
     async function loadMap(mapFile) {
         try {
-            const res = await fetch(`http://${window.location.hostname}:3000/maps/${encodeURIComponent(mapFile)}?t=` + Date.now());
+            const res = await fetch(`http://${window.location.hostname}:8000/maps/${encodeURIComponent(mapFile)}?t=` + Date.now());
             if (!res.ok) throw new Error('Map file not found on server.');
             let data = await res.json();
 
