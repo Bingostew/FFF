@@ -219,7 +219,8 @@
                         $socket.emit('move_fleet', { gameId: $gameId, fleet: selectedFleetToMove, target: hex });
                     } else {
                         selectedFleetToMove = null; targetingMode = 'focus'; 
-                        handleTurnEnd(); // Switch turn to AI after moving
+                        triggerOverlay("FLEET REPOSITIONED", "success");
+                        setTimeout(() => executeEnemyTurn(), 2000); 
                     }
                 } else { showWarning(event.clientX, event.clientY, `${selectedFleetToMove.name} is out of fuel!`); }
             } else { showWarning(event.clientX, event.clientY, "Select a fleet to jump first!"); }
@@ -228,7 +229,9 @@
 
         if (isConfirmed) {
             const friendlyFleet = fleetSelections.find(f => f.q === hex.q && f.r === hex.r);
-            const isDetectedEnemy = enemySearchedHexes.some(e => e.q === hex.q && e.r === hex.r);
+            const isDetectedEnemy = enemyFleets.some(e => e.q === hex.q && e.r === hex.r) && 
+                                    friendlySearchedHexes.some(s => s.q === hex.q && s.r === hex.r);
+                                    
             if (friendlyFleet) { sourceFleet = friendlyFleet; showWarning(event.clientX, event.clientY, `Source: ${sourceFleet.name}`); }
             if (isDetectedEnemy) targetEnemy = hex;
         }
@@ -311,17 +314,19 @@
             friendlySearchedHexes = [...friendlySearchedHexes, ...newSearches];
 
             if(detected){
-                targetEnemy = detected;
-                sourceFleet = null;
-                selectedGroup = []; targetingMode = 'focus'; return true; 
+                selectedGroup = []; 
+                return true; 
             }
-            selectedGroup = []; targetingMode = 'focus'; return false;
+            selectedGroup = []; 
+            return false;
         }
     }
 
     function handleTurnEnd() {
-        targetEnemy = null; sourceFleet = null; selectedGroup = []; targetingMode = 'focus';
-        if (!isMultiplayer) setTimeout(() => { executeEnemyTurn(); }, 1500); 
+        targetEnemy = null; sourceFleet = null; selectedGroup = [];
+        if (!isMultiplayer){
+            turnTimeout = setTimeout(() => { executeEnemyTurn(); }, 1500);
+        } 
     }
 
     function resolveAttack(roll1, roll2) {
@@ -338,24 +343,47 @@
             targetEnemy = null;
         } else {
             // Local Attack Logic
-            const hit1 = roll1 >= requiredRoll; const hit2 = roll2 >= requiredRoll;
-            const totalHits = (hit1 ? 1 : 0) + (hit2 ? 1 : 0);
+            const hit1 = roll1 >= requiredRoll; 
+            const hit2 = roll2 >= requiredRoll;
+            const totalHits = (hit1 || hit2) ? 1 : 0;
             
-            if (totalHits === 2) triggerOverlay("TARGET DESTROYED: 2 HITS", "success");
-            else if (totalHits === 1) triggerOverlay("TARGET HIT", "success");
-            else triggerOverlay("TARGET MISSED: 0 HITS", "fail");
+            let overlayMsg = "";
+            if (totalHits > 0) {
+                overlayMsg = "TARGET HIT: 1 DAMAGE";
+            } else {
+                overlayMsg = "TARGET MISSED: 0 DAMAGE";
+            }
             
             const enemyIndex = enemyFleets.findIndex(e => e.q === targetEnemy.q && e.r === targetEnemy.r);
             if (enemyIndex !== -1 && totalHits > 0){
                 enemyFleets[enemyIndex].health -= totalHits;
-                if(enemyFleets[enemyIndex].health <= 0) enemyFleets = enemyFleets.filter((_, i) => i !== enemyIndex);
+                if(enemyFleets[enemyIndex].health <= 0){
+                    enemyFleets = enemyFleets.filter((_, i) => i !== enemyIndex);
+                }
                 checkWinCondition(); 
             }
-            setTimeout(() => { targetEnemy = null; sourceFleet = null; selectedGroup = []; executeEnemyTurn(); }, 2000);
+
+            // Player Counter-Detection Roll
+            const counterRoll = Math.floor(Math.random() * 6) + 1;
+            if (counterRoll >= 3) {
+                enemySearchedHexes = [...enemySearchedHexes, { q: sourceFleet.q, r: sourceFleet.r }];
+                triggerOverlay(`${overlayMsg} | WARNING: LOCATION COMPROMISED!`, "fail");
+            } else {
+                triggerOverlay(overlayMsg, totalHits > 0 ? "success" : "fail");
+            }
+
+            setTimeout(() => { 
+                targetEnemy = null; 
+                sourceFleet = null; 
+                selectedGroup = []; 
+                executeEnemyTurn(); 
+            }, 2000);
         }
     }
 
     let overlayTimeout;
+    let aiTimeout;
+    let turnTimeout;
 
     function triggerOverlay(message, mode = 'fail'){
         clearTimeout(overlayTimeout);
@@ -392,29 +420,26 @@
         isEnemyTurn = true; 
         const aiGameState = syncStateToAI();
 
-        setTimeout(() => {
+        aiTimeout = setTimeout(() => {
             try {
                 // 1. --- THE HEURISTIC OVERRIDE: HUNT & DESTROY ---
                 let forcedMove = null;
 
-                // Cheat check: Remove destroyed ships from memory so it doesn't shoot ghosts
                 aiMemory.knownTargets = aiMemory.knownTargets.filter(targetHex => 
                     fleetSelections.some(f => f.q === targetHex.q && f.r === targetHex.r)
                 );
 
                 if (aiMemory.knownTargets.length > 0) {
-                    // FIRE AT KNOWN TARGET
                     const target = aiMemory.knownTargets[0];
                     const posStr = HexUtils.posToString({ col: target.col, row: target.row });
                     forcedMove = `ISR_focus_${posStr}`;
                 } else if (aiMemory.suspectedHexes.length > 0) {
-                    // HUNT FLEEING SHIP (Check adjacent hexes)
                     const suspect = aiMemory.suspectedHexes.shift(); 
                     const posStr = HexUtils.posToString({ col: suspect.col, row: suspect.row });
                     forcedMove = `ISR_focus_${posStr}`;
                 }
 
-                // 2. --- GET MOVE (Use Override, or fallback to MCTS) ---
+                // 2. --- GET MOVE ---
                 let bestMove = forcedMove;
                 if (!bestMove) {
                     const mcts = new MCTS(300); 
@@ -455,20 +480,37 @@
                         aiMemory.suspectedHexes = []; 
                         
                         isRevealed = true; 
-                        triggerOverlay(`WARNING: YOU WERE DETECTED!`, "fail");
                         
-                        fleetSelections = fleetSelections.map(f => {
-                            if (f.q === detectedFriendly.q && f.r === detectedFriendly.r) return { ...f, health: f.health - 1 };
-                            return f;
-                        }).filter(f => f.health > 0);
+                        // AI Rolls 2 Dice
+                        const roll1 = Math.floor(Math.random() * 6) + 1;
+                        const roll2 = Math.floor(Math.random() * 6) + 1;
+                        const aiRequiredRoll = 3; 
+                        const hits = (roll1 >= aiRequiredRoll || roll2 >= aiRequiredRoll) ? 1 : 0;
+                        
+                        if (hits > 0) {
+                            fleetSelections = fleetSelections.map(f => {
+                                if (f.q === detectedFriendly.q && f.r === detectedFriendly.r) return { ...f, health: f.health - hits };
+                                return f;
+                            }).filter(f => f.health > 0); 
+                        }
+
+                        // AI Counter-Detection Roll (Your friend's logic)
+                        const counterRoll = Math.floor(Math.random() * 6) + 1;
+                        if (counterRoll >= 3 && enemyFleets.length > 0) {
+                            const attacker = enemyFleets[Math.floor(Math.random() * enemyFleets.length)];
+                            friendlySearchedHexes = [...friendlySearchedHexes, { q: attacker.q, r: attacker.r }];
+                            triggerOverlay(`ENEMY ROLLED ${roll1} & ${roll2}. WE TRACED THEIR SIGNAL!`, hits > 0 ? "fail" : "success");
+                        } else {
+                            triggerOverlay(`ENEMY ROLLED ${roll1} & ${roll2}. ${hits} HITS!`, hits > 0 ? "fail" : "success");
+                        }
+                        
                         checkWinCondition();
 
                     } else { 
                         // MISS! Did we miss a known target? If so, they fled. Hunt them.
                         const missedKnown = aiMemory.knownTargets.find(t => scannedHexes.some(s => s.q === t.q && s.r === t.r));
                         if (missedKnown) {
-                            aiMemory.knownTargets = []; // Clear the old known spot
-                            // Generate adjacent hexes using 'area' mode, filter out land and already searched spots
+                            aiMemory.knownTargets = []; 
                             aiMemory.suspectedHexes = getTargetHexes(missedKnown, 'area', 0, gridHexes)
                                 .filter(h => !specialTiles.some(t => t.col === h.col && t.row === h.row))
                                 .filter(h => !enemySearchedHexes.some(s => s.q === h.q && s.r === h.r));
@@ -483,7 +525,7 @@
             }
         }, 300); 
     }
-    
+
     function endEnemyTurn() {
         setTimeout(() => {
             currentTurn += 1;
@@ -505,7 +547,6 @@
         clearTimeout(aiTimeout);
         clearTimeout(turnTimeout);
     });
-
 </script>
 
 <svelte:window onkeydown={handleDevShortcut} />
@@ -571,7 +612,7 @@
                     >
                         <polygon points={pointsStr} fill={config ? `url(#pattern-${hex.col}-${hex.row})` : "url(#water-pattern)"} stroke="black" stroke-width="0.5"/>
                         
-                        {#if isEnemyFleet && isRevealed}
+                        {#if isEnemyFleet && (isRevealed || isFriendlySearched)}
                             <polygon points={pointsStr} fill="#000000" fill-opacity="0.6" stroke="#4ade80" stroke-width="2" pointer-events="none" />
                             <text x={hex.x} y={hex.y} dy="5" text-anchor="middle" fill="#4ade80" font-family="'Chakra Petch', sans-serif" font-size="12" font-weight="bold" pointer-events="none">ENEMY</text>
                         {/if}
