@@ -1,26 +1,153 @@
-<div class="page-content">
-  <h1 class="section-header">TEAM FIND, FIX, & FINISH</h1>
-  <p>Find, Fix, & Finish is a 2-player “Micro wargame” in which players wrestle with important information as they hunt for the opposing fleets. The game aims to familiarize players with the tense back and forth as each fleet simultaneously tries to find their targets while concealing their own fleets. Each of the ISR capabilities within the game broadly represents different means to find the enemy. “Focus ISR” represents imagery intelligence such as unmanned aerial systems. “Directional ISR” represents techniques like combat directional finding. “Area ISR” represents signals intelligence that covers a large area.
+<script>
+    let imageUrl = "/Find-Fix-and-Finish-2.jpg"; 
 
-Although immensely simplified, the game aims to highlight how different capabilities have comparative advantages, represented by a tradeoff between probability of success and area of coverage. The map and game are specifically designed so that no singular method is guaranteed or supreme. Each mechanic has its specific value and contextual application. Similarly, the simple combat mechanic aims to highlight key factors- such as distance and terrain - in maritime combat. In the spirit of Wayne Hugh’s Fleet Tactics, each player must strive to find the enemy first and strike decisively. If unsuccessful, the enemy fleet may surmise your own position or detect your position from our attack and respond with a counterattack of their own.</p>
-  <p>USNA CS CAPSTONE: 2025-2026</p>
+    // Store your paragraph text here
+    let missionText = "Find, Fix, Finish is a capstone project developed by 5 midshipmen from the United States Naval Academy. Midshipmen developers are listed below, and designer notes and credits can be found in the image to the right.";
+    
+    // Split the text into an array of words
+    let words = missionText.split(" ");
+</script>
+
+<div class="split-container">
+    
+    <div class="left-pane">
+        <div class="content-wrapper">
+            <h1 class="typewriter" style="--delay: 0.2s; --duration: 1s;">FIND FIX FINISH CREDITS</h1>
+            
+            <h2 class="typewriter" style="--delay: 1.2s; --duration: 1s;">Customer: Center for Naval Analyses</h2>
+            
+            <p class="animated-paragraph">
+                {#each words as word, i}
+                    <span class="word" style="--delay: {2.2 + (i * 0.08)}s">{word}</span>
+                {/each}
+            </p>
+            
+            <ul>
+                <li class="typewriter" style="--delay: 5.2s; --duration: 0.5s;"><strong>Developer 1: </strong> MIDN Tristen Alvis</li>
+                <li class="typewriter" style="--delay: 5.7s; --duration: 0.5s;"><strong>Developer 2: </strong> MIDN Johnson Ampofo</li>
+                <li class="typewriter" style="--delay: 6.2s; --duration: 0.5s;"><strong>Developer 3: </strong> MIDN Ana Gafton</li>
+                <li class="typewriter" style="--delay: 6.7s; --duration: 0.5s;"><strong>Developer 4: </strong> MIDN Ziming Huang</li>
+                <li class="typewriter" style="--delay: 7.2s; --duration: 0.5s;"><strong>Developer 5: </strong> MIDN Nick Smith</li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="right-pane">
+        <img src={imageUrl} alt="Mission Objective" class="intel-image boot-up" />
+    </div>
+
 </div>
 
 <style>
-  .page-content { 
-    padding: 100px 50px; 
-    color: #fff; 
-    font-family: 'Chakra Petch', sans-serif; 
-    z-index: 10;
-    font-size: 3.5vh; 
-    position: relative; 
-    user-select: none; 
-    -webkit-user-select: none; 
-  }
-  
-  .section-header { 
-    font-family: 'Black Ops One', cursive; 
-    font-size: 5vh; 
-    color: #a79d9d; 
-  }
+    /* --- LAYOUT STYLES --- */
+    .split-container {
+        display: flex;
+        width: 100vw;
+        height: 100vh;
+        color: #abbbd1;
+        font-family: 'Chakra Petch', sans-serif;
+        overflow: hidden;
+    }
+
+    .left-pane {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 2rem;
+        box-sizing: border-box;
+    }
+
+    .content-wrapper {
+        max-width: 800px;
+        width: 100%;
+    }
+
+    .right-pane {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-left: 2px solid #3b82f6;
+        padding: 2rem;
+        box-sizing: border-box;
+    }
+
+    .intel-image {
+        max-width: 100%;
+        max-height: 100%;
+        object-fit: contain;
+        border-radius: 8px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+    }
+
+    /* Text Polish */
+    h1 {
+        color: #3b82f6;
+        font-size: clamp(1.5rem, 3.5vw, 4rem);
+        margin-bottom: 0.5rem;
+        text-shadow: 0 0 10px rgba(59, 130, 246, 0.3);
+        white-space: nowrap; /* Ensures the title stays on one line */
+    }
+
+    h2 { 
+      color: #fff; 
+      font-size: 2.2rem;
+      margin-bottom: 2rem; 
+    }
+    
+    p, li { 
+        font-size: clamp(1.2rem, 2vw, 1.6rem); 
+        line-height: 1.6; 
+        margin-bottom: 1rem; 
+    }
+
+    /* --- THE UNIFIED TYPEWRITER EFFECT --- */
+    .typewriter {
+        clip-path: inset(0 100% 0 0);
+        animation: wipeReveal var(--duration, 1s) linear forwards;
+        animation-delay: var(--delay, 0s);
+    }
+
+    @keyframes wipeReveal {
+        to { clip-path: inset(0 0 0 0); }
+    }
+
+    /* --- THE IMAGE BOOT-UP EFFECT --- */
+    .boot-up {
+        opacity: 0;
+        filter: brightness(2) contrast(1.5) blur(5px);
+        animation: bootUpAnim 1.5s ease-out forwards;
+        animation-delay: 0.2s;
+    }
+
+    @keyframes bootUpAnim {
+        to {
+            opacity: .8;
+            filter: brightness(1) contrast(1) blur(0);
+        }
+    }
+
+    /* 1. Ensure the paragraph is allowed to wrap */
+    .animated-paragraph {
+        white-space: normal; /* Forces text to drop to a new line when it hits the edge */
+        margin-bottom: 2rem;
+    }
+
+    /* 2. The Word Fix */
+    .word {
+        opacity: 0; 
+        animation: typeWord 0.01s forwards;
+        animation-delay: var(--delay);
+        
+        /* THE MAGIC: inline-block treats each word like a tiny, unbreakable box */
+        display: inline-block; 
+        
+        /* This guarantees a perfect mathematical space between every word */
+        margin-right: 0.35rem; 
+    }
+
+    @keyframes typeWord {
+        to { opacity: 1; } 
+    }
 </style>

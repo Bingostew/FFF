@@ -1,11 +1,13 @@
 <script>
     // @ts-nocheck
+    import { onDestroy } from 'svelte';
     import { defineHex, Grid, rectangle, Orientation, line } from 'honeycomb-grid';
     import { isHovering } from '$lib/store';
     import { socket, gameId, activePlayerId } from '$lib/gameStore';   
     import { getTargetHexes, isGroupConnected, getS } from './gridUtils.js';
     import Sidebar from './Sidebar.svelte';
     import StatusBar from './StatusBar.svelte';
+    import { goto } from '$app/navigation';
 
     // --- BRINGING THE AI BACK HOME FOR SINGLEPLAYER ---
     import MCTS from './game/MCTS.js';
@@ -496,6 +498,14 @@
                 isRevealed ? "DEV MODE: ENEMY REVEALED" : "DEV MODE: HIDDEN");
         }
     }
+
+    onDestroy(() => {
+        clearTimeout(overlayTimeout);
+        clearTimeout(warningTimeout);
+        clearTimeout(aiTimeout);
+        clearTimeout(turnTimeout);
+    });
+
 </script>
 
 <svelte:window onkeydown={handleDevShortcut} />
@@ -659,7 +669,7 @@
             <div style="display: flex; gap: 20px; justify-content: center;">
                 <button 
                     class="nav-btn" 
-                    onclick={() => window.location.href = '/'}
+                    onclick={() => { $isHovering = false; goto('/');}}
                     onmouseenter={() => $isHovering = true} 
                     onmouseleave={() => $isHovering = false}
                 >
@@ -667,7 +677,7 @@
                 </button>
                 <button 
                     class="nav-btn" 
-                    onclick={() => window.location.reload()}
+                    onclick={() => { $isHovering = false; window.location.reload(); }}
                     onmouseenter={() => $isHovering = true} 
                     onmouseleave={() => $isHovering = false}
                 >
@@ -782,7 +792,7 @@
         background: rgba(15, 20, 30, 0.7);
         backdrop-filter: blur(4px);
         display: flex; justify-content: center; align-items: center;
-        z-index: 9999;
+        z-index: 9998;
         pointer-events: all;
         animation: fadeInOut 2s forwards;
         cursor: none; 
