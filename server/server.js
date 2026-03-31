@@ -27,6 +27,24 @@ const games = {}
 
 // -- MAP EDITOR FUNCTIONALITY ----------------------------------------------------------------------------------
 
+// Enable CORS for development so the frontend (port 5173) can talk to the backend (port 3000)
+app.use((req, res, next) => {
+    res.header("Access-Control-Allow-Origin", "*");
+    res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
+    res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+    if (req.method === 'OPTIONS') {
+        return res.sendStatus(200);
+    }
+    next();
+});
+
+// Ensure maps directory exists
+const fs = require('fs');
+const mapsDir = path.join(__dirname, '../static/maps');
+if (!fs.existsSync(mapsDir)) {
+    fs.mkdirSync(mapsDir, { recursive: true });
+}
+
 // This endpoint reads a map file and ensures it's in the correct format for the editor.
 // It handles legacy maps that might just be an array of tiles.
 app.get('/maps/:mapFile', (req, res) => {
