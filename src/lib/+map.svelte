@@ -45,6 +45,9 @@
         { q: 4, r: -1, name: "IJN Yamato", health: 2 }, { q: 2, r: 1, name: "IJN Musashi", health: 2 }]);
     let gameOver = $state(false);
     let gameResult = $state("");
+    let globalDice = $state({ show: false, val1: 0, val2: null, text: '', isStopping: false });
+    let playerFinalStats = $state({ health: 0, fuel: 0, fleets: 0 });
+    let enemyFinalStats = $state({ health: 0, fuel: 0, fleets: 0 });
     let overlay = $state({ show : false, text:'', mode: 'fail'});
 
     let sourceFleet = $state(null);
@@ -89,13 +92,77 @@
 
     //Checks the state of the game, presents Victory or Defeat screen. 
     function checkWinCondition() {
+        // Always check player and enemy stats to display. 
+        playerFinalStats = {
+            fleets: fleetSelections.length,
+            health: fleetSelections.reduce((acc, f) => acc + Math.max(0, f.health), 0),
+            fuel: fleetSelections.reduce((acc, f) => acc + Math.max(0, f.fuel), 0)
+        };
+        
+        enemyFinalStats = {
+            fleets: enemyFleets.length,
+            health: enemyFleets.reduce((acc, f) => acc + Math.max(0, f.health), 0),
+            fuel: enemyFleets.reduce((acc, f) => acc + Math.max(0, f.fuel), 0)
+        };
+
+        // 1. Standard Win/Loss (Annihilation)
         if (enemyFleets.length === 0) {
             gameOver = true;
             gameResult = "VICTORY";
+            return;
         } else if (fleetSelections.length === 0) {
             gameOver = true;
-            gameResult = "DEFEAT";
+            gameResult = "DEFEAT";S
+            return;
         }
+
+        // 2. Turn 10 Time Limit & Tiebreaker
+        if (currentTurn > 10) {
+            gameOver = true;
+            
+            // Calculate total points based on surviving assets
+            const playerPoints = playerFinalStats.health + playerFinalStats.fuel;
+            const enemyPoints = enemyFinalStats.health + enemyFinalStats.fuel;
+
+            if (playerPoints > enemyPoints) {
+                gameResult = "VICTORY";
+            } else if (enemyPoints > playerPoints) {
+                gameResult = "DEFEAT";
+            } else {
+                gameResult = "DRAW";
+            }
+        }
+    }
+
+    function rollUniversalDice(text, numDice, callback) {
+        globalDice.show = true;
+        globalDice.text = text;
+        globalDice.isStopping = false;
+        
+        const final1 = Math.floor(Math.random() * 6) + 1;
+        const final2 = numDice === 2 ? Math.floor(Math.random() * 6) + 1 : null;
+        
+        let iterations = 0; let speed = 40;
+        
+        function animate() {
+            iterations++;
+            globalDice.val1 = Math.floor(Math.random() * 6) + 1;
+            if (numDice === 2) globalDice.val2 = Math.floor(Math.random() * 6) + 1;
+            
+            if (iterations < 8) {
+                speed += iterations * 15;
+                setTimeout(animate, speed);
+            } else {
+                globalDice.val1 = final1;
+                if (numDice === 2) globalDice.val2 = final2;
+                globalDice.isStopping = true;
+                setTimeout(() => {
+                    globalDice.show = false;
+                    callback(final1, final2);
+                }, 2000); // 2 seconds to view the locked dice
+            }
+        }
+        animate();
     }
 
     // Gets highlighted hexes & automatically filters out land!
@@ -247,6 +314,11 @@
                             ? { ...f, q: hex.q, r: hex.r, fuel: f.fuel - 1 } 
                             : f
                     );
+                    // HIDE MOVEMENT FROM ENEMY
+                    enemySearchedHexes = enemySearchedHexes.filter(h => 
+                        !(h.q === selectedFleetToMove.q && h.r === selectedFleetToMove.r) &&
+                        !(h.q === hex.q && h.r === hex.r)
+                    );
                     selectedFleetToMove = null; 
                     targetingMode = 'focus'; 
                     if (isMultiplayer) {
@@ -390,29 +462,50 @@
         }
     }
 
+    // 1. PLAYER SCAN -> AUTO ATTACK
     function handlePlayerSearch() {
-        if (isMultiplayer) {
-            const rawPos = selectedGroup;
-            const formattedPositions = {};
-            rawPos.forEach((h, index) => { 
-                formattedPositions[index] = { q: h.q, r: h.r }; 
-            });
+        if (selectedGroup.length === 0) return;
 
-            $socket.emit('die_roll', { gameId: $gameId });
-            return false; 
-        } else {
-            if (selectedGroup.length === 0) return false;
+        const needsRoll = targetingMode === 'directional' || targetingMode === 'area';
+        const numDice = needsRoll ? 1 : 0;
+        const threshold = targetingMode === 'directional' ? 4 : 3;
+
+        const executeSearchLogic = (rollResult) => {
+            const isSuccess = !needsRoll || rollResult <= threshold;
+            if (!isSuccess) {
+                triggerOverlay(`SCAN FAILED`, "fail");
+                handleTurnEnd();
+                return;
+            }
 
             const newSearches = selectedGroup.filter(selected => !friendlySearchedHexes.some(searched => searched.q === selected.q && searched.r === selected.r));
             const detected = selectedGroup.find(hex => enemyFleets.some(e => e.q === hex.q && e.r === hex.r));
             friendlySearchedHexes = [...friendlySearchedHexes, ...newSearches];
+            selectedGroup = [];
 
-            if(detected){
-                selectedGroup = []; 
-                return true; 
+            if (detected) {
+                triggerOverlay("TARGET FOUND - AUTO-ENGAGING", "success");
+                targetEnemy = detected;
+                // Auto-select closest ship
+                sourceFleet = fleetSelections.reduce((prev, curr) => {
+                    const d1 = (Math.abs(prev.q - detected.q) + Math.abs(prev.r - detected.r) + Math.abs((-prev.q - prev.r) - (-detected.q - detected.r))) / 2;
+                    const d2 = (Math.abs(curr.q - detected.q) + Math.abs(curr.r - detected.r) + Math.abs((-curr.q - curr.r) - (-detected.q - detected.r))) / 2;
+                    return d2 < d1 ? curr : prev;
+                });
+                
+                // Auto-fire after 2 seconds!
+                setTimeout(() => resolveAttack(), 2000); 
+            } else {
+                triggerOverlay("AREA CLEAR", "success");
+                handleTurnEnd();
             }
-            selectedGroup = []; 
-            return false;
+        };
+
+        if (needsRoll) {
+            rollUniversalDice("--SCANNING--", 1, (r1) => executeSearchLogic(r1));
+        } else {
+            triggerOverlay("INITIALIZING SCAN...", "success");
+            setTimeout(() => executeSearchLogic(0), 500);
         }
     }
 
@@ -429,56 +522,35 @@
         } 
     }
 
-    function resolveAttack(roll1, roll2) {
+    function resolveAttack() {
         if (!sourceFleet || !targetEnemy) return;
 
-        if (isMultiplayer) {
-            $socket.emit('attack', { 
-                gameId: $gameId, 
-                source: sourceFleet, 
-                target: targetEnemy,
-                roll1: roll1,
-                roll2: roll2
-            });
-            targetEnemy = null;
-        } else {
-            const hit1 = roll1 >= requiredRoll;
-            const hit2 = roll2 >= requiredRoll;
-            const totalHits = (hit1 || hit2) ? 1 : 0;
-            
-            let overlayMsg = "";
-            if (totalHits > 0) {
-                overlayMsg = "TARGET HIT: 1 DAMAGE";
-            } else {
-                overlayMsg = "TARGET MISSED: 0 DAMAGE";
-            }
-            
+        rollUniversalDice("--FIRING WEAPONS--", 2, (roll1, roll2) => {
+            const hits = (roll1 >= requiredRoll || roll2 >= requiredRoll) ? 1 : 0;
             const enemyIndex = enemyFleets.findIndex(e => e.q === targetEnemy.q && e.r === targetEnemy.r);
-            if (enemyIndex !== -1 && totalHits > 0){
-                enemyFleets[enemyIndex].health -= totalHits;
-                if(enemyFleets[enemyIndex].health <= 0){
-                    enemyFleets = enemyFleets.filter((_, i) => i !== enemyIndex);
-                }
-                checkWinCondition(); //Check if all enemy vessels are destroyed. 
+            
+            if (enemyIndex !== -1 && hits > 0){
+                enemyFleets[enemyIndex].health -= hits;
+                if(enemyFleets[enemyIndex].health <= 0) enemyFleets = enemyFleets.filter((_, i) => i !== enemyIndex);
+                checkWinCondition(); 
             }
 
-            // Counter detection roll. 
-            const counterRoll = Math.floor(Math.random() * 6) + 1;
-            if (counterRoll >= 3) {
-                // The enemy successfully traced your attack! Add your ship to their radar.
-                enemySearchedHexes = [...enemySearchedHexes, { q: sourceFleet.q, r: sourceFleet.r }];
-                triggerOverlay(`${overlayMsg} | WARNING: LOCATION COMPROMISED!`, "fail");
-            } else {
-                triggerOverlay(overlayMsg, totalHits > 0 ? "success" : "fail");
-            }
+            triggerOverlay(hits > 0 ? "TARGET HIT: 1 DMG" : "MISSED", hits > 0 ? "success" : "fail");
 
             setTimeout(() => {
-                targetEnemy = null;
-                sourceFleet = null;
-                selectedGroup = [];
-                executeEnemyTurn();
+                if (gameOver) return;
+                // ENEMY COUNTER BATTERY
+                rollUniversalDice("--ENEMY TRACING SIGNAL--", 1, (counterRoll) => {
+                    if (counterRoll >= 3) {
+                        enemySearchedHexes = [...enemySearchedHexes, { q: sourceFleet.q, r: sourceFleet.r }];
+                        triggerOverlay("WARNING: LOCATION COMPROMISED!", "fail");
+                        setTimeout(() => handleTurnEnd(), 2000);
+                    } else {
+                        handleTurnEnd();
+                    }
+                });
             }, 2000);
-        }
+        });
     }
 
 
@@ -502,78 +574,60 @@
     }
 
     function executeEnemyTurn() {
-        if (gameOver) return; // Stop the AI if the game is over!
-        isEnemyTurn = true; 
+        if (gameOver) return;
+        isEnemyTurn = true;
 
-        aiTimeout = setTimeout(() => {
-            if (gridHexes.length > 0 && !gameOver) {
-                const modes = ['focus', 'directional', 'area'];
-                const randomMode = modes[Math.floor(Math.random() * modes.length)];
-                const randomRotation = Math.floor(Math.random() * 6);
-                
-                // Pick a random WATER hex for the scan epicenter
-                const waterHexes = gridHexes.filter(h => h && !specialTiles.some(t => t.col === h.col && t.row === h.row));
-                const randomHex = waterHexes[Math.floor(Math.random() * waterHexes.length)];
-                
-                if (randomHex) {
-                    const targetHexes = getTargetHexes(randomHex, randomMode, randomRotation, gridHexes) || [];
-                    
-                    // FIX 1: Added 'target &&' to prevent crashes if the scan goes off the edge of the map!
-                    const newSearches = targetHexes.filter(target => 
-                        target && 
-                        !specialTiles.some(t => t.col === target.col && t.row === target.row) &&
-                        !enemySearchedHexes.some(searched => searched.q === target.q && searched.r === target.r) &&
-                        !friendlySearchedHexes.some(searched => searched.q === target.q && searched.r === target.r)
-                    );
-                    
+        setTimeout(() => {
+            const waterHexes = gridHexes.filter(h => !specialTiles.some(t => t.col === h.col && t.row === h.row));
+            const randomHex = waterHexes[Math.floor(Math.random() * waterHexes.length)];
+            const targetHexes = getTargetHexes(randomHex, 'area', 0, gridHexes) || [];
+            
+            rollUniversalDice("--ENEMY SCANNING--", 1, (aiScanRoll) => {
+                if (aiScanRoll <= 3) { // AI Scan Success
+                    const newSearches = targetHexes.filter(target => target && !specialTiles.some(t => t.col === target.col && t.row === target.row));
                     enemySearchedHexes = [...enemySearchedHexes, ...newSearches];
+                    let hitFriendly = fleetSelections.find(f => newSearches.some(s => s && s.q === f.q && s.r === f.r));
 
-                    // Did the AI hit a player ship? (Added 's &&' safety check here too)
-                    let hitFriendlyFleet = fleetSelections.find(f => newSearches.some(s => s && s.q === f.q && s.r === f.r));
-                    
-                    if (hitFriendlyFleet) {
-                        // AI Rolls 2 Dice (Assume AI hits on 3+ for standard difficulty)
-                        const roll1 = Math.floor(Math.random() * 6) + 1;
-                        const roll2 = Math.floor(Math.random() * 6) + 1;
-                        const aiRequiredRoll = 3; 
-                        const hits = (roll1 >= aiRequiredRoll || roll2 >= aiRequiredRoll) ? 1 : 0;
-                        
-                        // Update Player Health
-                        if (hits > 0) {
-                            fleetSelections = fleetSelections.map(f => {
-                                if (f.id === hitFriendlyFleet.id) {
-                                    return { ...f, health: f.health - hits };
-                                }
-                                return f;
-                            }).filter(f => f.health > 0); 
-                        }
+                    if (hitFriendly) {
+                        triggerOverlay("ENEMY LOCK DETECTED", "fail");
+                        setTimeout(() => {
+                            rollUniversalDice("--INCOMING FIRE--", 2, (r1, r2) => {
+                                const hits = (r1 >= 3 || r2 >= 3) ? 1 : 0;
+                                if (hits > 0) fleetSelections = fleetSelections.map(f => f.id === hitFriendly.id ? { ...f, health: f.health - hits } : f).filter(f => f.health > 0);
+                                checkWinCondition();
 
-                        // --- NEW: PLAYER COUNTER-DETECTION ROLL ---
-                        const counterRoll = Math.floor(Math.random() * 6) + 1;
-                        
-                        // Only trace if we rolled 3+ AND the enemy actually has ships left to trace!
-                        if (counterRoll >= 3 && enemyFleets.length > 0) {
-                            // Randomly pick which enemy ship fired the shot
-                            const attacker = enemyFleets[Math.floor(Math.random() * enemyFleets.length)];
-                            
-                            // Add it to friendlySearchedHexes so it pops up on your radar!
-                            friendlySearchedHexes = [...friendlySearchedHexes, { q: attacker.q, r: attacker.r }];
-                            
-                            triggerOverlay(`ENEMY ROLLED ${roll1} & ${roll2}. WE TRACED THEIR SIGNAL!`, hits > 0 ? "fail" : "success");
-                        } else {
-                            triggerOverlay(`ENEMY ROLLED ${roll1} & ${roll2}. ${hits} HITS!`, hits > 0 ? "fail" : "success");
-                        }
-                        
-                        checkWinCondition();
+                                triggerOverlay(hits > 0 ? "HULL BREACH: 1 DMG" : "ENEMY MISSED", hits > 0 ? "fail" : "success");
+                                
+                                setTimeout(() => {
+                                    if(gameOver || enemyFleets.length === 0) return;
+                                    // PLAYER COUNTER BATTERY
+                                    rollUniversalDice("--TRACING ENEMY SIGNAL--", 1, (counterRoll) => {
+                                        if (counterRoll >= 3) {
+                                            const attacker = enemyFleets[Math.floor(Math.random() * enemyFleets.length)];
+                                            friendlySearchedHexes = [...friendlySearchedHexes, { q: attacker.q, r: attacker.r }];
+                                            triggerOverlay("ENEMY SIGNAL TRACED!", "success");
+                                        }
+                                        endAiTurn();
+                                    });
+                                }, 2000);
+                            });
+                        }, 2000);
                     } else {
                         triggerOverlay("ENEMY SCAN DETECTED NOTHING", "success");
+                        endAiTurn();
                     }
+                } else {
+                    triggerOverlay("ENEMY SCAN FAILED", "success");
+                    endAiTurn();
                 }
-            }
-            
-            currentTurn += 1;
-            isEnemyTurn = false; 
-        }, 3000); 
+            });
+        }, 1500);
+    }
+
+    function endAiTurn() {
+        currentTurn += 1;
+        checkWinCondition();
+        if (!gameOver) isEnemyTurn = false;
     }
 
     let overlayTimeout; // [cite: 853]
@@ -868,33 +922,60 @@
 
     {#if gameOver}
     <div class="fullscreen-lock-overlay" style="background: rgba(10, 15, 30, 0.95); flex-direction: column; animation: fadeInStay 0.5s forwards; opacity: 1;">        <div class="failure-content" style="text-align: center;">
-            <div class="glitch-text" style="color: {gameResult === 'VICTORY' ? '#4ade80' : '#e24a4a'}; animation: none;">
+            <div class="glitch-text" style="color: {gameResult === 'VICTORY' ? '#4ade80' : gameResult === 'DEFEAT' ? '#e24a4a' : '#eab308'}; animation: none;">
                 {gameResult}
             </div>
+            
             <div class="sub-text" style="color: #abbbd1; margin-bottom: 40px; font-size: 1.5rem; letter-spacing: 5px;">
-                {gameResult === 'VICTORY' ? 'ALL ENEMY FLEETS DESTROYED' : 'ALL FRIENDLY FLEETS LOST'}
+                {#if gameResult === 'VICTORY'}
+                    {enemyFleets.length === 0 ? 'ALL ENEMY FLEETS DESTROYED' : 'STRATEGIC VICTORY: SUPERIOR ASSETS'}
+                {:else if gameResult === 'DEFEAT'}
+                    {fleetSelections.length === 0 ? 'ALL FRIENDLY FLEETS LOST' : 'TACTICAL DEFEAT: INSUFFICIENT ASSETS'}
+                {:else}
+                    HOSTILITIES CEASED: STALEMATE
+                {/if}
+            </div>
+
+            <div style="display: flex; gap: 40px; justify-content: center; margin-bottom: 40px; font-family: 'Chakra Petch'; color: #fff;">
+                <div style="background: rgba(59,130,246,0.2); border: 1px solid #3b82f6; padding: 15px; border-radius: 4px;">
+                    <h3 style="margin: 0 0 10px 0; color: #3b82f6;">FRIENDLY ASSETS</h3>
+                    <div>FLEETS: {playerFinalStats.fleets}</div>
+                    <div>HULL INT.: {playerFinalStats.health}</div>
+                    <div>FUEL: {playerFinalStats.fuel}</div>
+                </div>
+                <div style="background: rgba(226,74,74,0.2); border: 1px solid #e24a4a; padding: 15px; border-radius: 4px;">
+                    <h3 style="margin: 0 0 10px 0; color: #e24a4a;">ENEMY ASSETS</h3>
+                    <div>FLEETS: {enemyFinalStats.fleets}</div>
+                    <div>HULL INT.: {enemyFinalStats.health}</div>
+                    <div>FUEL: {enemyFinalStats.fuel}</div>
+                </div>
             </div>
             
             <div style="display: flex; gap: 20px; justify-content: center;">
-                <button 
-                    class="nav-btn" 
-                    onclick={() => { $isHovering = false; goto('/');}}
-                    onmouseenter={() => $isHovering = true} 
-                    onmouseleave={() => $isHovering = false}
-                >
+                <button class="nav-btn" onclick={() => { $isHovering = false; goto('/');}} onmouseenter={() => $isHovering = true} onmouseleave={() => $isHovering = false}>
                     MAIN MENU
                 </button>
-                <button 
-                    class="nav-btn" 
-                    onclick={() => { $isHovering = false; window.location.reload(); }}
-                    onmouseenter={() => $isHovering = true} 
-                    onmouseleave={() => $isHovering = false}
-                >
+                <button class="nav-btn" onclick={() => { $isHovering = false; window.location.reload(); }} onmouseenter={() => $isHovering = true} onmouseleave={() => $isHovering = false}>
                     PLAY AGAIN
                 </button>
             </div>
         </div>
     </div>
+    {/if}
+
+    {#if globalDice.show}
+        <div class="dice-popup-overlay" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.6); display: flex; justify-content: center; align-items: center; z-index: 10000; backdrop-filter: blur(2px);">
+            <div class="dice-box {globalDice.isStopping ? 'is-stopping' : ''}" style="background: #0a0f1e; border: 2px solid {globalDice.isStopping ? '#22c55e' : '#3b82f6'}; padding: 40px; text-align: center; box-shadow: 0 0 30px {globalDice.isStopping ? 'rgba(34,197,94,0.4)' : 'rgba(59,130,246,0.4)'}; clip-path: polygon(10% 0, 100% 0, 100% 90%, 90% 100%, 0 100%, 0 10%);">
+                <span style="font-family: 'Chakra Petch'; color: #abbbd1; letter-spacing: 3px;">{globalDice.text}</span>
+                <div style="display: flex; gap: 20px; justify-content: center; margin: 20px 0;">
+                    <div style="width: 100px; height: 100px; background: #000; border: 2px solid currentColor; display: flex; align-items: center; justify-content: center; font-size: 4rem; font-weight: bold; color: {globalDice.isStopping ? '#22c55e' : '#3b82f6'}; font-family: 'Chakra Petch';">{globalDice.val1}</div>
+                    {#if globalDice.val2 !== null}
+                        <div style="width: 100px; height: 100px; background: #000; border: 2px solid currentColor; display: flex; align-items: center; justify-content: center; font-size: 4rem; font-weight: bold; color: {globalDice.isStopping ? '#22c55e' : '#3b82f6'}; font-family: 'Chakra Petch';">{globalDice.val2}</div>
+                    {/if}
+                </div>
+                {#if globalDice.isStopping}<div style="font-size: 0.8rem; color: #22c55e; letter-spacing: 5px; font-weight: bold;">RESULT LOCKED</div>{/if}
+            </div>
+        </div>
     {/if}
 
  

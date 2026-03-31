@@ -36,86 +36,7 @@
 
     let totalFuel = $derived(fleetSelections.reduce((acc, f) => acc + (f.fuel || 0), 0));
 
-    function diceRoll(isAttack = false) {
-
-        const needsRoll = targetingMode === 'directional' || targetingMode === 'area';
-
-        if (isRolling || !isMyTurn) return; 
-
-
-        if(!needsRoll && !isAttack){
-            const detected = onSearch(); 
-            if(detected){
-                onScanResult("TARGET FOUND", 'success');
-                return;
-            }
-            onScanResult("AREA CLEAR: NO TARGETS FOUND", 'success');
-            setTimeout(() => onTurnEnd(), 2000);
-            return;
-        }
-
-        isRolling = true;
-        
-        // Execute the search logic in the parent Map component
-        const finalResult1 = Math.floor(Math.random() * 6) + 1;
-        const finalResult2 = Math.floor(Math.random() * 6) + 1;
-
-        let iterations = 0;
-        const maxIterations = 8;
-        let speed = 40;
-
-        function animate(){
-            iterations ++;
-            
-            currentRollDisplay1 = Math.floor(Math.random() * 6) + 1;
-            if (isAttack) currentRollDisplay2 = Math.floor(Math.random() * 6) + 1;
     
-            if(iterations < maxIterations){
-                speed += iterations * 15;
-                setTimeout(animate, speed);
-            }
-            else{
-                currentRollDisplay1 = finalResult1;
-                if(isAttack) currentRollDisplay2 = finalResult2;
-
-                isRolling = false;
-                setTimeout(() => {
-                    finalizeResult(isAttack, finalResult1, finalResult2);
-                }, 2000);
-            }
-        }
-
-        animate();
-    }
-
-    function finalizeResult(isAttack, result1, result2){
-        if(isAttack) currentRollDisplay2 = result2;
-        isRolling = false;
-
-        if(isAttack){
-            currentRollDisplay1 = 0;
-            onFireResolve(result1, result2);
-        }
-        else{
-            const threshold = targetingMode === 'directional' ? 4 : 3;
-            const isRollSuccess = result1 <= threshold;
-
-            if (!isRollSuccess) {
-                onScanResult(`SCAN FAILED: ROLLED ${result1}`, 'fail');
-                setTimeout(() => onTurnEnd(), 2000);
-            } else {
-                const hasDetectedEnemy = onSearch(); 
-                if(hasDetectedEnemy){
-                    onScanResult("TARGET FOUND", 'success');
-                }
-                else {
-                    onScanResult("AREA CLEAR: NO TARGETS FOUND", 'success');
-                    setTimeout(() => onTurnEnd(), 2000);
-                }
-            }
-        }
-        currentRollDisplay1 = 0;
-    }
 </script>
 
 <!--SIDEBAR CONTENT-->
@@ -186,11 +107,8 @@
                         <span class="btn-sub">{totalFuel > 0 ? "MOVE FLEET (COST: 1 FUEL)" : "NO FUEL REMAINING"}</span>
                     </button>
 
-                    <button 
-                        style="margin-top: 10px; border-color: #3b82f6; color: #3b82f6;"
-                        onclick={() => diceRoll()}   
-                        disabled={isRolling || !isMyTurn || selectedGroup.length === 0}
-                    >
+                    <button style="margin-top: 10px; border-color: #3b82f6; color: #3b82f6;" 
+                        onclick={() => onSearch()} disabled={!isMyTurn || selectedGroup.length === 0}>
                         <span class="btn-text">ACTIVATE SCAN</span>
                         <span class="btn-sub">CONFIRM AND SEARCH</span>
                     </button>
@@ -222,11 +140,7 @@
                 {/if}
 
                 <div class="button-group">
-                    <button 
-                        class="fire-button"
-                        onclick={() => diceRoll(true)}
-                        disabled={isRolling || !sourceFleet}
-                    >
+                    <button class="fire-button" onclick={() => onFireResolve()} disabled={!sourceFleet}>
                         <span class="btn-text">ENGAGE</span>
                         <span class="btn-sub">{sourceFleet ? "EXECUTE ATTACK VECTOR" : "WAITING FOR SOURCE..."}</span>
                     </button>
@@ -475,24 +389,4 @@
         100% { transform: scale(1); opacity: 1; }
     }
 
-
-    /* Custom scrollbars, might be removed in pursuit of better scaling */
-    /*::-webkit-scrollbar {
-        width: 6px; 
-        cursor: none;
-    }
-
-    ::-webkit-scrollbar-track {
-        background: rgba(10, 15, 30, 0.5); 
-        border-left: 1px solid rgba(59, 130, 246, 0.1); 
-    }
-
-    ::-webkit-scrollbar-thumb {
-        background: rgba(59, 130, 246, 0.5); 
-        border-radius: 0px; 
-    }
-
-    ::-webkit-scrollbar-thumb:hover {
-        background: rgba(59, 130, 246, 0.9); 
-    }*/
 </style>
