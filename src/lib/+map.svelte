@@ -431,6 +431,7 @@
 
     function handlePlayerSearch(die=0) {
         if (isMultiplayer) {
+
             if (selectedGroup.length === 0) return false;
 
             const rawPos = selectedGroup;
@@ -440,6 +441,7 @@
             });
 
 
+            console.log("MULTIOIIIIIPLAYER");
             const eventName = `${targetingMode}`; // e.g., 'focus', 'directional', or 'area'
             
             $socket.emit(eventName, { 
@@ -449,7 +451,6 @@
             });
 
             selectedGroup = []; 
-            return false;
         } else {
             if (selectedGroup.length === 0) return false;
 
@@ -474,14 +475,16 @@
                 triggerOverlay("AREA CLEAR", "success");
                 handleTurnEnd();
             }
+
+            if (needsRoll) {
+                rollUniversalDice("--SCANNING--", 1, (r1) => executeSearchLogic(r1));
+            } else {
+                triggerOverlay("INITIALIZING SCAN...", "success");
+                setTimeout(() => executeSearchLogic(0), 500);
+            }
         };
 
-        if (needsRoll) {
-            rollUniversalDice("--SCANNING--", 1, (r1) => executeSearchLogic(r1));
-        } else {
-            triggerOverlay("INITIALIZING SCAN...", "success");
-            setTimeout(() => executeSearchLogic(0), 500);
-        }
+
     }
 
     function handleTurnEnd() {
@@ -809,6 +812,7 @@
         bind:rotation
         bind:targetEnemy
         bind:sourceFleet
+        bind:isMultiplayer
         {fleetSelections} 
         {selectedGroup} 
         {attackRange}

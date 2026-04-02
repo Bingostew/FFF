@@ -22,6 +22,7 @@
         isConfirmed = $bindable(), 
         rotation = $bindable(),
         sourceFleet = $bindable(),
+        isMultiplayer = $bindable(),
         fleetSelections = [], 
         onConfirm,
         isMyTurn = true,
@@ -52,6 +53,8 @@
         isRolling = true;
         pendingAttack = isAttack;
 
+        console.log("roll")
+
         currentRollDisplay1 = Math.floor(Math.random() * 6) + 1;
         if (isAttack) currentRollDisplay2 = Math.floor(Math.random() * 6) + 1;
         let speed = 40;
@@ -67,8 +70,10 @@
         }
 
         animate();
-        $socket.emit('die_roll', { gameId: $gameId });
 
+        if(isMultiplayer){
+            $socket.emit('die_roll', { gameId: $gameId });
+        }
     }
 
     export function handleDiceResult(res){
@@ -174,7 +179,7 @@
                     </button>
 
                     <button style="margin-top: 10px; border-color: #3b82f6; color: #3b82f6;" 
-                        onclick={() => onSearch()} disabled={!isMyTurn || selectedGroup.length === 0}>
+                        onclick={() => diceRoll(false)} disabled={!isMyTurn || selectedGroup.length === 0}>
                         <span class="btn-text">ACTIVATE SCAN</span>
                         <span class="btn-sub">CONFIRM AND SEARCH</span>
                     </button>
