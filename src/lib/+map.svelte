@@ -631,7 +631,7 @@
         setTimeout(() => { overlay.show = false; }, 2000);
     }
 
-    // --- RESTORED: LOCAL AI BRAIN ---
+    // Board state sent to AI brain
     function syncStateToAI() {
         const aiGame = new F3Game();
         aiGame.currentPlayer = 'BLUE'; 
@@ -646,10 +646,20 @@
             return { id: f.id, pos: HexUtils.posToString({ col: hex.col, row: hex.row }), hp: f.health, fuel: f.fuel, isHidden: false };
         });
 
+        // 1. Sync standard searched hexes
         enemySearchedHexes.forEach(hex => {
             const idx = aiGame.posToIndex(HexUtils.posToString({ col: hex.col, row: hex.row }));
             const hit = fleetSelections.some(f => f.q === hex.q && f.r === hex.r);
             aiGame.blueIntel[idx] = hit ? 'S' : 'E';
+        });
+
+        // 2. THE FIX: Trick the AI into thinking land hexes are already "Empty"
+        specialTiles.forEach(tile => {
+            const posStr = HexUtils.posToString({ col: tile.col, row: tile.row });
+            const idx = aiGame.posToIndex(posStr);
+            if (idx !== -1) {
+                aiGame.blueIntel[idx] = 'E'; 
+            }
         });
 
         return aiGame;
