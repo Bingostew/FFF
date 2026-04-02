@@ -173,11 +173,8 @@
                         <span class="btn-sub">{totalFuel > 0 ? "MOVE FLEET (COST: 1 FUEL)" : "NO FUEL REMAINING"}</span>
                     </button>
 
-                    <button 
-                        style="margin-top: 10px; border-color: #3b82f6; color: #3b82f6;"
-                        onclick={() => diceRoll()}   
-                        disabled={isRolling || !isMyTurn || selectedGroup.length === 0}
-                    >
+                    <button style="margin-top: 10px; border-color: #3b82f6; color: #3b82f6;" 
+                        onclick={() => onSearch()} disabled={!isMyTurn || selectedGroup.length === 0}>
                         <span class="btn-text">ACTIVATE SCAN</span>
                         <span class="btn-sub">CONFIRM AND SEARCH</span>
                     </button>
@@ -227,6 +224,20 @@
                         </button>
                     </div>
                 {/if}
+
+                <div class="button-group">
+                    <button class="fire-button" onclick={() => onFireResolve()} disabled={!sourceFleet}>
+                        <span class="btn-text">ENGAGE</span>
+                        <span class="btn-sub">{sourceFleet ? "EXECUTE ATTACK VECTOR" : "WAITING FOR SOURCE..."}</span>
+                    </button>
+
+                    <button 
+                        class="cancel-btn"
+                        onclick={() => { targetEnemy = null; sourceFleet = null; }}
+                    >
+                        <span class="btn-text" style="font-size: 0.8rem; text-align: center;">ABORT MISSION</span>
+                    </button>
+                </div>
             {/if}
         {/if}
     </div>
@@ -464,24 +475,4 @@
         100% { transform: scale(1); opacity: 1; }
     }
 
-
-    /* Custom scrollbars, might be removed in pursuit of better scaling */
-    /*::-webkit-scrollbar {
-        width: 6px; 
-        cursor: none;
-    }
-
-    ::-webkit-scrollbar-track {
-        background: rgba(10, 15, 30, 0.5); 
-        border-left: 1px solid rgba(59, 130, 246, 0.1); 
-    }
-
-    ::-webkit-scrollbar-thumb {
-        background: rgba(59, 130, 246, 0.5); 
-        border-radius: 0px; 
-    }
-
-    ::-webkit-scrollbar-thumb:hover {
-        background: rgba(59, 130, 246, 0.9); 
-    }*/
 </style>

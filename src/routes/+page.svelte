@@ -1,25 +1,28 @@
 <!--MAIN MENU PAGE-->
 <!--SCRIPTS FOR MAIN MENU PAGE-->
 <script>
-  import { isHovering } from '$lib/store'; // Import shared state
+  import { isHovering } from '$lib/store';
   import { goto } from '$app/navigation';
-  import { createWebSocketModuleRunnerTransport } from 'vite/module-runner';
   import { initSocket, gameId, socket } from '$lib/gameStore';
   import { PUBLIC_SERVER_URL } from '$env/static/public';
+  import { onMount } from 'svelte';
 
-  let showMultiplayerModal = $state(false); //Toggles multiplayer modal.
-  let showSingleplayerModal = $state(false); //Toggles singleplayer modal.
-
+  let showMultiplayerModal = $state(false);
+  let showSingleplayerModal = $state(false);
   let nickname = $state('');
   let lobbyCode = $state('');
-  initSocket();
-
-  
   /** 0 = Name Input, 1 = Selection, 2 = Create Lobby, 3 = Join Lobby; multiplayer
    * 0 = Name Input, 1 = Start Game; Singleplayer
   */ 
   let modalStep = $state(0);
+
+  onMount(() => {
+      initSocket();
+  });
+
   
+  
+
   /*****************FRONTEND METHODS******************/
   /** * @param {String} gamemode 
    * Modal chooses between showing the singleplayer or multiplayer information. 
@@ -181,6 +184,19 @@
             MULTIPLAYER
         </a>
     </li>    
+
+    <li>
+        <a 
+            href="/map-editor"
+            class ="select-link"
+            draggable="false" 
+            onclick={(e) => { $isHovering = false; }} 
+            onmouseenter={() => $isHovering = true} 
+            onmouseleave={() => $isHovering = false}
+        >
+            MAP EDITOR
+        </a>
+    </li>   
 
     <li>
         <a 
