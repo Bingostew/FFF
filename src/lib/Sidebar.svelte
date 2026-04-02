@@ -224,20 +224,6 @@
                         </button>
                     </div>
                 {/if}
-
-                <div class="button-group">
-                    <button class="fire-button" onclick={() => onFireResolve()} disabled={!sourceFleet}>
-                        <span class="btn-text">ENGAGE</span>
-                        <span class="btn-sub">{sourceFleet ? "EXECUTE ATTACK VECTOR" : "WAITING FOR SOURCE..."}</span>
-                    </button>
-
-                    <button 
-                        class="cancel-btn"
-                        onclick={() => { targetEnemy = null; sourceFleet = null; }}
-                    >
-                        <span class="btn-text" style="font-size: 0.8rem; text-align: center;">ABORT MISSION</span>
-                    </button>
-                </div>
             {/if}
         {/if}
     </div>

@@ -3,11 +3,27 @@
 
 // --- DYNAMICALLY LOAD THE ES MODULE AI FILES INTO NODE.JS ---
 let MCTS, F3Game, HexUtils;
+const path = require('path');               
+const { pathToFileURL } = require('url'); 
+
 (async () => {
     try {
-        MCTS = (await import('./MCTS.js')).default || (await import('./MCTS.js'));
-        F3Game = (await import('./F3Game.js')).F3Game;
-        HexUtils = (await import('./HexUtils.js')).HexUtils;
+        const aiDir = path.resolve(__dirname, '../src/lib/game');
+
+        const mctsPath = pathToFileURL(path.join(aiDir, 'MCTS.js')).href;
+        const f3Path = pathToFileURL(path.join(aiDir, 'F3Game.js')).href;
+        const hexPath = pathToFileURL(path.join(aiDir, 'HexUtils.js')).href;
+
+        // Import the modules
+        const mctsModule = await import(mctsPath);
+        MCTS = mctsModule.default || mctsModule.MCTS; 
+
+        const f3Module = await import(f3Path);
+        F3Game = f3Module.F3Game;
+
+        const hexModule = await import(hexPath);
+        HexUtils = hexModule.HexUtils;
+
         console.log("✅ Advanced MCTS Engine successfully wired to the server!");
     } catch (e) {
         console.error("❌ Failed to load AI Modules. Ensure MCTS.js, F3Game.js, and HexUtils.js are in the same folder as this handler.", e);
@@ -531,6 +547,8 @@ module.exports = (io, lobbies) => {
                 io.to(gameId).emit('game_start', { 
                     activePlayer: firstPlayerId 
                 });
+            }
+        });
 
 
         // Handle the "Finish" - Strike Logic
@@ -799,6 +817,7 @@ module.exports = (io, lobbies) => {
                 });
                 switchTurn(gameId);
             }
+        });
             /*
         socket.on('focus', ({gameId, Positions, positions}) => {
             const posToUse = Positions || positions;
