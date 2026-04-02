@@ -8,13 +8,6 @@
     import { socket, gameId, activePlayerId } from '$lib/gameStore';   
     // Used for API calls to server
     let isSubmitted = $state(false);
-    
-    // State variables for dice rolling functionality.
-    let currentRollDisplay1 = $state(0);
-    let currentRollDisplay2 = $state(0);
-
-    let isRolling = $state(false);
-    let pendingAttack = $state(false);
 
     // Standard JS props (using defaults to prevent crashes)
     let { 
@@ -37,77 +30,6 @@
     } = $props();
 
     let totalFuel = $derived(fleetSelections.reduce((acc, f) => acc + (f.fuel || 0), 0));
-
-    function diceRoll(isAttack = false) {
-
-        const needsRoll = targetingMode === 'directional' || targetingMode === 'area';
-
-        if (isRolling || !isMyTurn) return; 
-
-
-        if(!needsRoll && !isAttack){
-            onSearch();
-            return;
-        }
-
-        isRolling = true;
-        pendingAttack = isAttack;
-
-        console.log("roll")
-
-        currentRollDisplay1 = Math.floor(Math.random() * 6) + 1;
-        if (isAttack) currentRollDisplay2 = Math.floor(Math.random() * 6) + 1;
-        let speed = 40;
-
-        function animate(){
-
-            if(!isRolling) return;
-
-            currentRollDisplay1 = Math.floor(Math.random() * 6) + 1;
-            if (isAttack) currentRollDisplay2 = Math.floor(Math.random() * 6) + 1;
-    
-            setTimeout(animate, speed);
-        }
-
-        animate();
-
-        if(isMultiplayer){
-            $socket.emit('die_roll', { gameId: $gameId });
-        }
-    }
-
-    export function handleDiceResult(res){
-        isRolling = false; 
-        
-        currentRollDisplay1 = res;
-
-        let secondDie = 0;
-        if (pendingAttack) {
-            secondDie = Math.floor(Math.random() * 6) + 1;
-            currentRollDisplay2 = secondDie;
-        }
-
-        setTimeout(() => {
-            finalizeResult(pendingAttack, res, secondDie);
-            pendingAttack = false; // Reset for next time
-        }, 1200);
-    }
-
-    function finalizeResult(isAttack, result1, result2){
-
-        const isScan = !isAttack;
-        const currentMode = targetingMode; 
-
-        if (isAttack) {
-            onFireResolve(result1, result2);
-        } else {
-            onSearch(result1);
-        }
-
-        currentRollDisplay1 = 0;
-        currentRollDisplay2 = 0;
-        pendingAttack = false;
-    }
 </script>
 
 <!--SIDEBAR CONTENT-->
@@ -178,8 +100,8 @@
                         <span class="btn-sub">{totalFuel > 0 ? "MOVE FLEET (COST: 1 FUEL)" : "NO FUEL REMAINING"}</span>
                     </button>
 
-                    <button style="margin-top: 10px; border-color: #3b82f6; color: #3b82f6;" 
-                        onclick={() => diceRoll(false)} disabled={!isMyTurn || selectedGroup.length === 0}>
+                    <button style="margin-top: 10px; border-color: #3b82f6; color: #3b82f6;"
+                        onclick={() => onSearch()} disabled={!isMyTurn || selectedGroup.length === 0}>
                         <span class="btn-text">ACTIVATE SCAN</span>
                         <span class="btn-sub">CONFIRM AND SEARCH</span>
                     </button>
@@ -214,8 +136,8 @@
                     <div class="button-group">
                         <button 
                             class="fire-button"
-                            onclick={() => diceRoll(true)}
-                            disabled={isRolling || !sourceFleet}
+                            onclick={() => onFireResolve()}
+                            disabled={!sourceFleet}
                         >
                             <span class="btn-text">ENGAGE</span>
                             <span class="btn-sub">{sourceFleet ? "EXECUTE ATTACK VECTOR" : "WAITING FOR SOURCE..."}</span>
@@ -232,27 +154,6 @@
             {/if}
         {/if}
     </div>
-
-    {#if currentRollDisplay1 !== 0}
-        <div class="dice-popup-overlay">
-            <div class="dice-box" class:is-stopping={!isRolling}>
-                <span class="dice-header">
-                    {targetEnemy ? '--READYING WEAPON--' : '--SCANNING--'}
-                </span>
-                
-                <div class="dice-row">
-                    <div class="die-face">{currentRollDisplay1}</div>
-                    {#if targetEnemy}
-                        <div class="die-face">{currentRollDisplay2}</div>
-                    {/if}
-                </div>
-
-                {#if !isRolling}
-                    <div class="lock-indicator">RESULT LOCKED</div>
-                {/if}
-            </div>
-        </div>
-    {/if}
 {/if}
 
 <!--SIDEBAR APPEARANCE-->
@@ -352,7 +253,6 @@
         margin-top: 4px; 
     }
 
-    
     .attack-stats {
         background: rgba(226, 74, 74, 0.1);
         border: 1px solid rgba(226, 74, 74, 0.3);
@@ -390,75 +290,6 @@
         0% { opacity: 1; }
         50% { opacity: 0.5; }
         100% { opacity: 1; }
-    }
-
-    .dice-popup-overlay {
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100vw;
-        height: 100vh;
-        background: rgba(0, 0, 0, 0.6);
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        z-index: 10000;
-        backdrop-filter: blur(2px);
-    }
-
-    .dice-box {
-        background: #0a0f1e;
-        border: 2px solid #3b82f6;
-        padding: 40px;
-        text-align: center;
-        box-shadow: 0 0 30px rgba(59, 130, 246, 0.4);
-        clip-path: polygon(10% 0, 100% 0, 100% 90%, 90% 100%, 0 100%, 0 10%);
-        animation: popIn 0.3s ease-out;
-    }
-
-    .dice-box.is-stopping {
-        border-color: #22c55e;
-        box-shadow: 0 0 30px rgba(34, 197, 94, 0.4);
-    }
-
-    .dice-row {
-        display: flex;
-        gap: 20px;
-        justify-content: center;
-        margin: 20px 0;
-    }
-
-    .die-face {
-        width: 100px;
-        height: 100px;
-        background: #000;
-        border: 2px solid currentColor;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 4rem;
-        font-weight: bold;
-        color: #3b82f6;
-        font-family: 'Chakra Petch', sans-serif;
-    }
-
-    .is-stopping .die-face {
-        color: #22c55e;
-    }
-
-    .dice-header {
-        font-family: 'Chakra Petch', sans-serif;
-        color: #abbbd1;
-        letter-spacing: 3px;
-        font-size: 1rem;
-    }
-
-    .lock-indicator {
-        font-size: 0.8rem;
-        color: #22c55e;
-        letter-spacing: 5px;
-        margin-top: 10px;
-        font-weight: bold;
     }
 
     @keyframes popIn {
