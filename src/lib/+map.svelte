@@ -515,6 +515,7 @@
                 triggerOverlay("TARGET MISSED: 0 HITS", "fail");
             }
         }
+        
         rollUniversalDice("--FIRING WEAPONS--", 2, (roll1, roll2) => {
             const hits = (roll1 >= requiredRoll || roll2 >= requiredRoll) ? 1 : 0;
             const enemyIndex = enemyFleets.findIndex(e => e.q === targetEnemy.q && e.r === targetEnemy.r);
