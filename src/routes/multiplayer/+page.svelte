@@ -1,5 +1,5 @@
 <script>
-    import HexMap from '$lib/+map Multi.svelte';
+    import HexMap from '$lib/+map.svelte';
 </script>
 
 <div class="page-content">
@@ -18,7 +18,7 @@
     padding-top: 2vh;
     width: 100%;
     height: 100%;
-    user-select: none; 
+    user-select: none;
     -webkit-user-select: none; 
   }
 

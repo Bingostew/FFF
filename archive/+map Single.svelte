@@ -40,6 +40,36 @@
     let friendlySearchedHexes = $state([]);
     let enemySearchedHexes = $state([]);    
     let isRevealed = $state(false);
+    let enemyFleets = $state([]); 
+
+    let sourceFleet = $state(null);
+    let targetEnemy = $state(null);
+    let attackRange = $derived.by(() => {
+        if (!sourceFleet || !targetEnemy) return null;
+
+        let dist = (Math.abs(sourceFleet.q - targetEnemy.q) + 
+                    Math.abs(sourceFleet.r - targetEnemy.r) + 
+                    Math.abs((-sourceFleet.q - sourceFleet.r) - (-targetEnemy.q - targetEnemy.r))) / 2;
+
+        const lineOfSight = grid.traverse(grid.line({ start: sourceFleet, end: targetEnemy }));
+        let landPenalty = 0;
+        
+        const pathArray = [...lineOfSight].slice(1, -1);
+
+        pathArray.forEach(hex => {
+            if (specialTiles.some(t => t.col === hex.col && t.row === hex.row)) {
+                landPenalty += 1; 
+            }
+        });
+
+        return landPenalty + dist;
+    });
+
+    let requiredRoll = $derived(
+        attackRange === null ? null : 
+        attackRange <= 2 ? 2 : 
+        attackRange <= 6 ? 3 : 4
+    );
 
     // This is the layout of the land tiles
     const specialTiles = [
@@ -100,7 +130,7 @@
             return;
         }
 
-        // --- NEW: MOVE LOGIC ---
+        // MOVE LOGIC
         if (targetingMode === 'move') {
             const isFleet = fleetSelections.find(h => h.q === hex.q && h.r === hex.r);
             
@@ -145,6 +175,25 @@
             return;
         }
         // --- END MOVE LOGIC ---
+
+        if (isConfirmed) {
+            const friendlyFleet = fleetSelections.find(f => f.q === hex.q && f.r === hex.r);
+            const isDetectedEnemy = enemySearchedHexes.some(e => e.q === hex.q && e.r === hex.r);
+
+            // 1. Select Source (Your Fleet)
+            if (friendlyFleet) {
+                sourceFleet = friendlyFleet;
+                showWarning(event.clientX, event.clientY, `Source: ${sourceFleet.name}`);
+                return;
+            }
+
+            // 2. Select Target (Detected Enemy)
+            if (isDetectedEnemy) {
+                targetEnemy = hex;
+                return;
+            }
+        }
+
 
         // TARGETING PHASE
         else if (targetingMode === 'directional') {
@@ -225,10 +274,17 @@
         if (fleetSelections.length === 2) {
             console.log("Fleets locked:", fleetSelections.map(f => ({ q: f.q, r: f.r })));
             isConfirmed = true;
+
+            enemyFleets = [
+                { q: 6, r: -3, name: "IJN Yamato", health: 2 }, // Designated Spot 1 (Top Right)
+                { q: 4, r: 0, name: "IJN Musashi", health: 2 }   // Designated Spot 2 (Middle Right)
+            ];
+            
             selectedGroup = [];
             targetingMode = 'focus';
         }
     }
+
 
     // --- ARTIFICIAL INTELLIGENCE ---
 
@@ -279,9 +335,42 @@
             !friendlySearchedHexes.some(searched => searched.q === selected.q && searched.r === selected.r)
         );
         
-        friendlySearchedHexes = [...friendlySearchedHexes, ...newSearches];
-        selectedGroup = []; // Clear selection after activating
+        const detected = selectedGroup.find(hex => 
+            enemyFleets.some(e => e.q === hex.q && e.r === hex.r)
+        );
+
+        if(detected){
+            targetEnemy = detected;
+            showWarning(mousePos.x, mousePos.y, "TARGET DETECTED: FIRE MISSION ACTIVE");
+            
+            if (!sourceFleet && fleetSelections.length > 0) sourceFleet = fleetSelections[0];
+        
+            selectedGroup = []; 
+
+            return true;
+        }
+
+        selectedGroup = []; 
+
+        return false;
     }
+
+    function resolveAttack() {
+        if (!sourceFleet || !targetEnemy) return;
+
+        const roll = Math.floor(Math.random() * 6) + 1; 
+        
+        if (roll >= requiredRoll) {
+            showWarning(mousePos.x, mousePos.y, `HIT! Rolled a ${roll}`);
+        } else {
+            showWarning(mousePos.x, mousePos.y, `MISS! Rolled a ${roll} (Needed ${requiredRoll}+)`);
+        }
+
+        // Reset targeting after the shot
+        targetEnemy = null;
+        executeEnemyTurn(); 
+    }
+
 </script>
 
 <!--MAP HTML-->
@@ -297,6 +386,10 @@
         onConfirm={confirmFleets}
         onSearch={handlePlayerSearch} 
         onTurnEnd={executeEnemyTurn} 
+        bind:targetEnemy={targetEnemy}
+        {attackRange}
+        {requiredRoll}
+        onFireResolve={resolveAttack}
     />
 
     <!--MIDDLE-->
@@ -472,6 +565,16 @@
                 {/each}
             </g>
         </svg>
+
+
+        {#if targetEnemy && sourceFleet}
+            <div class="fleet-tooltip attack-mode" style="top: {mousePos.y - 100}px; left: {mousePos.x}px; border-color: #e24a4a;">
+                <div class="tooltip-header" style="color: #e24a4a;">FIRE CONTROL</div>
+                <div class="tooltip-stat">TARGET RANGE: <span style="color: #fff">{attackRange} HEXES</span></div>
+                <div class="tooltip-stat">ROLL NEEDED: <span style="color: #e24a4a; font-weight: bold;">{requiredRoll}+</span></div>
+                <div class="tooltip-stat" style="font-size: 0.7rem; opacity: 0.7;">(Land Penalty Included)</div>
+            </div>
+        {/if}
 
         {#if hoveredHex && isConfirmed}
             {@const hoveredFleet = fleetSelections.find(f => f.q === hoveredHex.q && f.r === hoveredHex.r)}

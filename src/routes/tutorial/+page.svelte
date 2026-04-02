@@ -1,21 +1,10 @@
-<div class="page-content">
-  <h1 class="section-header">HOW TO PLAY</h1>
-  
-  <div class="briefing-container">
-    <div class="step">
-      <h2>PHASE 1: FIND</h2>
-      <p>Locate the target using provided intel and signal triangulation.</p>
-    </div>
-    <div class="step">
-      <h2>PHASE 2: FIX</h2>
-      <p>Pin down the target's location and restrict their movement.</p>
-    </div>
-    <div class="step">
-      <h2>PHASE 3: FINISH</h2>
-      <p>Execute the objective. Confirm neutralization.</p>
-    </div>
-  </div>
-</div>
+
+
+<img 
+    src="/Find-Fix-and-Finish-1.jpg" 
+    alt="Rules Reference" 
+    class="floating-rules" 
+/>
 
 <style>
   .page-content { 
@@ -43,4 +32,25 @@
   .step:hover { 
     border-color: #3b82f6; 
   }
+
+  .floating-rules {
+    /* 1. THE CENTERING MAGIC */
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      z-index: 1000;
+      
+      /* 2. THE DYNAMIC SIZING MAGIC */
+      max-width: 85vw;  /* Never take up more than 85% of the screen width */
+      max-height: 85vh; /* Never take up more than 85% of the screen height */
+      width: auto;      /* Keeps the image proportions from getting stretched */
+      height: auto;     /* Keeps the image proportions from getting squished */
+
+      /* 3. VISUAL POLISH */
+      opacity: 0.95; 
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8); /* Strong shadow to pop off the background */
+      border-radius: 8px; /* Slightly rounds the corners of the image */
+  }
+      
 </style>

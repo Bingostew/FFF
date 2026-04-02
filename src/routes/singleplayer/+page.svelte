@@ -1,7 +1,7 @@
 <!--SINGLEPLAYER PAGE-->
 <!--SCRIPTS FOR SINGEPLAYER PAGE-->
 <script>
-    import HexMap from '$lib/+map Single.svelte';
+    import HexMap from '$lib/+map.svelte';
 </script>
 
 <!--SINGLEPLAYER HTML-->
