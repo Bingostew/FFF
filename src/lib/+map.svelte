@@ -130,31 +130,49 @@
     }
 
     function rollUniversalDice(text, numDice, callback) {
+        if (globalDice.show) return;
+
         globalDice.show = true;
         globalDice.text = text;
         globalDice.isStopping = false;
+        globalDice.val1 = Math.floor(Math.random() * 6) + 1;
+        globalDice.val2 = numDice === 2 ? Math.floor(Math.random() * 6) + 1 : null;
         
-        const final1 = Math.floor(Math.random() * 6) + 1;
-        const final2 = numDice === 2 ? Math.floor(Math.random() * 6) + 1 : null;
+        // 2. Generate the Cryptographically Secure final results
+        const cryptoVals = new Uint32Array(2);
+        window.crypto.getRandomValues(cryptoVals);
+        const final1 = (cryptoVals[0] % 6) + 1;
+        const final2 = numDice === 2 ? (cryptoVals[1] % 6) + 1 : null;
         
-        let iterations = 0; let speed = 40;
+        let iterations = 0;
+        const maxIterations = 15; // 15 frames
         
         function animate() {
-            iterations++;
-            globalDice.val1 = Math.floor(Math.random() * 6) + 1;
-            if (numDice === 2) globalDice.val2 = Math.floor(Math.random() * 6) + 1;
+            iterations++; 
             
-            if (iterations < 8) {
-                speed += iterations * 15;
-                setTimeout(animate, speed);
+            // 3. Prevent duplicate frames so it visually spins every time
+            let next1, next2;
+            do { next1 = Math.floor(Math.random() * 6) + 1; } while (next1 === globalDice.val1);
+            globalDice.val1 = next1;
+
+            if (numDice === 2) {
+                do { next2 = Math.floor(Math.random() * 6) + 1; } while (next2 === globalDice.val2);
+                globalDice.val2 = next2;
+            }
+            
+            if (iterations < maxIterations) {
+                // 50ms provides a buttery-smooth 20 FPS blur without stuttering
+                setTimeout(animate, 50); 
             } else {
+                // Lock in the cryptographically secure result
                 globalDice.val1 = final1;
                 if (numDice === 2) globalDice.val2 = final2;
                 globalDice.isStopping = true;
+                
                 setTimeout(() => {
                     globalDice.show = false;
                     callback(final1, final2);
-                }, 2000); // 2 seconds to view the locked dice
+                }, 2000); 
             }
         }
         animate();
@@ -507,10 +525,12 @@
                 });
                 targetEnemy = null;
                 sourceFleet = null;
-                // Note: The UI overlay and turn-end will be handled by the incoming 'strike_result' socket listener!
             } else {
-                // SINGLEPLAYER LOGIC
-                const hits = (roll1 >= requiredRoll || roll2 >= requiredRoll) ? 1 : 0;
+                // SINGLEPLAYER LOGIC: 1 Damage Per Success
+                let hits = 0;
+                if (roll1 >= requiredRoll) hits++;
+                if (roll2 >= requiredRoll) hits++;
+                
                 const enemyIndex = enemyFleets.findIndex(e => e.q === targetEnemy.q && e.r === targetEnemy.r);
                 
                 if (enemyIndex !== -1 && hits > 0){
@@ -519,18 +539,20 @@
                     checkWinCondition(); 
                 }
 
-                triggerOverlay(hits > 0 ? "TARGET HIT: 1 DMG" : "MISSED", hits > 0 ? "success" : "fail");
+                // Dynamic overlay based on damage dealt
+                let hitMsg = hits === 2 ? "CRITICAL STRIKE: 2 DMG" : (hits === 1 ? "TARGET HIT: 1 DMG" : "MISSED");
+                triggerOverlay(hitMsg, hits > 0 ? "success" : "fail");
 
                 setTimeout(() => {
                     if (gameOver) return;
-                    // ENEMY COUNTER BATTERY
+                    // ENEMY COUNTER BATTERY: 1 Die, 3+ Traces Signal, Hand Turn Over
                     rollUniversalDice("--ENEMY TRACING SIGNAL--", 1, (counterRoll) => {
                         if (counterRoll >= 3) {
                             enemySearchedHexes = [...enemySearchedHexes, { q: sourceFleet.q, r: sourceFleet.r }];
                             triggerOverlay("WARNING: LOCATION COMPROMISED!", "fail");
-                            setTimeout(() => handleTurnEnd(), 2000);
+                            setTimeout(() => handleTurnEnd(), 2000); // Wait for warning, then start AI Turn
                         } else {
-                            handleTurnEnd();
+                            handleTurnEnd(); // Immediately start AI Turn
                         }
                     });
                 }, 2000);
@@ -566,7 +588,9 @@
 
         aiGame.blueFleets = enemyFleets.map(f => {
             const hex = gridHexes.find(h => h.q === f.q && h.r === f.r);
-            return { id: f.id, pos: HexUtils.posToString({ col: hex.col, row: hex.row }), hp: f.health, fuel: f.fuel, isHidden: false };
+            // Check if the player has successfully scanned this hex
+            const isRevealedToPlayer = friendlySearchedHexes.some(s => s.q === f.q && s.r === f.r);
+            return { id: f.id, pos: HexUtils.posToString({ col: hex.col, row: hex.row }), hp: f.health, fuel: f.fuel, isHidden: !isRevealedToPlayer };
         });
 
         enemySearchedHexes.forEach(hex => {
@@ -625,6 +649,8 @@
 
                     enemyFleets = enemyFleets.map(f => (f.id === fleetId) ? { ...f, q: targetHex.q, r: targetHex.r, fuel: f.fuel - 1 } : f);
                     triggerOverlay(`ENEMY MOVED`, "fail");
+
+                    endEnemyTurn();
                 } 
                 else if (command === "ISR") {
                     const scanType = parts[1]; 
@@ -633,67 +659,89 @@
                         return offset ? gridHexes.find(h => h.col === offset.col && h.row === offset.row) : null;
                     }).filter(Boolean); 
 
-                    enemySearchedHexes = [...enemySearchedHexes, ...scannedHexes];
-                    
-                    const detectedFriendly = scannedHexes.find(hex => fleetSelections.some(f => f.q === hex.q && f.r === hex.r));
+                    rollUniversalDice(`--ENEMY SCANNING (${scanType.toUpperCase()})--`, 1, (aiScanRoll) => {
+                        
+                        // AI only succeeds on 3 or less (adjust difficulty here if needed)
+                        if (aiScanRoll <= 3) {
+                            enemySearchedHexes = [...enemySearchedHexes, ...scannedHexes];
+                            const detectedFriendly = scannedHexes.find(hex => fleetSelections.some(f => f.q === hex.q && f.r === hex.r));
 
-                    if (detectedFriendly) {
-                        // HIT! Lock target into memory and clear suspected hexes
-                        aiMemory.knownTargets = [{ q: detectedFriendly.q, r: detectedFriendly.r, col: detectedFriendly.col, row: detectedFriendly.row }];
-                        aiMemory.suspectedHexes = []; 
-                        
-                        isRevealed = true; 
-                        
-                        // AI Rolls 2 Dice
-                        const roll1 = Math.floor(Math.random() * 6) + 1;
-                        const roll2 = Math.floor(Math.random() * 6) + 1;
-                        const aiRequiredRoll = 3; 
-                        const hits = (roll1 >= aiRequiredRoll || roll2 >= aiRequiredRoll) ? 1 : 0;
-                        
-                        if (hits > 0) {
-                            fleetSelections = fleetSelections.map(f => {
-                                if (f.q === detectedFriendly.q && f.r === detectedFriendly.r) return { ...f, health: f.health - hits };
-                                return f;
-                            }).filter(f => f.health > 0); 
-                        }
+                            if (detectedFriendly) {
+                                // HIT! Lock target
+                                aiMemory.knownTargets = [{ q: detectedFriendly.q, r: detectedFriendly.r, col: detectedFriendly.col, row: detectedFriendly.row }];
+                                aiMemory.suspectedHexes = []; 
+                                triggerOverlay("ENEMY LOCK DETECTED!", "fail");
 
-                        // AI Counter-Detection Roll (Your friend's logic)
-                        const counterRoll = Math.floor(Math.random() * 6) + 1;
-                        if (counterRoll >= 3 && enemyFleets.length > 0) {
-                            const attacker = enemyFleets[Math.floor(Math.random() * enemyFleets.length)];
-                            friendlySearchedHexes = [...friendlySearchedHexes, { q: attacker.q, r: attacker.r }];
-                            triggerOverlay(`ENEMY ROLLED ${roll1} & ${roll2}. WE TRACED THEIR SIGNAL!`, hits > 0 ? "fail" : "success");
+                                setTimeout(() => {
+                                    rollUniversalDice("--INCOMING--", 2, (r1, r2) => {
+                                        // AI LOGIC: 1 Damage Per Success (Hits on 3+)
+                                        let hits = 0;
+                                        if (r1 >= 3) hits++;
+                                        if (r2 >= 3) hits++;
+                                        
+                                        if (hits > 0) {
+                                            fleetSelections = fleetSelections.map(f => {
+                                                if (f.q === detectedFriendly.q && f.r === detectedFriendly.r) return { ...f, health: f.health - hits };
+                                                return f;
+                                            }).filter(f => f.health > 0);
+                                        }
+                                        checkWinCondition();
+
+                                        let hitMsg = hits === 2 ? "FRIENDLY VESSEL DESTROYED: 2 DMG" : (hits === 1 ? "VESSEL STRUCK: 1 DMG" : "ENEMY MISSED");
+                                        triggerOverlay(hitMsg, hits > 0 ? "fail" : "success");
+                                        
+                                        setTimeout(() => {
+                                            if(gameOver || enemyFleets.length === 0) return endEnemyTurn();
+                                            
+                                            // PLAYER COUNTER BATTERY: 1 Die, 3+ Traces Signal, Hand Turn Over
+                                            rollUniversalDice("--TRACING ENEMY SIGNAL--", 1, (counterRoll) => {
+                                                if (counterRoll >= 3) {
+                                                    // Pick a random living enemy ship to reveal
+                                                    const attacker = enemyFleets[Math.floor(Math.random() * enemyFleets.length)];
+                                                    friendlySearchedHexes = [...friendlySearchedHexes, { q: attacker.q, r: attacker.r }];
+                                                    triggerOverlay("ENEMY SIGNAL TRACED!", "success");
+                                                } else {
+                                                    triggerOverlay("SIGNAL TRACE FAILED!", "fail");
+                                                }
+                                                // End AI Turn and give control back to Player
+                                                endEnemyTurn(); 
+                                            });
+                                        }, 2000);
+                                    });
+                                }, 2000);
+
+                            } else { 
+                                // MISS! 
+                                const missedKnown = aiMemory.knownTargets.find(t => scannedHexes.some(s => s.q === t.q && s.r === t.r));
+                                if (missedKnown) {
+                                    aiMemory.knownTargets = [];
+                                    aiMemory.suspectedHexes = getTargetHexes(missedKnown, 'area', 0, gridHexes)
+                                        .filter(h => !specialTiles.some(t => t.col === h.col && t.row === h.row))
+                                        .filter(h => !enemySearchedHexes.some(s => s.q === h.q && s.r === h.r));
+                                }
+                                triggerOverlay(`ENEMY SCAN DETECTED NOTHING!`, "success");
+                                endEnemyTurn();
+                            }
                         } else {
-                            triggerOverlay(`ENEMY ROLLED ${roll1} & ${roll2}. ${hits} HITS!`, hits > 0 ? "fail" : "success");
+                            // AI Failed its scan roll!
+                            triggerOverlay(`ENEMY SCAN FAILED!`, "success");
+                            endEnemyTurn();
                         }
-                        
-                        checkWinCondition();
-
-                    } else { 
-                        // MISS! Did we miss a known target? If so, they fled. Hunt them.
-                        const missedKnown = aiMemory.knownTargets.find(t => scannedHexes.some(s => s.q === t.q && s.r === t.r));
-                        if (missedKnown) {
-                            aiMemory.knownTargets = []; 
-                            aiMemory.suspectedHexes = getTargetHexes(missedKnown, 'area', 0, gridHexes)
-                                .filter(h => !specialTiles.some(t => t.col === h.col && t.row === h.row))
-                                .filter(h => !enemySearchedHexes.some(s => s.q === h.q && s.r === h.r));
-                        }
-                        triggerOverlay(`ENEMY CONDUCTED ${scanType} SCAN`, "fail"); 
-                    }
+                    });
                 }
-                endEnemyTurn();
             } catch (error) {
                 console.error("AI Crash:", error);
                 endEnemyTurn(); 
             }
-        }, 300); 
+        }, 1500); 
     }
 
     function endEnemyTurn() {
         setTimeout(() => {
             currentTurn += 1;
-            isEnemyTurn = false; 
-        }, 2500); 
+            checkWinCondition();
+            if (!gameOver) isEnemyTurn = false; 
+        }, 2500);
     }
 
     function handleDevShortcut(e) {
@@ -856,7 +904,7 @@
     <div class="fullscreen-lock-overlay" class:overlay-success={overlay.mode === 'success'}>
         <div class="failure-content">
             <div class="glitch-text">{overlay.text}</div>
-            <div class="sub-text">{overlay.mode === 'success' ? 'FIRE CONTROL INITIALIZED...' : 'RECALIBRATING SENSORS...'}</div>
+            <div class="sub-text">{overlay.mode === 'success' ? 'COLLECTING DATA...' : 'RECALIBRATING SENSORS...'}</div>
         </div>
     </div>
     {/if}
