@@ -69,7 +69,7 @@
         border: 1px solid #3b82f6;
         border-right: none;
         color: #3b82f6;
-        cursor: pointer;
+        cursor: none;
         display: flex;
         flex-direction: column;
         justify-content: center;
