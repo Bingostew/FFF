@@ -234,6 +234,8 @@
             const ISREvents = ['focus_result', 'directional_result', 'area_result'];
 
             const onISRResult = (data) => {
+
+                console.log("RESSSSSSSSSSSSSSS");
                 const { playerName, revealPos, positions, rollSuccess } = data;
                 
                 if (!revealPos || revealPos.length === 0) {
