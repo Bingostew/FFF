@@ -210,15 +210,27 @@
 
             $socket.on('strike_result', ({attacker, hit, targetHex, fleetKey, hpRemaining, isDetroyed, distance}) => {
                 
-                if (hit === 2) {
-                    triggerOverlay("TARGET DESTROYED: 2 HITS", "success");
-                } else if (hit === 1) {
-                    triggerOverlay("TARGET HIT", "success");
-                } else {
-                    triggerOverlay("TARGET MISSED: 0 HITS", "fail");
+                if(isMyTurn){
+                    if (hit === 2) {
+                        triggerOverlay("TARGET DESTROYED: 2 HITS", "success");
+                    } else if (hit === 1) {
+                        triggerOverlay("TARGET HIT", "success");
+                    } else {
+                        triggerOverlay("TARGET MISSED: 0 HITS", "fail");
+                    }
                 }
-                
-                handleTurnEnd();
+                else{
+                    /*
+                    const targetHex = gridHexes.find(h => h.q === newPosition.q && h.r === newPosition.r);
+                    if (targetHex) {
+                        enemyFleets = enemyFleets.map(f => {
+                            const idMatch = fleetKey === 'alpha' ? 'B1' : 'B2';
+                            if (f.id === idMatch) return { ...f, q: targetHex.q, r: targetHex.r, fuel: f.fuel - 1 };
+                            return f;
+                        });
+                        triggerOverlay(`ENEMY MOVED`, "fail");
+                    }*/
+                }
             });
 
             $socket.on('fleet_moved', ({playerId, fleetKey, newPosition}) =>{
@@ -283,18 +295,6 @@
                 }
             });
 
-            $socket.on('strike_result', ({ attacker, hit, targetHex, fleetKey, hpRemaining, isDestroyed }) => {
-                if (attacker !== $socket.id) {
-                    if (hit) {
-                        triggerOverlay("WARNING: YOU HAVE BEEN HIT!", "fail");
-                        fleetSelections = fleetSelections.map((f, i) => {
-                            const isTarget = (fleetKey === 'alpha' && i === 0) || (fleetKey === 'beta' && i === 1);
-                            if (isTarget) return { ...f, health: hpRemaining };
-                            return f;
-                        });
-                    } else { triggerOverlay("ENEMY STRIKE MISSED", "success"); }
-                }
-            });
 
             return () => {
                 $socket.off("room_update");
@@ -454,11 +454,14 @@
 
         const needsRoll = targetingMode === 'directional' || targetingMode === 'area';
         const threshold = targetingMode === 'directional' ? 4 : 3;
+                console.log("ssssssssssssssssssssssssssssssss");
 
         const executeSearchLogic = (rollResult) => {
             if (isMultiplayer) {
                 // MULTIPLAYER LOGIC
                 const formattedPositions = {};
+                                console.log("mmmmmmmmmmmmmmmmmm");
+
                 selectedGroup.forEach((h, index) => { formattedPositions[index] = { q: h.q, r: h.r }; });
                 $socket.emit(targetingMode, { gameId: $gameId, Positions: formattedPositions, dieResult: rollResult });
                 selectedGroup = [];

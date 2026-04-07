@@ -554,9 +554,7 @@ module.exports = (io, lobbies) => {
         // Handle the "Finish" - Strike Logic
         socket.on('execute_strike', ({ gameId, targetHex, dieResult1, dieResult2 }) => {
             const lobby = lobbies[gameId];
-            if (checkForActionConditions(lobby, socket) === false) {
-                return;
-            }
+
 
             // Calculate the shortest distance from a living friendly fleet to the target hex
             const attackerFleets = lobby.fleets[socket.id];
@@ -629,15 +627,15 @@ module.exports = (io, lobbies) => {
                 switchTurn(gameId);
             }
             // If the Bot is assigned to go first, trigger it!
-            if (firstPlayerId === BOT_ID) {
-                setTimeout(() => processBotTurn(gameId), 2000);
-            }
+          //  if (firstPlayerId === BOT_ID) {
+            //    setTimeout(() => processBotTurn(gameId), 2000);
+           // }
             
         });
 
-        socket.on('execute_strike', ({ gameId, targetHex, dieResult }) => {
-            handleStrike(gameId, socket.id, targetHex, dieResult, (msg) => socket.emit('error', msg));
-        });
+    //    socket.on('execute_strike', ({ gameId, targetHex, dieResult }) => {
+      //      handleStrike(gameId, socket.id, targetHex, dieResult, (msg) => socket.emit('error', msg));
+       // });
 
         socket.on('leave_game', ({ gameId }) => {
             socket.leave(gameId);
@@ -663,10 +661,6 @@ module.exports = (io, lobbies) => {
             const opponentId = Object.keys(lobby.players).find(id => id !== socket.id);
             const opponentFleets = lobby.fleets[opponentId];
             const player = lobby.players[socket.id];
-
-            if (checkForActionConditions(lobby, socket) === false) {
-                return;
-            }
 
             console.log("check");
 
@@ -712,9 +706,6 @@ module.exports = (io, lobbies) => {
             const opponentId = Object.keys(lobby.players).find(id => id !== socket.id);
             const opponentFleets = lobby.fleets[opponentId];
 
-            if (checkForActionConditions(lobby, socket) === false) {
-                return;
-            }
             for (const key in opponentFleets) {
                 const fleet = opponentFleets[key];
                 if (!fleet.isDestroyed) {
@@ -770,9 +761,6 @@ module.exports = (io, lobbies) => {
             const opponentId = Object.keys(lobby.players).find(id => id !== socket.id);
             const opponentFleets = lobby.fleets[opponentId];
 
-            if (checkForActionConditions(lobby, socket) === false) {
-                return;
-            }
             for (const key in opponentFleets) {
                 const fleet = opponentFleets[key];
                 if (!fleet.isDestroyed) {
