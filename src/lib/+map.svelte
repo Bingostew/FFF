@@ -300,6 +300,8 @@
     function handleHexClick(event, hex) {
         if (isConfirmed && !isMyTurn) return;
 
+        const coordStr = `${String.fromCharCode(65 + hex.col)}-${hex.row + 1}`; // e.g., "A-1"
+
         if(targetEnemy){
             const friendlyFleet = fleetSelections.find(f => f.q === hex.q && f.r === hex.r);
             if(friendlyFleet){
@@ -311,18 +313,24 @@
         const isSpecial = specialTiles.some(t => t.col === hex.col && t.row === hex.row);
         if (isSpecial) { showWarning(event.clientX, event.clientY, isConfirmed ? "Cannot select land" : "Cannot place fleet on land"); return; }
 
+        // --- PLACEMENT LOGIC ---
         if (!isConfirmed) {
             const tacticalNames = ["USS Gentile", "USS Maroon"]; 
             const index = fleetSelections.findIndex(h => h.q === hex.q && h.r === hex.r);
             if (index > -1) {
+                const removedName = fleetSelections[index].name;
                 fleetSelections = fleetSelections.filter(h => h !== fleetSelections[index]);
                 fleetSelections = fleetSelections.map((f, i) => ({ ...f, name: tacticalNames[i], id: i + 1 }));
+                addLog(`Recalled ${removedName} from ${coordStr}.`, 'player');
             } else if (fleetSelections.length < 2) {
-                fleetSelections = [...fleetSelections, { q: hex.q, r: hex.r, name: tacticalNames[fleetSelections.length], id: fleetSelections.length + 1, health: 2, fuel: 3 }];
+                const newName = tacticalNames[fleetSelections.length];
+                fleetSelections = [...fleetSelections, { q: hex.q, r: hex.r, name: newName, id: fleetSelections.length + 1, health: 2, fuel: 3 }];
+                addLog(`Deployed ${newName} to ${coordStr}.`, 'player');
             }
             return;
         }
 
+        // --- MOVEMENT LOGIC ---
         if (targetingMode === 'move') {
             const isFleet = fleetSelections.find(h => h.q === hex.q && h.r === hex.r);
             if (isFleet) {
@@ -336,30 +344,27 @@
                     showWarning(event.clientX, event.clientY, "Must jump to an adjacent hex!"); return;
                 }
                 if (selectedFleetToMove.fuel > 0) {
-                    // Update ONLY the moving ship's location and fuel
+                    const fleetName = selectedFleetToMove.name;
                     fleetSelections = fleetSelections.map(f => 
                         (f.q === selectedFleetToMove.q && f.r === selectedFleetToMove.r) 
                             ? { ...f, q: hex.q, r: hex.r, fuel: f.fuel - 1 } 
                             : f
                     );
-                    // HIDE MOVEMENT FROM ENEMY
                     enemySearchedHexes = enemySearchedHexes.filter(h => 
                         !(h.q === selectedFleetToMove.q && h.r === selectedFleetToMove.r) &&
                         !(h.q === hex.q && h.r === hex.r)
                     );
-                    selectedFleetToMove = null; 
-                    targetingMode = 'focus'; 
+                    
                     if (isMultiplayer) {
                         const fleetIndex = fleetSelections.findIndex(f => 
-                            f.q === selectedFleetToMove.q && f.r === selectedFleetToMove.r
+                            f.q === hex.q && f.r === hex.r
                         );
-
                         let fleetStr = fleetIndex === 0 ? 'alpha' : 'beta';
-                        $socket.emit('move_fleet', { gameId: $gameId, fleetKey: fleetStr, newPosition: {q: selectedFleetToMove.q, r:selectedFleetToMove.r} });
+                        $socket.emit('move_fleet', { gameId: $gameId, fleetKey: fleetStr, newPosition: {q: hex.q, r: hex.r} });
                     } else {
                         selectedFleetToMove = null; targetingMode = 'focus'; 
                         triggerOverlay("FLEET REPOSITIONED", "success");
-                        addLog(`Fleet repositioned to ${String.fromCharCode(65 + hex.col)}-${hex.row + 1}.`, 'player');
+                        addLog(`[${fleetName}] repositioned to ${coordStr}.`, 'player');
                         setTimeout(() => executeEnemyTurn(), 2000); 
                     }
                 } else { showWarning(event.clientX, event.clientY, `${selectedFleetToMove.name} is out of fuel!`); }
@@ -416,16 +421,18 @@
 
     $effect(() => { if (targetingMode !== 'move') selectedFleetToMove = null; });
 
-    // --- RESTORED: LOCAL SINGLEPLAYER CONFIRMATION ---
+
     function confirmFleets() {
         if (fleetSelections.length === 2) {
+            addLog("All fleets are positioned!", "system");
+            
             if (isMultiplayer) {
                 const fleetPositions = { alpha: { q: fleetSelections[0].q, r: fleetSelections[0].r }, beta: { q: fleetSelections[1].q, r: fleetSelections[1].r } };
                 $socket.emit('place_fleets', { gameId: $gameId, fleetPositions });
                 $socket.once('fleets_placed_confirmation', () => { $socket.emit('ready_check', {gameId: $gameId}); });
             } else {
                 isConfirmed = true; 
-                // Randomize Local AI Fleets
+                addLog("--- Turn 1 Start ---", "system");
                 const waterHexes = gridHexes.filter(h => !specialTiles.some(t => t.col === h.col && t.row === h.row));
                 const r1 = waterHexes[Math.floor(Math.random() * waterHexes.length)];
                 let r2 = waterHexes[Math.floor(Math.random() * waterHexes.length)];
@@ -441,29 +448,33 @@
         }
     }
 
-    // --- UNIFIED SEARCH LOGIC ---
-    function handlePlayerSearch() {
-        if (selectedGroup.length === 0) return;
 
-        const needsRoll = targetingMode === 'directional' || targetingMode === 'area';
-        const threshold = targetingMode === 'directional' ? 4 : 3;
+    // search logic
+    function handlePlayerSearch(die=0) {
+        if (isMultiplayer) {
+            if (selectedGroup.length === 0) return false;
+            const rawPos = selectedGroup;
+            const formattedPositions = {};
+            rawPos.forEach((h, index) => { 
+                formattedPositions[index] = { q: h.q, r: h.r }; 
+            });
 
-        const executeSearchLogic = (rollResult) => {
-            if (isMultiplayer) {
-                // MULTIPLAYER LOGIC
-                const formattedPositions = {};
-                selectedGroup.forEach((h, index) => { formattedPositions[index] = { q: h.q, r: h.r }; });
-                $socket.emit(targetingMode, { gameId: $gameId, Positions: formattedPositions, dieResult: rollResult });
-                selectedGroup = [];
-            } else {
-                // SINGLEPLAYER LOGIC
-                const isSuccess = !needsRoll || rollResult <= threshold;
-                if (!isSuccess) {
-                    triggerOverlay(`SCAN FAILED`, "fail");
-                    handleTurnEnd();
-                    return;
-                }
+            addLog(`Initiating ${targetingMode.toUpperCase()} scan...`, "player");
+            const eventName = `${targetingMode}`; 
+            
+            $socket.emit(eventName, { 
+                gameId: $gameId, 
+                Positions: formattedPositions,
+                dieResult: die
+            });
 
+            selectedGroup = []; 
+        } else {
+            if (selectedGroup.length === 0) return false;
+
+            addLog(`Initiating ${targetingMode.toUpperCase()} scan...`, "player");
+            
+            rollUniversalDice("--SCANNING--", 1, () => {
                 const newSearches = selectedGroup.filter(selected => !friendlySearchedHexes.some(searched => searched.q === selected.q && searched.r === selected.r));
                 const detected = selectedGroup.find(hex => enemyFleets.some(e => e.q === hex.q && e.r === hex.r));
                 friendlySearchedHexes = [...friendlySearchedHexes, ...newSearches];
@@ -471,30 +482,22 @@
 
                 if (detected) {
                     triggerOverlay("TARGET FOUND - AUTO-ENGAGING", "success");
+                    addLog("Target found! Auto-engaging...", "success");
                     targetEnemy = detected;
-                    // Auto-select closest ship
                     sourceFleet = fleetSelections.reduce((prev, curr) => {
                         const d1 = (Math.abs(prev.q - detected.q) + Math.abs(prev.r - detected.r) + Math.abs((-prev.q - prev.r) - (-detected.q - detected.r))) / 2;
                         const d2 = (Math.abs(curr.q - detected.q) + Math.abs(curr.r - detected.r) + Math.abs((-curr.q - curr.r) - (-detected.q - detected.r))) / 2;
                         return d2 < d1 ? curr : prev;
                     });
                     
-                    // Auto-fire after 2 seconds!
                     setTimeout(() => resolveAttack(), 2000); 
                 } else {
                     triggerOverlay("AREA CLEAR", "success");
+                    addLog("Scan complete. Area clear.", "system");
                     handleTurnEnd();
                 }
-            }
+            });
         };
-
-        // Roll the universal dice first, THEN execute the logic
-        if (needsRoll) {
-            rollUniversalDice("--SCANNING--", 1, (r1) => executeSearchLogic(r1));
-        } else {
-            triggerOverlay("INITIALIZING SCAN...", "success");
-            setTimeout(() => executeSearchLogic(0), 500);
-        }
     }
 
     function handleTurnEnd() {
@@ -504,45 +507,57 @@
         } 
     }
 
-    // --- UNIFIED ATTACK LOGIC ---
+    // attack logic
     function resolveAttack() {
         if (!sourceFleet || !targetEnemy) return;
 
-        // Roll the universal dice first, THEN execute the logic
+        // Find the coordinates for the log
+        const targetCoord = `${String.fromCharCode(65 + targetEnemy.col)}-${targetEnemy.row + 1}`;
+        addLog(`[${sourceFleet.name}] firing on coordinates ${targetCoord}...`, "player");
+
         rollUniversalDice("--FIRING WEAPONS--", 2, (roll1, roll2) => {
             if (isMultiplayer) {
-                // MULTIPLAYER LOGIC
                 $socket.emit('execute_strike', { 
                     gameId: $gameId, 
                     targetHex: { q: targetEnemy.q, r: targetEnemy.r },
-                    dieResult1: roll1,
+                    dieResult1 :roll1,
                     dieResult2: roll2
                 });
                 targetEnemy = null;
-                sourceFleet = null;
-                // Note: The UI overlay and turn-end will be handled by the incoming 'strike_result' socket listener!
             } else {
-                // SINGLEPLAYER LOGIC
-                const hits = (roll1 >= requiredRoll || roll2 >= requiredRoll) ? 1 : 0;
+                const hit1 = roll1 >= requiredRoll;
+                const hit2 = roll2 >= requiredRoll;
+                const totalHits = (hit1 ? 1 : 0) + (hit2 ? 1 : 0);
+                
+                if (totalHits === 2) {
+                    triggerOverlay("TARGET DESTROYED: 2 HITS", "success");
+                    addLog("Direct hit! Enemy fleet destroyed.", "success");
+                } else if (totalHits === 1) {
+                    triggerOverlay("TARGET HIT", "success");
+                    addLog("Enemy fleet hit (1 DMG).", "success");
+                } else {
+                    triggerOverlay("TARGET MISSED: 0 HITS", "fail");
+                    addLog("Attack missed.", "player");
+                }
+
                 const enemyIndex = enemyFleets.findIndex(e => e.q === targetEnemy.q && e.r === targetEnemy.r);
                 
-                if (enemyIndex !== -1 && hits > 0){
-                    enemyFleets[enemyIndex].health -= hits;
+                if (enemyIndex !== -1 && totalHits > 0){
+                    enemyFleets[enemyIndex].health -= totalHits;
                     if(enemyFleets[enemyIndex].health <= 0) enemyFleets = enemyFleets.filter((_, i) => i !== enemyIndex);
                     checkWinCondition(); 
                 }
 
-                triggerOverlay(hits > 0 ? "TARGET HIT: 1 DMG" : "MISSED", hits > 0 ? "success" : "fail");
-
                 setTimeout(() => {
                     if (gameOver) return;
-                    // ENEMY COUNTER BATTERY
                     rollUniversalDice("--ENEMY TRACING SIGNAL--", 1, (counterRoll) => {
                         if (counterRoll >= 3) {
                             enemySearchedHexes = [...enemySearchedHexes, { q: sourceFleet.q, r: sourceFleet.r }];
                             triggerOverlay("WARNING: LOCATION COMPROMISED!", "fail");
+                            addLog("WARNING: Enemy traced your firing signal!", "enemy");
                             setTimeout(() => handleTurnEnd(), 2000);
                         } else {
+                            addLog("Enemy failed to trace your firing signal.", "system");
                             handleTurnEnd();
                         }
                     });
@@ -604,12 +619,11 @@
     function executeEnemyTurn() {
         if (gameOver) return; 
         isEnemyTurn = true; 
-        addLog(`--- Enemy Turn ---`, 'system');
+        addLog(`---> Enemy Turn`, 'system');
         const aiGameState = syncStateToAI();
 
         aiTimeout = setTimeout(() => {
             try {
-                // 1. --- THE HEURISTIC OVERRIDE: HUNT & DESTROY ---
                 let forcedMove = null;
 
                 aiMemory.knownTargets = aiMemory.knownTargets.filter(targetHex => 
@@ -626,7 +640,7 @@
                     forcedMove = `ISR_focus_${posStr}`;
                 }
 
-                // 2. --- GET MOVE ---
+                // get move
                 let bestMove = forcedMove;
                 if (!bestMove) {
                     const mcts = new MCTS(300); 
@@ -639,7 +653,7 @@
                     endEnemyTurn(); return;
                 }
 
-                // 3. --- EXECUTE MOVE & UPDATE MEMORY ---
+                // execute move and update memory
                 const parts = bestMove.split('_');
                 const command = parts[0]; 
 
