@@ -76,6 +76,25 @@
         return landPenalty + dist;
     });
 
+    let hoveredAttackStats = $derived.by(() => {
+        // We only care about this if an enemy is already targeted
+        if (!targetEnemy || !hoveredHex) return null;
+
+        // Check if the hex we are hovering over contains one of our fleets
+        const hoveredFriendly = fleetSelections.find(f => f.q === hoveredHex.q && f.r === hoveredHex.r);
+        if (!hoveredFriendly) return null;
+
+        // Calculate distance (Reuse your existing distance logic)
+        const dist = (Math.abs(hoveredFriendly.q - targetEnemy.q) + 
+                    Math.abs(hoveredFriendly.r - targetEnemy.r) + 
+                    Math.abs((-hoveredFriendly.q - hoveredFriendly.r) - (-targetEnemy.q - targetEnemy.r))) / 2;
+        
+        // Calculate required roll
+        const roll = dist <= 2 ? 2 : dist <= 6 ? 3 : 4;
+
+        return { range: dist, roll: roll, name: hoveredFriendly.name };
+    });
+
     let requiredRoll = $derived(
         attackRange === null ? null : attackRange <= 2 ? 2 : attackRange <= 6 ? 3 : 4
     );
@@ -200,6 +219,9 @@
 
             $socket.on('turn_change', ({ activePlayer }) => {
                 activePlayerId.set(activePlayer);
+                targetEnemy = null;
+                sourceFleet = null;
+                selectedGroup = [];
             });
 
             $socket.on('die_result', ({playerId, die}) => {
@@ -211,6 +233,15 @@
             $socket.on('strike_result', ({attacker, hit, targetHex, fleetKey, hpRemaining, isDetroyed, distance}) => {
                 
                 if(isMyTurn){
+
+                    enemyFleets = enemyFleets.map(f => {
+                        const idMatch = fleetKey === 'alpha' ? 'B1' : 'B2';
+                        if (f.id === idMatch) {
+                            return { ...f, health: hpRemaining };
+                        }
+                        return f;
+                    }).filter(f => f.health > 0); // Remove if destroyed
+
                     if (hit === 2) {
                         triggerOverlay("TARGET DESTROYED: 2 HITS", "success");
                     } else if (hit === 1) {
@@ -220,16 +251,14 @@
                     }
                 }
                 else{
-                    /*
-                    const targetHex = gridHexes.find(h => h.q === newPosition.q && h.r === newPosition.r);
-                    if (targetHex) {
-                        enemyFleets = enemyFleets.map(f => {
-                            const idMatch = fleetKey === 'alpha' ? 'B1' : 'B2';
-                            if (f.id === idMatch) return { ...f, q: targetHex.q, r: targetHex.r, fuel: f.fuel - 1 };
-                            return f;
-                        });
-                        triggerOverlay(`ENEMY MOVED`, "fail");
-                    }*/
+                    fleetSelections = fleetSelections.map(f => {
+                        if (f.q === targetHex.q && f.r === targetHex.r) {
+                            return { ...f, health: hpRemaining };
+                        }
+                        return f;
+                    }).filter(f => f.health > 0);
+
+                    if (hit > 0) triggerOverlay("HULL BREACH DETECTED", "fail");
                 }
             });
 
@@ -307,6 +336,15 @@
 
     function handleHexClick(event, hex) {
         if (isConfirmed && !isMyTurn) return;
+
+        // If targeting, select ship
+        if (targetEnemy) {
+            const clickedFriendly = fleetSelections.find(f => f.q === hex.q && f.r === hex.r);
+            if (clickedFriendly) {
+                sourceFleet = clickedFriendly;
+                return; 
+            }
+        }
 
         const isSpecial = specialTiles.some(t => t.col === hex.col && t.row === hex.row);
         if (isSpecial) { showWarning(event.clientX, event.clientY, isConfirmed ? "Cannot select land" : "Cannot place fleet on land"); return; }
@@ -856,13 +894,15 @@
             </g>
         </svg>
 
-        {#if targetEnemy && sourceFleet}
-            <div class="fleet-tooltip attack-mode" style="top: {mousePos.y - 100}px; left: {mousePos.x}px; border-color: #e24a4a;">
-                <div class="tooltip-header" style="color: #e24a4a;">FIRE CONTROL</div>
-                <div class="tooltip-stat">TARGET RANGE: <span style="color: #fff">{attackRange} HEXES</span></div>
-                <div class="tooltip-stat">ROLL NEEDED: <span style="color: #e24a4a; font-weight: bold;">{requiredRoll}+</span></div>
-                <div class="tooltip-stat" style="font-size: 0.7rem; opacity: 0.7;">(Land Penalty Included)</div>
-            </div>
+        {#if targetEnemy}
+            {#if hoveredAttackStats}
+                <div class="fleet-tooltip attack-mode" style="top: {mousePos.y - 120}px; left: {mousePos.x}px; border-color: #3b82f6;">
+                    <div class="tooltip-header" style="color: #e24a4a;">FIRING SOLUTION: {hoveredAttackStats.name}</div>
+                    <div class="tooltip-stat">TARGET RANGE: <span style="color: #fff">{hoveredAttackStats.range} HEXES</span></div>
+                    <div class="tooltip-stat">ROLL NEEDED: <span style="color: #e24a4a; font-weight: bold;">{hoveredAttackStats.roll}+</span></div>
+                    <div class="tooltip-stat" style="font-size: 0.7rem; opacity: 0.7;">[CLICK TO SELECT AS SOURCE]</div>
+                </div>
+            {/if}
         {/if}
 
         {#if hoveredHex && isConfirmed}
