@@ -472,19 +472,16 @@
                 formattedPositions[index] = { q: h.q, r: h.r }; 
             });
 
-        const executeSearchLogic = (rollResult) => {
-            if (isMultiplayer) {
-                const formattedPositions = {};
-                selectedGroup.forEach((h, index) => { formattedPositions[index] = { q: h.q, r: h.r }; });
-                $socket.emit(targetingMode, { gameId: $gameId, Positions: formattedPositions, dieResult: rollResult });
-                selectedGroup = [];
-            } else {
-                const isSuccess = !needsRoll || rollResult <= threshold;
-                if (!isSuccess) {
-                    triggerOverlay(`SCAN FAILED`, "fail");
-                    setTimeout(() => executeCounterScan(null), 2000); // Move to Counter-Scan
-                    return;
-                }
+            addLog(`Initiating ${targetingMode.toUpperCase()} scan...`, "player");
+            if (die > 0) addLog(`Sensor sweep rolled a ${die}.`, "player");
+            
+            const eventName = `${targetingMode}`; 
+            
+            $socket.emit(eventName, { 
+                gameId: $gameId, 
+                Positions: formattedPositions,
+                dieResult: die
+            });
 
             selectedGroup = []; 
         } else {
@@ -492,9 +489,8 @@
 
             addLog(`Initiating ${targetingMode.toUpperCase()} scan...`, "player");
             
-            // Modified callback to accept the roll value
             rollUniversalDice("--SCANNING--", 1, (roll1) => {
-                addLog(`rolled a ${roll1}.`, "player"); // <-- Added SP Dice Log
+                addLog(`Sensor sweep rolled a ${roll1}.`, "player");
                 
                 const newSearches = selectedGroup.filter(selected => !friendlySearchedHexes.some(searched => searched.q === selected.q && searched.r === selected.r));
                 const detected = selectedGroup.find(hex => enemyFleets.some(e => e.q === hex.q && e.r === hex.r));
@@ -518,7 +514,7 @@
                     handleTurnEnd();
                 }
             });
-        };
+        }
     }
 
     function handleTurnEnd() {
