@@ -14,11 +14,10 @@ export default class MCTS {
     }
 
     search(realGameState) {
-        // We will store the combined results of all simulated "universes" here
+        // Store the combined results of all simulated games here
         const aggregatedMoves = {};
 
-        // 1. MULTI-UNIVERSE SETUP
-        // Instead of 1 universe with 1000 iterations, we do 20 universes with 50 iterations each.
+        // Instead of 1 universes with 1000 iterations, we do 20 universes with 50 iterations each.
         // This forces the AI to pick new random spots for the player 20 different times.
         const numUniverses = 20;
         const iterationsPerUniverse = Math.floor(this.iterations / numUniverses);
@@ -54,7 +53,7 @@ export default class MCTS {
         if (sortedMoves.length === 0) return null;
 
         // --- X-RAY DEBUG OUTPUT ---
-        console.log("\n🧠 --- AI INTERNAL THOUGHT PROCESS (MULTI-UNIVERSE) ---");
+        console.log("\n--- AI INTERNAL THOUGHT PROCESS (MULTI-UNIVERSE) ---");
         console.log(`Universes Simulated: ${numUniverses}`);
         console.log(`Total Simulations Run: ${numUniverses * iterationsPerUniverse}`);
         console.log("Top 5 Evaluated Moves Across All Universes:");
