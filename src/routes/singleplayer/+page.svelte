@@ -2,6 +2,29 @@
 <!--SCRIPTS FOR SINGEPLAYER PAGE-->
 <script>
     import HexMap from '$lib/+map.svelte';
+    import { page } from '$app/state';
+    import { onMount } from 'svelte';
+    import { PUBLIC_SERVER_URL } from '$env/static/public';
+
+    let customTiles = $state(null);
+    let loading = $state(true);
+
+    onMount(async () => {
+        const mapName = page.url.searchParams.get('map');
+        if (mapName) {
+            try {
+                const fileName = mapName.endsWith('.json') ? mapName : `${mapName}.json`;
+                const res = await fetch(`${PUBLIC_SERVER_URL}/maps/${encodeURIComponent(fileName)}?t=${Date.now()}`);
+                if (res.ok) {
+                    const data = await res.json();
+                    customTiles = Array.isArray(data) ? data : data.tiles;
+                }
+            } catch (e) {
+                console.error("Failed to load custom map", e);
+            }
+        }
+        loading = false;
+    });
 </script>
 
 <!--SINGLEPLAYER HTML-->
@@ -10,7 +33,11 @@
     <h1 class="glitch-text">FIND, FIX, & FINISH</h1>
     
     <div class="map-container">
-        <HexMap />
+        {#if !loading}
+            <HexMap {customTiles} />
+        {:else}
+            <div class="loading-status">INITIALIZING THEATER OF OPERATIONS...</div>
+        {/if}
     </div>
 </div>
 
@@ -45,6 +72,13 @@
         border-radius: 8px;
         
         overflow: hidden; 
+    }
+
+    .loading-status {
+        color: #3b82f6;
+        font-family: 'Chakra Petch', sans-serif;
+        font-size: 1.5rem;
+        text-shadow: 0 0 10px #3b82f6;
     }
 
     /*Appearance of the logo at the top*/

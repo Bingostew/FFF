@@ -15,6 +15,8 @@
    * 0 = Name Input, 1 = Start Game; Singleplayer
   */ 
   let modalStep = $state(0);
+  let mapList = $state([]);
+  let selectedMap = $state('');
 
   onMount(() => {
       initSocket();
@@ -46,6 +48,7 @@
       modalStep = 0;
       nickname = '';
       lobbyCode = '';
+      selectedMap = '';
       }, 200);
       return
     }
@@ -108,12 +111,28 @@
     }
   }
 
+  async function fetchMaps() {
+    try {
+      const res = await fetch(`${PUBLIC_SERVER_URL}/list-maps`);
+      if (res.ok) {
+        mapList = await res.json();
+        modalStep = 4; // Map selection step
+      }
+    } catch (e) {
+      console.error("Failed to fetch maps", e);
+    }
+  }
+
   /**
    * Helps for TESTING. Navigates to the singleplayer page, method made for
    * ease of singleplayer testing. However server may not be needed for singleplayer. 
    */
   function goToGame() {
-    goto('/singleplayer');
+    let url = '/singleplayer';
+    if (selectedMap) {
+      url += `?map=${encodeURIComponent(selectedMap.replace('.json', ''))}`;
+    }
+    goto(url);
   }
 
   /**
@@ -272,17 +291,52 @@
                   <div class="vertical-stack" role="group">
                       <button 
                           class="action-btn wide" 
-                          onclick={() => { goToGame(); $isHovering = false; }}
+                          onclick={() => { selectedMap = ''; goToGame(); $isHovering = false; }}
                           onmouseenter={() => $isHovering = true}
                           onmouseleave={() => $isHovering = false}
                       >
-                          START GAME
+                          START (DEFAULT MAP)
+                      </button>
+                      <button 
+                          class="action-btn wide" 
+                          onclick={() => { fetchMaps(); $isHovering = false; }}
+                          onmouseenter={() => $isHovering = true}
+                          onmouseleave={() => $isHovering = false}
+                      >
+                          CHOOSE CUSTOM MAP
                       </button>
                   </div>
                   
                   <button 
                       class="close-btn" 
                       onclick={() => { goBack(); $isHovering = false; }} 
+                      onmouseenter={() => $isHovering = true}
+                      onmouseleave={() => $isHovering = false}
+                  >
+                      &lt; BACK
+                  </button>
+
+              {:else if modalStep === 4}
+                  <h2>SELECT OPERATION AREA</h2>
+                  <div class="map-list-container">
+                      {#if mapList.length > 0}
+                          {#each mapList as map}
+                              <button 
+                                  class="action-btn wide map-btn" 
+                                  onclick={() => { selectedMap = map; goToGame(); $isHovering = false; }}
+                                  onmouseenter={() => $isHovering = true}
+                                  onmouseleave={() => $isHovering = false}
+                              >
+                                  {map.replace('.json', '')}
+                              </button>
+                          {/each}
+                      {:else}
+                          <p class="status-text" style="font-size: 1rem;">NO CUSTOM MAPS DETECTED</p>
+                      {/if}
+                  </div>
+                  <button 
+                      class="close-btn" 
+                      onclick={() => { modalStep = 1; $isHovering = false; }} 
                       onmouseenter={() => $isHovering = true}
                       onmouseleave={() => $isHovering = false}
                   >
@@ -442,6 +496,22 @@
 <!--PAGE HTML STYLES-->
 <style>
     /*MODALS*/
+    .map-list-container {
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        align-items: center;
+        margin-top: 1rem;
+        max-height: 30vh;
+        overflow-y: auto;
+    }
+
+    .map-btn {
+        font-size: clamp(0.8rem, 1.5vh, 1rem) !important;
+        padding: 0.8rem !important;
+    }
+
     /*Modal layout, provides a vertical look to the modal*/
     .vertical-stack { 
         display: flex; 
