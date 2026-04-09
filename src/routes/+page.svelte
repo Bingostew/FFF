@@ -56,9 +56,11 @@
 
   $effect(() => {
     if ($socket) {
-      const handleRoomUpdate = ({ players }) => {
+      const handleRoomUpdate = ({ players, map }) => {
         if (Object.keys(players).length === 2) {
-          goto("/multiplayer");
+          let url = "/multiplayer";
+          if (map) url += `?map=${encodeURIComponent(map)}`;
+          goto(url);
         }
       };
 
@@ -100,7 +102,12 @@
   async function goToCreate() {
     try {
       modalStep = 2;
-      const res = await fetch(`${PUBLIC_SERVER_URL}/create-lobby`, { method: 'POST' });
+      const payload = selectedMap ? { map: selectedMap.replace('.json', '') } : {};
+      const res = await fetch(`${PUBLIC_SERVER_URL}/create-lobby`, { 
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
       const data = await res.json();
       lobbyCode = data.gameId;
 
@@ -395,11 +402,20 @@
                   <div class="vertical-stack" role="group">
                       <button 
                           class="action-btn wide" 
-                          onclick={() => { goToCreate(); $isHovering = false; }}
+                          onclick={() => { selectedMap = ''; goToCreate(); $isHovering = false; }}
                           onmouseenter={() => $isHovering = true}
                           onmouseleave={() => $isHovering = false}
                       >
-                          CREATE LOBBY
+                          CREATE (DEFAULT MAP)
+                      </button>
+                      
+                      <button 
+                          class="action-btn wide" 
+                          onclick={() => { fetchMaps(); $isHovering = false; }}
+                          onmouseenter={() => $isHovering = true}
+                          onmouseleave={() => $isHovering = false}
+                      >
+                          CHOOSE CUSTOM MAP
                       </button>
                       
                       <button 
@@ -415,6 +431,33 @@
                   <button 
                       class="close-btn" 
                       onclick={() => { goBack(); $isHovering = false; }}
+                      onmouseenter={() => $isHovering = true}
+                      onmouseleave={() => $isHovering = false}
+                  >
+                      &lt; BACK
+                  </button>
+              
+              {:else if modalStep === 4}
+                  <h2>SELECT OPERATION AREA</h2>
+                  <div class="map-list-container">
+                      {#if mapList.length > 0}
+                          {#each mapList as map}
+                              <button 
+                                  class="action-btn wide map-btn" 
+                                  onclick={() => { selectedMap = map; goToCreate(); $isHovering = false; }}
+                                  onmouseenter={() => $isHovering = true}
+                                  onmouseleave={() => $isHovering = false}
+                              >
+                                  {map.replace('.json', '')}
+                              </button>
+                          {/each}
+                      {:else}
+                          <p class="status-text" style="font-size: 1rem;">NO CUSTOM MAPS DETECTED</p>
+                      {/if}
+                  </div>
+                  <button 
+                      class="close-btn" 
+                      onclick={() => { modalStep = 1; $isHovering = false; }} 
                       onmouseenter={() => $isHovering = true}
                       onmouseleave={() => $isHovering = false}
                   >

@@ -416,7 +416,8 @@ module.exports = (io, lobbies) => {
             } else {
                 io.to(gameId).emit('room_update', {
                     players: lobby.players,
-                    status: lobby.status
+                    status: lobby.status,
+                    map: lobby.map
                 });
             }
 
@@ -460,7 +461,8 @@ module.exports = (io, lobbies) => {
             
             io.to(gameId).emit('room_update', {
                 players: lobby.players,
-                status: lobby.status
+                status: lobby.status,
+                map: lobby.map
             });
 
             if (lobby.mode === 'single' && !lobby.players[BOT_ID]) {
