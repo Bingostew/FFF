@@ -117,10 +117,28 @@
   }
 
   /**
-   * Changes the modal to 3 in order to support multiplayer join lobby functionality. 
+   * Automatically finds an available lobby or creates one if none exist.
+   * This connects two users without requiring manual code entry.
    */
-  function goToJoin() {
-    modalStep = 3;
+  async function autoJoin() {
+    try {
+      // Attempt to find a lobby with an available slot (e.g., 1/2 players)
+      // This assumes your backend has a corresponding /find-lobby endpoint
+      const res = await fetch(`${PUBLIC_SERVER_URL}/find-lobby`);
+      const data = await res.json();
+
+      if (data.gameId) {
+        lobbyCode = data.gameId;
+        gameId.set(lobbyCode);
+        $socket.emit('join_game', { gameId: lobbyCode, playerName: nickname });
+        modalStep = 2; // Transition to the waiting/ready state
+      } else {
+        // No available lobbies found, fallback to creating one
+        await goToCreate();
+      }
+    } catch (e) {
+      await goToCreate(); // Fallback to creating a lobby on error
+    }
   }
   
   /**
@@ -350,7 +368,7 @@
                       
                       <button 
                           class="action-btn wide" 
-                          onclick={() => { goToJoin(); $isHovering = false; }}
+                          onclick={() => { autoJoin(); $isHovering = false; }}
                           onmouseenter={() => $isHovering = true}
                           onmouseleave={() => $isHovering = false}
                       >
@@ -368,7 +386,7 @@
                   </button>
               
               {:else if modalStep === 2}
-                  <h2>LOBBY CREATED</h2>
+                  <h2>LOBBY READY</h2>
                   <p class="status-text">{lobbyCode}</p>
                   
                   <div class="button-group" role="group">

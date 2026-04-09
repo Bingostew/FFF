@@ -124,6 +124,17 @@ app.post('/create-lobby', (req, res) => {
     res.json({ gameId, message: 'Lobby created!' });
 });
 
+/**
+ * Matchmaking: Find a lobby that is 'waiting' and has exactly 1 player.
+ */
+app.get('/find-lobby', (req, res) => {
+    const gameId = Object.keys(lobbies).find(id => {
+        const lobby = lobbies[id];
+        return lobby.status === 'waiting' && Object.keys(lobby.players).length === 1;
+    });
+    res.json({ gameId: gameId || null });
+});
+
 
 // --- SOCKET.IO: GAME LOGIC ---
 
