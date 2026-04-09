@@ -743,7 +743,6 @@
                     triggerOverlay(`ENEMY MOVED`, "fail");
 
                     // --- ENHANCED MOVEMENT LOG ---
-                    // If they jump into a hex you already scanned, the log reveals their exact location!
                     const isRevealedToPlayer = friendlySearchedHexes.some(s => s.q === targetHex.q && s.r === targetHex.r);
                     if (isRevealedToPlayer || isRevealed) {
                         const coordStr = `${String.fromCharCode(65 + targetHex.col)}-${targetHex.row + 1}`;
@@ -764,11 +763,12 @@
 
                     rollUniversalDice(`--ENEMY SCANNING (${scanType.toUpperCase()})--`, 1, (aiScanRoll) => {
                         
-                        addLog(`Enemy rolled a ${aiScanRoll}.`, "enemy"); // <-- Added Enemy Scan Log
+                        addLog(`Enemy rolled a ${aiScanRoll}.`, "enemy"); 
 
                         if (aiScanRoll <= 3) {
                             enemySearchedHexes = [...enemySearchedHexes, ...scannedHexes];
-                            detectedFriendly = scannedHexes.find(hex => fleetSelections.some(f => f.q === hex.q && f.r === hex.r));
+                            // Added 'const' here to prevent scope crash
+                            const detectedFriendly = scannedHexes.find(hex => fleetSelections.some(f => f.q === hex.q && f.r === hex.r));
 
                             if (detectedFriendly) {
                                 aiMemory.knownTargets = [{ q: detectedFriendly.q, r: detectedFriendly.r, col: detectedFriendly.col, row: detectedFriendly.row }];
@@ -776,10 +776,11 @@
                                 triggerOverlay("ENEMY LOCK DETECTED!", "fail");
                                 addLog(`WARNING: Enemy scan detected your fleet!`, 'enemy');
 
+                                // Queue incoming fire after initial lock
                                 setTimeout(() => {
                                     rollUniversalDice("--INCOMING--", 2, (r1, r2) => {
                                         
-                                        addLog(`Enemy firing solution rolled: ${r1} and ${r2}.`, "enemy"); // <-- Added Enemy Attack Log
+                                        addLog(`Enemy firing solution rolled: ${r1} and ${r2}.`, "enemy"); 
 
                                         let hits = 0;
                                         if (r1 >= 3) hits++;
@@ -796,12 +797,13 @@
                                         let hitMsg = hits === 2 ? "FRIENDLY VESSEL DESTROYED: 2 DMG" : (hits === 1 ? "VESSEL STRUCK: 1 DMG" : "ENEMY MISSED");
                                         triggerOverlay(hitMsg, hits > 0 ? "fail" : "success");
                                         
+                                        // Queue player counter-battery trace
                                         setTimeout(() => {
                                             if(gameOver || enemyFleets.length === 0) return endEnemyTurn();
                                             
                                             rollUniversalDice("--TRACING ENEMY SIGNAL--", 1, (counterRoll) => {
                                                 
-                                                addLog(`Counter-trace attempt rolled a ${counterRoll}.`, "player"); // <-- Added Player Trace Log
+                                                addLog(`Counter-trace attempt rolled a ${counterRoll}.`, "player"); 
 
                                                 if (counterRoll >= 3) {
                                                     const attacker = enemyFleets[Math.floor(Math.random() * enemyFleets.length)];
@@ -835,50 +837,6 @@
                             addLog(`Enemy scan failed.`, "system"); 
                             endEnemyTurn();
                         }
-
-                        // --- NEW: PLAYER TRACES THE AI'S SCAN SIGNAL ---
-                        setTimeout(() => {
-                            if (gameOver) return endEnemyTurn();
-                            
-                            rollUniversalDice("--TRACING ENEMY SCAN SIGNAL--", 1, (counterRoll) => {
-                                if (counterRoll >= 3 && enemyFleets.length > 0) {
-                                    const attacker = enemyFleets[Math.floor(Math.random() * enemyFleets.length)];
-                                    friendlySearchedHexes = [...friendlySearchedHexes, { q: attacker.q, r: attacker.r }];
-                                    triggerOverlay("ENEMY SIGNAL TRACED!", "success");
-                                } else {
-                                    triggerOverlay("SIGNAL TRACE FAILED!", "fail");
-                                }
-                                
-                                // --- FINALLY: AI ATTACKS (IF IT FOUND A TARGET) ---
-                                setTimeout(() => {
-                                    if (gameOver || enemyFleets.length === 0) return endEnemyTurn();
-
-                                    if (detectedFriendly) {
-                                        rollUniversalDice("--INCOMING--", 2, (r1, r2) => {
-                                            let hits = 0;
-                                            if (r1 >= 3) hits++;
-                                            if (r2 >= 3) hits++;
-                                            
-                                            if (hits > 0) {
-                                                fleetSelections = fleetSelections.map(f => {
-                                                    if (f.q === detectedFriendly.q && f.r === detectedFriendly.r) return { ...f, health: f.health - hits };
-                                                    return f;
-                                                }).filter(f => f.health > 0);
-                                            }
-                                            checkWinCondition();
-
-                                            let hitMsg = hits === 2 ? "MASSIVE HULL BREACH: 2 DMG" : (hits === 1 ? "VESSEL STRUCK: 1 DMG" : "ENEMY MISSED");
-                                            triggerOverlay(hitMsg, hits > 0 ? "fail" : "success");
-                                            
-                                            // END TURN (NO COUNTER-BATTERY)
-                                            setTimeout(() => { endEnemyTurn(); }, 2000); 
-                                        });
-                                    } else {
-                                        endEnemyTurn(); 
-                                    }
-                                }, 2000);
-                            });
-                        }, 2000);
                     });
                 }
             } catch (error) {
