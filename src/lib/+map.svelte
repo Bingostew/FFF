@@ -315,6 +315,14 @@
                 const scannedCoords = positions ? (Array.isArray(positions) ? positions : Object.values(positions)) : [];
 
                 if (isMyTurn) {
+
+                    // Handle hits/failures as usual
+                    if (!rollSuccess) {
+                        triggerOverlay("SCAN FAILED: ROLL FAILURE", 'fail');
+                        handleTurnEnd();
+                        return;
+                    }
+
                     let updatedSearches = [...friendlySearchedHexes];
                     scannedCoords.forEach(coord => {
                         const hex = grid.getHex({ q: coord.q, r: coord.r });
@@ -324,12 +332,7 @@
                     });
                     friendlySearchedHexes = updatedSearches;
 
-                    // Handle hits/failures as usual
-                    if (!rollSuccess) {
-                        triggerOverlay("SCAN FAILED: ROLL FAILURE", 'fail');
-                        handleTurnEnd();
-                        return;
-                    }
+
                     if (!revealPos || revealPos.length === 0) {
                         triggerOverlay("AREA CLEAR", 'success');
                         handleTurnEnd();
@@ -347,7 +350,7 @@
                     });
 
                 } else {
-                    if (scannedCoords.length > 0) {
+                    if (rollSuccess) {
                         let incomingScans = [...enemySearchedHexes];
                         scannedCoords.forEach(coord => {
                             const hex = grid.getHex({ q: coord.q, r: coord.r });
@@ -357,6 +360,9 @@
                         });
                         enemySearchedHexes = incomingScans;
                         triggerOverlay("INCOMING SCAN DETECTED", "fail");
+                    }
+                    else{
+                        triggerOverlay("OPPONENT SCAN FAILED", 'success');
                     }
                 }
             };
@@ -1061,7 +1067,7 @@
                     >
                         <polygon points={pointsStr} fill={config ? `url(#pattern-${hex.col}-${hex.row})` : "url(#water-pattern)"} stroke="black" stroke-width="0.5"/>
                         
-                        {#if isEnemyFleet && (isRevealed || isFriendlySearched)}
+                        {#if isEnemyFleet && !isFleet && (isRevealed || isFriendlySearched)}
                             <polygon points={pointsStr} fill="#000000" fill-opacity="0.6" stroke="#4ade80" stroke-width="2" pointer-events="none" />
                             <text x={hex.x} y={hex.y} dy="5" text-anchor="middle" fill="#4ade80" font-family="'Chakra Petch', sans-serif" font-size="12" font-weight="bold" pointer-events="none">ENEMY</text>
                         {/if}

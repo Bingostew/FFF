@@ -705,7 +705,7 @@ module.exports = (io, lobbies) => {
                 io.to(gameId).emit('focus_result', {
                     playerName: player.name,
                     revealPos: null,
-                    postitions:Positions,
+                    positions:Positions,
                     rollSuccess: true
 
                 });
