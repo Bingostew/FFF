@@ -3,7 +3,7 @@
     import { onDestroy } from 'svelte';
     import { defineHex, Grid, rectangle, Orientation, line } from 'honeycomb-grid';
     import { isHovering } from '$lib/store';
-    import { socket, gameId, activePlayerId } from '$lib/gameStore';   
+    import { socket, gameId, activePlayerId, playerName, isMultiplayer } from '$lib/gameStore';   
     import { getTargetHexes, isGroupConnected, getS } from './gridUtils.js';
     import Sidebar from './Sidebar.svelte';
     import StatusBar from './StatusBar.svelte';
@@ -21,10 +21,9 @@
     const gridHexes = [...grid];
 
     // --- UNIFIED GAME STATE ---
-    let isMultiplayer = $derived(!!$socket && !!$gameId); 
     let isConfirmed = $state(false);
     let isEnemyTurn = $state(false); 
-    let isMyTurn = $derived(!isConfirmed || (isMultiplayer ? ($activePlayerId === $socket?.id) : !isEnemyTurn));
+    let isMyTurn = $derived(!isConfirmed || ($isMultiplayer ? ($activePlayerId === $socket?.id) : !isEnemyTurn));
     let hoveredHex = $state(null);
     let selectedGroup = $state([]);
     let lockedSelectionForSocket = $state([]); 
@@ -412,7 +411,7 @@
 
         // --- PLACEMENT LOGIC ---
         if (!isConfirmed) {
-            const tacticalNames = ["USS Gentile", "USS Maroon"]; 
+            const tacticalNames = [$playerName + " I", $playerName + " II"] 
             const index = fleetSelections.findIndex(h => h.q === hex.q && h.r === hex.r);
             if (index > -1) {
                 const removedName = fleetSelections[index].name;
@@ -452,7 +451,7 @@
                         !(h.q === hex.q && h.r === hex.r)
                     );
                     
-                    if (isMultiplayer) {
+                    if ($isMultiplayer) {
                         const fleetIndex = fleetSelections.findIndex(f => 
                             f.q === hex.q && f.r === hex.r
                         );
@@ -515,7 +514,7 @@
         if (fleetSelections.length === 2) {
             addLog("All fleets are positioned!", "system");
             
-            if (isMultiplayer) {
+            if ($isMultiplayer) {
                 const fleetPositions = { alpha: { q: fleetSelections[0].q, r: fleetSelections[0].r }, beta: { q: fleetSelections[1].q, r: fleetSelections[1].r } };
                 $socket.emit('place_fleets', { gameId: $gameId, fleetPositions });
                 $socket.once('fleets_placed_confirmation', () => { $socket.emit('ready_check', {gameId: $gameId}); });
@@ -548,7 +547,7 @@
         const threshold = targetingMode === 'directional' ? 4 : 3;
 
 
-        if (isMultiplayer) {
+        if ($isMultiplayer) {
             console.log("SUUUUUUUUUUUUUUUUUUUUUU");
             if (selectedGroup.length === 0) return false;
             const rawPos = selectedGroup;
@@ -597,7 +596,7 @@
 
     function handleTurnEnd() {
         targetEnemy = null; sourceFleet = null; selectedGroup = [];
-        if (!isMultiplayer){
+        if (!$isMultiplayer){
             turnTimeout = setTimeout(() => { executeEnemyTurn(); }, 1500);
         } 
     }
@@ -611,7 +610,7 @@
         addLog(`[${sourceFleet.name}] firing on coordinates ${targetCoord}...`, "player");
 
         rollUniversalDice("--FIRING WEAPONS--", 2, (roll1, roll2) => {
-            if (isMultiplayer) {
+            if ($isMultiplayer) {
                 $socket.emit('execute_strike', { 
                     gameId: $gameId, 
                     targetHex: { q: targetEnemy.q, r: targetEnemy.r },
@@ -667,7 +666,7 @@
             
             addLog(`Firing solution rolled: ${roll1} and ${roll2}.`, "player"); // <-- Added Attack Dice Log
 
-            if (isMultiplayer) {
+            if ($isMultiplayer) {
                 $socket.emit('execute_strike', { 
                     gameId: $gameId, 
                     targetHex: { q: targetEnemy.q, r: targetEnemy.r },
@@ -1012,7 +1011,6 @@
         bind:rotation
         bind:targetEnemy
         bind:sourceFleet
-        bind:isMultiplayer
         {fleetSelections} 
         {selectedGroup} 
         {attackRange}
@@ -1219,7 +1217,7 @@
         bind:currentTurn
         bind:isRevealed
         {isMyTurn}
-        {isMultiplayer}
+        {$isMultiplayer}
         {fleetSelections}
     />
 </div>
