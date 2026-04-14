@@ -15,7 +15,6 @@
         isConfirmed = $bindable(), 
         rotation = $bindable(),
         sourceFleet = $bindable(),
-        isMultiplayer = $bindable(),
         fleetSelections = [], 
         onConfirm,
         isMyTurn = true,

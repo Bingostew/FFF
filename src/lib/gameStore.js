@@ -5,6 +5,8 @@ import { PUBLIC_SERVER_URL } from '$env/static/public'; // Import the variable
 export const socket = writable(null);
 export const gameId = writable('');
 export const activePlayerId = writable(null);
+export const playerName = writable(null);
+export const isMultiplayer = writable(false);
 
 let socketInstance = null;
 
