@@ -110,7 +110,7 @@
             {:else}
                 {#if isMyTurn}
                     <h3 class="panel-header" style="color: #e24a4a; border-color: #e24a4a;">FIRE MISSION</h3>
-                
+                    
                     {#if !sourceFleet}
                         <div class="status-panel" style="border-color: #e24a4a; animation: pulse 2s infinite;">
                             <span style="color: #e24a4a; font-weight: bold;">SELECT SOURCE FLEET</span>
@@ -150,8 +150,24 @@
                             <span class="btn-text" style="font-size: 0.8rem; text-align: center;">ABORT MISSION</span>
                         </button>
                     </div>
-                {/if}
-            {/if}
+
+                {:else}
+                    <h3 class="panel-header" style="color: #abbbd1; opacity: 0.5;">SENSORS JAMMED</h3>
+                    
+                    <div class="status-panel" style="border-color: #e24a4a; background: rgba(226, 74, 74, 0.1);">
+                        <span style="color: #e24a4a; font-weight: bold; animation: pulse 1s infinite;">
+                            ⚠️ INCOMING FIRE DETECTED
+                        </span>
+                    </div>
+                    
+                    <div class="attack-stats" style="border-style: dashed; opacity: 0.6;">
+                        <p class="btn-sub" style="text-align: center;">
+                            An enemy fleet has established a target lock on your position. 
+                            Awaiting resolution of hostile action...
+            </p>
+        </div>
+    {/if}
+{/if}
         {/if}
     </div>
 {/if}
