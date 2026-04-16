@@ -1,7 +1,6 @@
 // @ts-nocheck
 import { HexUtils } from './HexUtils.js';
 
-// --- PERFORMANCE CACHE ---
 // Calculates the board shapes once so the AI doesn't fry your CPU
 let CACHED_ISR_MOVES = null;
 
@@ -14,6 +13,25 @@ function getStaticISRMoves() {
     for (let c = 0; c < 7; c++) {
         for (let r = 0; r < 6; r++) {
             validTargets.push(HexUtils.posToString({col: c, row: r}));
+        }
+    }
+
+    // Cache FOCUS Moves (Tight 3-hex clusters)
+    for (let c = 0; c < 7; c++) {
+        for (let r = 0; r < 6; r++) {
+            const centerStr = HexUtils.posToString({col: c, row: r});
+            const neighbors = HexUtils.getNeighbors(c, r);
+            if (neighbors.length >= 2) {
+                for (let i = 0; i < neighbors.length; i++) {
+                    const cluster = [
+                        centerStr, 
+                        HexUtils.posToString(neighbors[i]), 
+                        HexUtils.posToString(neighbors[(i + 1) % neighbors.length])
+                    ].sort();
+                    const moveStr = `ISR_focus_${cluster.join('_')}`;
+                    if (!moves.includes(moveStr)) moves.push(moveStr);
+                }
+            }
         }
     }
 
@@ -30,7 +48,7 @@ function getStaticISRMoves() {
                         HexUtils.posToString(neighbors[(i + 1) % neighbors.length]), 
                         HexUtils.posToString(neighbors[(i + 2) % neighbors.length])
                     ].sort();
-                    const moveStr = `ISR_AREA_${cluster.join('_')}`;
+                    const moveStr = `ISR_area_${cluster.join('_')}`;
                     if (!moves.includes(moveStr)) moves.push(moveStr);
                 }
             }
@@ -51,7 +69,7 @@ function getStaticISRMoves() {
 
                 if (midOffset.col >= 0 && midOffset.col <= 6 && midOffset.row >= 0 && midOffset.row <= 5 &&
                     endOffset.col >= 0 && endOffset.col <= 6 && endOffset.row >= 0 && endOffset.row <= 5) {
-                    moves.push(`ISR_DIR_${startStr}_${HexUtils.posToString(midOffset)}_${HexUtils.posToString(endOffset)}`);
+                    moves.push(`ISR_directional_${startStr}_${HexUtils.posToString(midOffset)}_${HexUtils.posToString(endOffset)}`);
                 }
             }
         }
@@ -66,11 +84,11 @@ export class F3Game {
         this.turn = 1;
         this.currentPlayer = 'RED'; 
         this.phase = 'SELECT_ACTION'; 
-        this.landHexes = ['B3', 'C2', 'D5', 'E4', 'F3']; 
         this.redFleets = []; 
         this.blueFleets = [];
         this.redIntel = new Array(7 * 6).fill('?'); 
         this.blueIntel = new Array(7 * 6).fill('?');
+        this.landHexes = []; // Ensure land hexes are loaded
         this.winner = null;
     }
 
@@ -85,7 +103,9 @@ export class F3Game {
                 while (!valid) {
                     const rCol = Math.floor(Math.random() * 7);
                     const rRow = Math.floor(Math.random() * 6);
-                    const posStr = `${String.fromCharCode(65+rCol)}${rRow+1}`;
+                    
+                    // THE FIX: Use HexUtils to guarantee the formatting is exactly "A-1"
+                    const posStr = HexUtils.posToString({ col: rCol, row: rRow });
                     
                     if (!this.landHexes.includes(posStr) && myIntel[this.posToIndex(posStr)] !== 'E') {
                         fleet.pos = posStr;
@@ -119,16 +139,26 @@ export class F3Game {
             });
 
             const staticISR = getStaticISRMoves();
-            
-            for(let i = 0; i < 5; i++) {
-                const shuffled = [...staticISR.validTargets].sort(() => 0.5 - Math.random());
-                const picked = [shuffled[0], shuffled[1], shuffled[2]].sort();
-                moves.push(`ISR_FOCUS_${picked[0]}_${picked[1]}_${picked[2]}`);
-            }
-            
             moves.push(...staticISR.moves);
         }
-        return moves;
+
+        // Apply the Land Hex Filter to ensure the AI never shoots the dirt
+        return moves.filter(move => {
+            const parts = move.split('_');
+            
+            if (parts[0] === 'MOVE' && parts.length >= 3) {
+                return !this.landHexes.includes(parts[2]);
+            } 
+            else if (parts[0] === 'ISR') {
+                // Check EVERY hex in the scan string (parts[2], parts[3], etc.)
+                for (let i = 2; i < parts.length; i++) {
+                    if (this.landHexes.includes(parts[i])) {
+                        return false; // Block the move if ANY part touches land
+                    }
+                }
+            }
+            return true;
+        });
     }
 
     getFleetById(id) {
@@ -152,15 +182,15 @@ export class F3Game {
             nextState.turnEnd();
         } 
         else if (command === "ISR") {
-            const scanType = parts[1];
+            const scanType = parts[1]; // focus, area, directional
             const targetHexes = parts.slice(2); 
             
             const roll = Math.floor(Math.random() * 6) + 1;
             let success = false;
             
-            if (scanType === "DIR" && roll <= 4) success = true;
-            if (scanType === "AREA" && roll <= 3) success = true;
-            if (scanType === "FOCUS") success = true; 
+            if (scanType === "directional" && roll <= 4) success = true;
+            if (scanType === "area" && roll <= 3) success = true;
+            if (scanType === "focus") success = true; 
             
             if (success) {
                 const opponentFleets = (this.currentPlayer === 'RED') ? nextState.blueFleets : nextState.redFleets;
@@ -201,6 +231,7 @@ export class F3Game {
         copy.blueFleets = JSON.parse(JSON.stringify(this.blueFleets));
         copy.redIntel = [...this.redIntel];
         copy.blueIntel = [...this.blueIntel];
+        copy.landHexes = [...this.landHexes];
         return copy;
     }
 
