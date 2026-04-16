@@ -554,9 +554,7 @@ module.exports = (io, lobbies) => {
         // Handle the "Finish" - Strike Logic
         socket.on('execute_strike', ({ gameId, targetHex, dieResult1, dieResult2 }) => {
             const lobby = lobbies[gameId];
-            if (checkForActionConditions(lobby, socket) === false) {
-                return;
-            }
+
 
             // Calculate the shortest distance from a living friendly fleet to the target hex
             const attackerFleets = lobby.fleets[socket.id];
@@ -625,19 +623,17 @@ module.exports = (io, lobbies) => {
                     winner: lobby.players[socket.id].name,
                     winnerId: socket.id 
                 });
-            } else {
-                switchTurn(gameId);
-            }
+            } 
             // If the Bot is assigned to go first, trigger it!
-            if (firstPlayerId === BOT_ID) {
-                setTimeout(() => processBotTurn(gameId), 2000);
-            }
+          //  if (firstPlayerId === BOT_ID) {
+            //    setTimeout(() => processBotTurn(gameId), 2000);
+           // }
             
         });
 
-        socket.on('execute_strike', ({ gameId, targetHex, dieResult }) => {
-            handleStrike(gameId, socket.id, targetHex, dieResult, (msg) => socket.emit('error', msg));
-        });
+    //    socket.on('execute_strike', ({ gameId, targetHex, dieResult }) => {
+      //      handleStrike(gameId, socket.id, targetHex, dieResult, (msg) => socket.emit('error', msg));
+       // });
 
         socket.on('leave_game', ({ gameId }) => {
             socket.leave(gameId);
@@ -653,6 +649,24 @@ module.exports = (io, lobbies) => {
             handlePlayerLeave(socket.id);
         });
 
+        socket.on('counter', ({gameId, counterResult}) => {
+            const lobby = lobbies[gameId];
+            if (!lobby){
+                console.error(`Lobby ${gameId} not found!`);
+                return;
+            }
+
+            const isSuccess = counterResult >= 3;
+
+            io.to(gameId).emit('counter_result', {
+                success: isSuccess
+            });
+
+            console.log("ASTFASTF");
+
+            switchTurn(gameId);
+        });
+
         socket.on('focus', ({gameId,Positions}) => {
             const lobby = lobbies[gameId];
             let revealPos = [];
@@ -663,12 +677,6 @@ module.exports = (io, lobbies) => {
             const opponentId = Object.keys(lobby.players).find(id => id !== socket.id);
             const opponentFleets = lobby.fleets[opponentId];
             const player = lobby.players[socket.id];
-
-            if (checkForActionConditions(lobby, socket) === false) {
-                return;
-            }
-
-            console.log("check");
 
             for (const key in opponentFleets) {
                 const fleet = opponentFleets[key];
@@ -697,7 +705,7 @@ module.exports = (io, lobbies) => {
                 io.to(gameId).emit('focus_result', {
                     playerName: player.name,
                     revealPos: null,
-                    postitions:Positions,
+                    positions:Positions,
                     rollSuccess: true
 
                 });
@@ -712,9 +720,6 @@ module.exports = (io, lobbies) => {
             const opponentId = Object.keys(lobby.players).find(id => id !== socket.id);
             const opponentFleets = lobby.fleets[opponentId];
 
-            if (checkForActionConditions(lobby, socket) === false) {
-                return;
-            }
             for (const key in opponentFleets) {
                 const fleet = opponentFleets[key];
                 if (!fleet.isDestroyed) {
@@ -770,9 +775,6 @@ module.exports = (io, lobbies) => {
             const opponentId = Object.keys(lobby.players).find(id => id !== socket.id);
             const opponentFleets = lobby.fleets[opponentId];
 
-            if (checkForActionConditions(lobby, socket) === false) {
-                return;
-            }
             for (const key in opponentFleets) {
                 const fleet = opponentFleets[key];
                 if (!fleet.isDestroyed) {
@@ -802,18 +804,20 @@ module.exports = (io, lobbies) => {
                 switchTurn(gameId);
 
             }
-            else if ((revealPos.length > 0) && (dieResult <= 3)) {
+            else if ((revealPos.length > 0)) {
                 io.to(gameId).emit('area_result', {
                     playerName: player.name,
                     revealPos: revealPos,
-                    positions: Positions
+                    positions: Positions,
+                    rollSuccess: true
                 });
             }
             else {
                 io.to(gameId).emit('area_result', {
                     playerName: player.name,
                     revealPos: null,
-                    positions: Positions
+                    positions: Positions,
+                    rollSuccess: true
                 });
                 switchTurn(gameId);
             }
