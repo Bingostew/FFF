@@ -16,6 +16,8 @@
     import { HexUtils } from './game/HexUtils.js';
 
     // Grid Config
+    let { customTiles = null } = $props();
+
     const Tile = defineHex({ dimensions: 50, origin: 'topLeft', orientation: Orientation.FLAT, offset: 1 });
     const grid = new Grid(Tile, rectangle({ width: 7, height: 6 }));
     const gridHexes = [...grid];
@@ -99,11 +101,11 @@
         attackRange === null ? null : attackRange <= 2 ? 2 : attackRange <= 6 ? 3 : 4
     );
 
-    const specialTiles = [
+    const specialTiles = $derived(customTiles || [
         { col: 1, row: 2, img: 'single_palm.jpg' }, { col: 2, row: 1, img: 'double_palm.jpg' },
         { col: 2, row: 4, img: 'tree.jpg' }, { col: 3, row: 4, img: 'hill.jpg' },
         { col: 4, row: 3, img: 'peak.jpg' }, { col: 5, row: 2, img: 'mountain.jpg' }
-    ];
+    ]);
 
     function checkWinCondition() {
         // Always check player and enemy stats to display. 

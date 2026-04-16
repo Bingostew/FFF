@@ -145,7 +145,7 @@
         <div class="terrain-palette">
             {#each terrainTypes as terrain}
                 <button 
-                    class:active={selectedTerrain === terrain}
+                    class:active={selectedTerrain.name === terrain.name}
                     onclick={() => selectedTerrain = terrain}
                     onmouseenter={() => $isHovering = true}
                     onmouseleave={() => $isHovering = false}
@@ -251,7 +251,7 @@
 
   .sidebar {
     width: 350px;
-    padding: 20px;
+    padding: 10vh 20px 20px;
     background: rgba(20, 20, 30, 0.95);
     border-right: 2px solid #3b82f6;
     display: flex;
@@ -295,7 +295,7 @@
     border: 1px solid #555;
     color: #abbbd1;
     padding: 10px;
-    cursor: pointer;
+    cursor: none;
     font-family: inherit;
     font-size: 1rem;
     transition: all 0.2s;
@@ -341,6 +341,7 @@
     font-family: 'Chakra Petch', sans-serif;
     margin-bottom: 5px;
     outline: none;
+    cursor: none;
   }
 
   textarea {
@@ -353,6 +354,7 @@
     padding: 10px;
     resize: none;
     outline: none;
+    cursor: none;
   }
 
   .action-btn {
@@ -360,9 +362,9 @@
     color: black;
     border: none;
     padding: 12px;
-    font-weight: bold;
+    font-weight: 700;
     font-family: 'Chakra Petch', sans-serif;
-    cursor: pointer;
+    cursor: none;
     transition: all 0.2s;
   }
 
@@ -399,7 +401,7 @@
 
   .hex-cell polygon {
     transition: stroke 0.1s, stroke-width 0.1s, fill-opacity 0.2s;
-    cursor: pointer;
+    cursor: none;
   }
   
   .hex-cell:hover polygon {
@@ -478,8 +480,8 @@
     border: 1px solid #abbbd1;
     color: #abbbd1;
     padding: 0.5rem 2rem;
-    font-size: 2vh;
-    cursor: pointer;
+    font-size: 2.5vh;
+    cursor: none;
     transition: all 0.3s;
   }
 
@@ -498,8 +500,10 @@
     text-align: center;
     font-size: 0.9rem;
     transition: color 0.2s;
+    cursor: none;
   }
   .back-link:hover {
     color: #3b82f6;
+    cursor: none;
   }
 </style>
