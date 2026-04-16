@@ -123,7 +123,6 @@
   async function autoJoin() {
     try {
       // Attempt to find a lobby with an available slot (e.g., 1/2 players)
-      // This assumes your backend has a corresponding /find-lobby endpoint
       const res = await fetch(`${PUBLIC_SERVER_URL}/find-lobby`);
       const data = await res.json();
 
@@ -368,11 +367,20 @@
                       
                       <button 
                           class="action-btn wide" 
-                          onclick={() => { autoJoin(); $isHovering = false; }}
+                          onclick={() => { modalStep = 3; $isHovering = false; }}
                           onmouseenter={() => $isHovering = true}
                           onmouseleave={() => $isHovering = false}
                       >
                           JOIN LOBBY
+                      </button>
+
+                      <button 
+                          class="action-btn wide" 
+                          onclick={() => { autoJoin(); $isHovering = false; }}
+                          onmouseenter={() => $isHovering = true}
+                          onmouseleave={() => $isHovering = false}
+                      >
+                          FIND LOBBY
                       </button>
                   </div>
                   

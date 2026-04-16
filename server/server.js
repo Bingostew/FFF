@@ -111,6 +111,7 @@ app.post('/save-map', (req, res) => {
 
 app.post('/create-lobby', (req, res) => {
     const gameId = uuidv4().substring(0, 6); // Shorter ID for easier sharing
+    const mode = req.body.mode || 'multi';
     lobbies[gameId] = { 
         players: {}, // Using object keyed by socket.id
         status: 'waiting', 
@@ -118,6 +119,7 @@ app.post('/create-lobby', (req, res) => {
         activePlayer: null, // Tracks whose turn it is
         fleets: {}, // Secret fleet positions { socketId: { alpha: {q,r}, beta: {q,r} } }
         assets: {}, // Tracks assets like fuel, special weapons, etc.
+        mode: mode,
         history: [], // Stores a log of all moves/strikes for replay or reconnection
         fleetPlaced: {}
     };
@@ -130,7 +132,11 @@ app.post('/create-lobby', (req, res) => {
 app.get('/find-lobby', (req, res) => {
     const gameId = Object.keys(lobbies).find(id => {
         const lobby = lobbies[id];
-        return lobby.status === 'waiting' && Object.keys(lobby.players).length === 1;
+        return (
+            lobby.status === 'waiting' && 
+            Object.keys(lobby.players).length === 1 && 
+            lobby.mode === 'multi'
+        );
     });
     res.json({ gameId: gameId || null });
 });
