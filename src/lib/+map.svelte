@@ -657,7 +657,6 @@
     }
     */
 
-    // attack logic
     function resolveAttack() {
         if (!sourceFleet || !targetEnemy) return;
 
@@ -666,7 +665,7 @@
 
         rollUniversalDice("--FIRING WEAPONS--", 2, (roll1, roll2) => {
             
-            addLog(`Firing solution rolled: ${roll1} and ${roll2}.`, "player"); // <-- Added Attack Dice Log
+            addLog(`Firing solution rolled: ${roll1} and ${roll2}.`, "player"); 
 
             if ($isMultiplayer) {
                 $socket.emit('execute_strike', { 
@@ -691,21 +690,21 @@
                 }
 
                 if (hits === 2) {
-                    triggerOverlay("CRITICAL STRIKE: 2 DMG", "success");
-                    addLog("Direct hit! Enemy fleet destroyed.", "success");
+                    triggerOverlay(`CRITICAL HIT AT ${targetCoord}: 2 DMG`, "success");
+                    addLog(`Direct hit! Enemy fleet destroyed at ${targetCoord}.`, "success");
                 } else if (hits === 1) {
-                    triggerOverlay("TARGET HIT: 1 DMG", "success");
-                    addLog("Enemy fleet hit (1 DMG).", "success");
+                    triggerOverlay(`HIT AT ${targetCoord}: 1 DMG`, "success");
+                    addLog(`Enemy fleet hit at ${targetCoord} (1 DMG).`, "success");
                 } else {
-                    triggerOverlay("MISSED", "fail");
-                    addLog("Attack missed.", "player");
+                    triggerOverlay(`MISSED ${targetCoord}`, "fail");
+                    addLog(`Attack on ${targetCoord} missed.`, "player");
                 }
 
                 setTimeout(() => {
                     if (gameOver) return;
                     rollUniversalDice("--ENEMY TRACING SIGNAL--", 1, (counterRoll) => {
                         
-                        addLog(`Enemy trace attempt rolled a ${counterRoll}.`, "enemy"); // <-- Added Trace Dice Log
+                        addLog(`Enemy trace attempt rolled a ${counterRoll}.`, "enemy"); 
 
                         if (counterRoll >= 3) {
                             enemySearchedHexes = [...enemySearchedHexes, { q: sourceFleet.q, r: sourceFleet.r }];
@@ -721,7 +720,6 @@
             }
         });
     }
-
     function endAiTurn() {
         currentTurn += 1;
         checkWinCondition();
@@ -771,13 +769,17 @@
             }
         });
 
+        aiGame.landHexes.posToString = specialTiles.map(tile => 
+            HexUtils.posToString({ col: tile.col, row: tile.row })
+        );
+
         return aiGame;
     }
 
     function executeEnemyTurn() {
         if (gameOver) return; 
         isEnemyTurn = true; 
-        addLog(`---> Enemy Turn`, 'system');
+        addLog(`---> ENEMY TURN`, 'system');
         const aiGameState = syncStateToAI();
 
         aiTimeout = setTimeout(() => {
@@ -816,13 +818,32 @@
                 if (command === "MOVE") {
                     const fleetId = parts[1];
                     const targetOffset = HexUtils.parsePos(parts[2]); 
-                    const targetHex = gridHexes.find(h => h.col === targetOffset.col && h.row === targetOffset.row);
+                    let targetHex = gridHexes.find(h => h.col === targetOffset.col && h.row === targetOffset.row);
+
+                    // --- IRONCLAD ANTI-LAND FAILSAFE ---
+                    // If the AI math glitches and picks land, Svelte intercepts it here!
+                    const isLand = specialTiles.some(t => t.col === targetHex.col && t.row === targetHex.row);
+                    if (isLand) {
+                        const fleet = enemyFleets.find(f => f.id === fleetId);
+                        const s1 = -fleet.q - fleet.r;
+                        
+                        // Force the AI to pick an adjacent water hex instead
+                        const safeNeighbors = gridHexes.filter(h => {
+                            const s2 = -h.q - h.r;
+                            const dist = (Math.abs(fleet.q - h.q) + Math.abs(fleet.r - h.r) + Math.abs(s1 - s2)) / 2;
+                            const notLand = !specialTiles.some(t => t.col === h.col && t.row === h.row);
+                            return dist === 1 && notLand;
+                        });
+                        
+                        if (safeNeighbors.length > 0) {
+                            targetHex = safeNeighbors[Math.floor(Math.random() * safeNeighbors.length)];
+                        }
+                    }
+                    // -----------------------------------
 
                     enemyFleets = enemyFleets.map(f => (f.id === fleetId) ? { ...f, q: targetHex.q, r: targetHex.r, fuel: f.fuel - 1 } : f);
                     triggerOverlay(`ENEMY MOVED`, "fail");
 
-                    // --- ENHANCED MOVEMENT LOG ---
-                    // If they jump into a hex you already scanned, the log reveals their exact location!
                     const isRevealedToPlayer = friendlySearchedHexes.some(s => s.q === targetHex.q && s.r === targetHex.r);
                     if (isRevealedToPlayer || isRevealed) {
                         const coordStr = `${String.fromCharCode(65 + targetHex.col)}-${targetHex.row + 1}`;
@@ -830,24 +851,35 @@
                     } else {
                         addLog("Enemy fleet movement detected in the shadows.", "enemy");
                     }
-                    // -----------------------------
 
                     endEnemyTurn();
                 } 
                 else if (command === "ISR") {
                     const scanType = parts[1]; 
+
                     let scannedHexes = parts.slice(2).map(posStr => {
                         const offset = HexUtils.parsePos(posStr);
                         return offset ? gridHexes.find(h => h.col === offset.col && h.row === offset.row) : null;
-                    }).filter(Boolean); 
+                    }).filter(Boolean);
+                    
+                    const targetOffset = HexUtils.parsePos(parts[2]);
+                    const centerHex = targetOffset ? gridHexes.find(h => h.col === targetOffset.col && h.row === targetOffset.row) : null;
+
+
+                    if (scannedHexes.length === 0) {
+                        scannedHexes = parts.slice(2).map(posStr => {
+                            const offset = HexUtils.parsePos(posStr);
+                            return offset ? gridHexes.find(h => h.col === offset.col && h.row === offset.row) : null;
+                        }).filter(Boolean); 
+                    }
 
                     rollUniversalDice(`--ENEMY SCANNING (${scanType.toUpperCase()})--`, 1, (aiScanRoll) => {
                         
-                        addLog(`Enemy rolled a ${aiScanRoll}.`, "enemy"); // <-- Added Enemy Scan Log
+                        addLog(`Enemy rolled a ${aiScanRoll}.`, "enemy");
 
                         if (aiScanRoll <= 3) {
                             enemySearchedHexes = [...enemySearchedHexes, ...scannedHexes];
-                            detectedFriendly = scannedHexes.find(hex => fleetSelections.some(f => f.q === hex.q && f.r === hex.r));
+                            const detectedFriendly = scannedHexes.find(hex => fleetSelections.some(f => f.q === hex.q && f.r === hex.r));
 
                             if (detectedFriendly) {
                                 aiMemory.knownTargets = [{ q: detectedFriendly.q, r: detectedFriendly.r, col: detectedFriendly.col, row: detectedFriendly.row }];
@@ -857,8 +889,9 @@
 
                                 setTimeout(() => {
                                     rollUniversalDice("--INCOMING--", 2, (r1, r2) => {
+                                        const targetCoord = `${String.fromCharCode(65 + detectedFriendly.col)}-${detectedFriendly.row + 1}`;
                                         
-                                        addLog(`Enemy firing solution rolled: ${r1} and ${r2}.`, "enemy"); // <-- Added Enemy Attack Log
+                                        addLog(`Enemy firing on ${targetCoord}. Rolled: ${r1} and ${r2}.`, "enemy"); 
 
                                         let hits = 0;
                                         if (r1 >= 3) hits++;
@@ -872,24 +905,24 @@
                                         }
                                         checkWinCondition();
 
-                                        let hitMsg = hits === 2 ? "FRIENDLY VESSEL DESTROYED: 2 DMG" : (hits === 1 ? "VESSEL STRUCK: 1 DMG" : "ENEMY MISSED");
+                                        let hitMsg = hits === 2 ? `CRITICAL HIT AT ${targetCoord}: 2 DMG` : (hits === 1 ? `HIT AT ${targetCoord}: 1 DMG` : `ENEMY MISSED ${targetCoord}`);
                                         triggerOverlay(hitMsg, hits > 0 ? "fail" : "success");
+                                        addLog(hitMsg, hits > 0 ? "enemy" : "success");
                                         
                                         setTimeout(() => {
                                             if(gameOver || enemyFleets.length === 0) return endEnemyTurn();
                                             
                                             rollUniversalDice("--TRACING ENEMY SIGNAL--", 1, (counterRoll) => {
-                                                
-                                                addLog(`Counter-trace attempt rolled a ${counterRoll}.`, "player"); // <-- Added Player Trace Log
+                                                addLog(`Counter-trace attempt rolled a ${counterRoll}.`, "player"); 
 
                                                 if (counterRoll >= 3) {
                                                     const attacker = enemyFleets[Math.floor(Math.random() * enemyFleets.length)];
                                                     friendlySearchedHexes = [...friendlySearchedHexes, { q: attacker.q, r: attacker.r }];
                                                     triggerOverlay("ENEMY SIGNAL TRACED!", "success");
-                                                    addLog(`Enemy fired (${hits} hits). We traced their firing signal!`, "success");
+                                                    addLog(`Enemy fired on ${targetCoord}. We traced their firing signal!`, "success");
                                                 } else {
                                                     triggerOverlay("SIGNAL TRACE FAILED!", "fail");
-                                                    addLog(`Enemy fired (${hits} hits). Trace failed.`, "system");
+                                                    addLog(`Enemy fired on ${targetCoord}. Trace failed.`, "system");
                                                 }
                                                 endEnemyTurn(); 
                                             });
@@ -914,50 +947,6 @@
                             addLog(`Enemy scan failed.`, "system"); 
                             endEnemyTurn();
                         }
-
-                        // --- NEW: PLAYER TRACES THE AI'S SCAN SIGNAL ---
-                        setTimeout(() => {
-                            if (gameOver) return endEnemyTurn();
-                            
-                            rollUniversalDice("--TRACING ENEMY SCAN SIGNAL--", 1, (counterRoll) => {
-                                if (counterRoll >= 3 && enemyFleets.length > 0) {
-                                    const attacker = enemyFleets[Math.floor(Math.random() * enemyFleets.length)];
-                                    friendlySearchedHexes = [...friendlySearchedHexes, { q: attacker.q, r: attacker.r }];
-                                    triggerOverlay("ENEMY SIGNAL TRACED!", "success");
-                                } else {
-                                    triggerOverlay("SIGNAL TRACE FAILED!", "fail");
-                                }
-                                
-                                // --- FINALLY: AI ATTACKS (IF IT FOUND A TARGET) ---
-                                setTimeout(() => {
-                                    if (gameOver || enemyFleets.length === 0) return endEnemyTurn();
-
-                                    if (detectedFriendly) {
-                                        rollUniversalDice("--INCOMING--", 2, (r1, r2) => {
-                                            let hits = 0;
-                                            if (r1 >= 3) hits++;
-                                            if (r2 >= 3) hits++;
-                                            
-                                            if (hits > 0) {
-                                                fleetSelections = fleetSelections.map(f => {
-                                                    if (f.q === detectedFriendly.q && f.r === detectedFriendly.r) return { ...f, health: f.health - hits };
-                                                    return f;
-                                                }).filter(f => f.health > 0);
-                                            }
-                                            checkWinCondition();
-
-                                            let hitMsg = hits === 2 ? "MASSIVE HULL BREACH: 2 DMG" : (hits === 1 ? "VESSEL STRUCK: 1 DMG" : "ENEMY MISSED");
-                                            triggerOverlay(hitMsg, hits > 0 ? "fail" : "success");
-                                            
-                                            // END TURN (NO COUNTER-BATTERY)
-                                            setTimeout(() => { endEnemyTurn(); }, 2000); 
-                                        });
-                                    } else {
-                                        endEnemyTurn(); 
-                                    }
-                                }, 2000);
-                            });
-                        }, 2000);
                     });
                 }
             } catch (error) {
