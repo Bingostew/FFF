@@ -3,7 +3,7 @@
 <script>
   import { isHovering } from '$lib/store';
   import { goto } from '$app/navigation';
-  import { initSocket, gameId, socket } from '$lib/gameStore';
+  import { initSocket, gameId, socket, playerName, isMultiplayer } from '$lib/gameStore';
   import { PUBLIC_SERVER_URL } from '$env/static/public';
   import { onMount } from 'svelte';
 
@@ -11,6 +11,9 @@
   let showSingleplayerModal = $state(false);
   let nickname = $state('');
   let lobbyCode = $state('');
+  let dotCount = $state(0);
+  let serverError = $state('');
+  let dots = $derived('.'.repeat(dotCount));
   /** 0 = Name Input, 1 = Selection, 2 = Create Lobby, 3 = Join Lobby; multiplayer
    * 0 = Name Input, 1 = Start Game; Singleplayer
   */ 
@@ -55,8 +58,9 @@
   }
 
   $effect(() => {
-    if ($socket) {
-      const handleRoomUpdate = ({ players, map }) => {
+    if (!$socket) return;
+
+    const handleRoomUpdate = ({ players, map }) => {
         if (Object.keys(players).length === 2) {
           let url = "/multiplayer";
           if (map) url += `?map=${encodeURIComponent(map)}`;
@@ -64,11 +68,26 @@
         }
       };
 
-      $socket.on("room_update", handleRoomUpdate);
+    const handleError = (msg) => {
+      serverError = msg;
+    };
 
-      return () => {
-        $socket.off("room_update", handleRoomUpdate);
-      };
+    $socket.on("room_update", handleRoomUpdate);
+    $socket.on("error", handleError);
+   return () => {
+      $socket.off("room_update", handleRoomUpdate);
+      $socket.off("error", handleError);
+    };
+  });
+
+  $effect(() => {
+    if (modalStep === 2) {
+      const interval = setInterval(() => {
+        dotCount = (dotCount + 1) % 4;
+      }, 500);
+      return () => clearInterval(interval);
+    } else {
+      dotCount = 0; 
     }
   });
 
@@ -92,8 +111,11 @@
 
   /** Confirms the nickname for the player*/
   function confirmName() {
-    if (nickname.trim().length > 0) modalStep = 1;
-  }
+    if (nickname.trim().length > 0){
+        modalStep = 1;
+        playerName.set(nickname);
+        }
+    }
 
   /*****************BACKEND METHODS******************/
   /**
@@ -101,6 +123,7 @@
    */
   async function goToCreate() {
     try {
+      isMultiplayer.set(true);
       modalStep = 2;
       const payload = selectedMap ? { map: selectedMap.replace('.json', '') } : {};
       const res = await fetch(`${PUBLIC_SERVER_URL}/create-lobby`, { 
@@ -147,6 +170,7 @@
    */
   function goToJoin() {
     modalStep = 3;
+    serverError = '';
   }
   
   /**
@@ -154,6 +178,7 @@
    * lobby. 
    */
   function connect(){
+    isMultiplayer.set(true);
     gameId.set(lobbyCode);
 
     $socket.emit('join_game', {gameId: lobbyCode, playerName: nickname});
@@ -261,7 +286,7 @@
                   
                   <input 
                       type="text" 
-                      placeholder="ENTER NAME..." 
+                      placeholder="ENTER SHIP NAME..." 
                       bind:value={nickname} 
                       class="tactical-input"
                       maxlength="18"
@@ -293,7 +318,7 @@
                   </div>
 
               {:else if modalStep === 1}
-                  <h2>WELCOME, <span class="highlight">{nickname}</span></h2>
+                  <h2>WELCOME</h2>
                   
                   <div class="vertical-stack" role="group">
                       <button 
@@ -397,7 +422,7 @@
                   </div>
 
               {:else if modalStep === 1}
-                  <h2>WELCOME, <span class="highlight">{nickname}</span></h2>
+                  <h2>WELCOME</h2>
                   
                   <div class="vertical-stack" role="group">
                       <button 
@@ -468,6 +493,10 @@
                   <h2>LOBBY CREATED</h2>
                   <p class="status-text">{lobbyCode}</p>
                   
+                  <p class="waiting-msg">
+                    WAITING FOR OPPONENT<span class="dots">{dots}</span>
+                  </p>
+                  
                   <div class="button-group" role="group">
                       <button 
                           class="close-btn" 
@@ -477,15 +506,6 @@
                           onmouseleave={() => $isHovering = false}
                       >
                           CANCEL
-                      </button>
-                      
-                      <button 
-                          class="close-btn" 
-                          onclick={() => { goBack(); $isHovering = false; }}
-                          onmouseenter={() => $isHovering = true}
-                          onmouseleave={() => $isHovering = false}
-                      >
-                          BACK
                       </button>
                   </div>
               
@@ -502,7 +522,12 @@
                       autocomplete="off"
                       autocorrect="off"
                       autocapitalize="off"
+                      oninput={() => serverError = ''}
                   />
+
+                  {#if serverError}
+                    <p class="error-text">{serverError}</p>
+                {/if}
                   
                   <div class="button-group" role="group">
                       <button 
@@ -806,5 +831,37 @@
         z-index: -1;
         opacity: 0.35; 
         pointer-events: none;
+    }
+
+    .waiting-msg {
+        color: #3b82f6;
+        font-family: 'Chakra Petch', sans-serif;
+        font-size: 1rem;
+        letter-spacing: 2px;
+        margin-bottom: 1rem;
+        font-weight: bold;
+    }
+
+    .dots {
+        display: inline-block;
+        width: 30px; 
+        text-align: left;
+    }
+
+    .error-text {
+        color: #e24a4a;
+        font-family: 'Chakra Petch', sans-serif;
+        font-size: 0.9rem;
+        font-weight: bold;
+        margin-top: -1.5rem; 
+        margin-bottom: 1.5rem;
+        text-transform: uppercase;
+        animation: shake 0.4s ease-in-out;
+    }
+
+    @keyframes shake {
+        0%, 100% { transform: translateX(0); }
+        25% { transform: translateX(-5px); }
+        75% { transform: translateX(5px); }
     }
 </style>
