@@ -16,6 +16,8 @@
     import { HexUtils } from './game/HexUtils.js';
 
     // Grid Config
+    let { customTiles = null } = $props();
+
     const Tile = defineHex({ dimensions: 50, origin: 'topLeft', orientation: Orientation.FLAT, offset: 1 });
     const grid = new Grid(Tile, rectangle({ width: 7, height: 6 }));
     const gridHexes = [...grid];
@@ -99,34 +101,11 @@
         attackRange === null ? null : attackRange <= 2 ? 2 : attackRange <= 6 ? 3 : 4
     );
 
-    // Make it a reactive state variable, loaded with a default map
-    let specialTiles = $state([
+    const specialTiles = $derived(customTiles || [
         { col: 1, row: 2, img: 'single_palm.jpg' }, { col: 2, row: 1, img: 'double_palm.jpg' },
         { col: 2, row: 4, img: 'tree.jpg' }, { col: 3, row: 4, img: 'hill.jpg' },
         { col: 4, row: 3, img: 'peak.jpg' }, { col: 5, row: 2, img: 'mountain.jpg' }
     ]);
-
-
-    function loadCustomMap(event) {
-        const file = event.target.files[0];
-        if (!file) return;
-
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            try {
-                // Parse the JSON file and overwrite the map!
-                const newMapData = JSON.parse(e.target.result);
-                specialTiles = newMapData;
-                
-                triggerOverlay("CUSTOM MAP LOADED", "success");
-                addLog(`Custom map file loaded: ${file.name}`, "system");
-            } catch (error) {
-                triggerOverlay("MAP LOAD FAILED: INVALID JSON", "fail");
-                console.error("Error reading map file:", error);
-            }
-        };
-        reader.readAsText(file);
-    }
 
     function checkWinCondition() {
         // Always check player and enemy stats to display. 
