@@ -2,6 +2,7 @@
     // @ts-nocheck
     import { defineHex, Grid, rectangle, Orientation } from 'honeycomb-grid';
     import { isHovering } from '$lib/store';
+    import { PUBLIC_SERVER_URL, PUBLIC_SERVER_PORT } from '$env/static/public';
 
     // Grid Setup (Same dimensions as your game map)
     const Tile = defineHex({ dimensions: 50, origin: 'topLeft', orientation: Orientation.FLAT, offset: 1 });
@@ -14,6 +15,9 @@
     let mapName = $state('MyMap');
     let showLoadMapModal = $state(false);
     let mapList = $state([]);
+    const URL = PUBLIC_SERVER_URL;
+    const PORT = PUBLIC_SERVER_PORT;
+
 
     // Available terrain types based on your assets
     const terrainTypes = [
@@ -77,7 +81,7 @@
                 tiles: JSON.parse(exportedData)
             };
 
-            const res = await fetch(`http://${window.location.hostname}:8000/save-map`, {
+            const res = await fetch(`http://${window.location.hostname}:${PORT}/save-map`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
@@ -97,7 +101,7 @@
 
     async function openLoadMapModal() {
         try {
-            const res = await fetch(`http://${window.location.hostname}:8000/list-maps`);
+            const res = await fetch(`http://${window.location.hostname}:${PORT}/list-maps`);
             mapList = await res.json();
         } catch (e) {
             mapList = [];
@@ -108,7 +112,7 @@
 
     async function loadMap(mapFile) {
         try {
-            const res = await fetch(`http://${window.location.hostname}:8000/maps/${encodeURIComponent(mapFile)}?t=` + Date.now());
+            const res = await fetch(`http://${window.location.hostname}:${PORT}/maps/${encodeURIComponent(mapFile)}?t=` + Date.now());
             if (!res.ok) throw new Error('Map file not found on server.');
             let data = await res.json();
 

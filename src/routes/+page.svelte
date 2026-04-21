@@ -4,7 +4,7 @@
   import { isHovering } from '$lib/store';
   import { goto } from '$app/navigation';
   import { initSocket, gameId, socket, playerName, isMultiplayer } from '$lib/gameStore';
-  import { PUBLIC_SERVER_URL } from '$env/static/public';
+  import { PUBLIC_SERVER_URL, PUBLIC_SERVER_PORT } from '$env/static/public';
   import { onMount } from 'svelte';
 
   let showMultiplayerModal = $state(false);
@@ -14,6 +14,7 @@
   let dotCount = $state(0);
   let serverError = $state('');
   let dots = $derived('.'.repeat(dotCount));
+  const PORT = PUBLIC_SERVER_PORT
   /** 0 = Name Input, 1 = Selection, 2 = Create Lobby, 3 = Join Lobby; multiplayer
    * 0 = Name Input, 1 = Start Game; Singleplayer
   */ 
@@ -143,7 +144,7 @@
 
   async function fetchMaps() {
     try {
-      const res = await fetch(`${PUBLIC_SERVER_URL}/list-maps`);
+      const res = await fetch(`http://${window.location.hostname}:${PORT}/list-maps`);
       if (res.ok) {
         mapList = await res.json();
         modalStep = 4; // Map selection step
