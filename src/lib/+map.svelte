@@ -55,7 +55,7 @@
     
     let gameOver = $state(false);
     let gameResult = $state("");
-    let globalDice = $state({ show: false, val1: 0, val2: null, text: '', isStopping: false });
+    let globalDice = $state({ show: false, val1: 0, val2: null, text: '', subtext: '', isStopping: false });
     let playerFinalStats = $state({ health: 0, fuel: 0, fleets: 0 });
     let enemyFinalStats = $state({ health: 0, fuel: 0, fleets: 0 });
     let overlay = $state({ show : false, text:'', mode: 'fail'});
@@ -150,11 +150,12 @@
         }
     }
 
-    function rollUniversalDice(text, numDice, callback) {
+    function rollUniversalDice(text, subtext, numDice, callback) {
         if (globalDice.show) return;
 
         globalDice.show = true;
         globalDice.text = text;
+        globalDice.subtext = subtext;
         globalDice.isStopping = false;
         globalDice.val1 = Math.floor(Math.random() * 6) + 1;
         globalDice.val2 = numDice === 2 ? Math.floor(Math.random() * 6) + 1 : null;
@@ -264,7 +265,7 @@
 
                     setTimeout(() => {
                         if (gameOver) return;
-                        rollUniversalDice("--TRACING SIGNAL--", 1, (counterRoll) => {
+                        rollUniversalDice("--TRACING SIGNAL--", "SUCCESS ON 3 OR HIGHER", 1, (counterRoll) => {
                             addLog(`Trace attempt rolled a ${counterRoll}.`, "enemy"); // <-- Added Trace Dice Log
                             $socket.emit('counter', { gameId: $gameId, counterResult: counterRoll });
                         });
@@ -542,57 +543,62 @@
 
     // search logic
     function handlePlayerSearch(die=0) {
-
         if (selectedGroup.length === 0) return;
 
         const needsRoll = targetingMode === 'directional' || targetingMode === 'area';
         const threshold = targetingMode === 'directional' ? 4 : 3;
 
-
-        if ($isMultiplayer) {
-            console.log("SUUUUUUUUUUUUUUUUUUUUUU");
-            if (selectedGroup.length === 0) return false;
-            const rawPos = selectedGroup;
-            const formattedPositions = {};
-            selectedGroup.forEach((h, index) => { formattedPositions[index] = { q: h.q, r: h.r }; });
-
-            addLog(`Initiating ${targetingMode.toUpperCase()} scan...`, "player");
-            if (die > 0) addLog(`Sensor sweep rolled a ${die}.`, "player");
-            
-            rollUniversalDice("--SCANNING--", 1, (roll1) => {
-                $socket.emit(targetingMode, { gameId: $gameId, Positions: formattedPositions, dieResult: roll1 });
+        // 1. Wrap the actual execution in a helper function
+        const executeSearchLogic = (rollResult) => {
+            if ($isMultiplayer) {
+                const formattedPositions = {};
+                selectedGroup.forEach((h, index) => { formattedPositions[index] = { q: h.q, r: h.r }; });
+                $socket.emit(targetingMode, { gameId: $gameId, Positions: formattedPositions, dieResult: rollResult });
                 selectedGroup = []; 
-            });
-        } else {
-            if (selectedGroup.length === 0) return false;
-
-            addLog(`Initiating ${targetingMode.toUpperCase()} scan...`, "player");
-            
-            rollUniversalDice("--SCANNING--", 1, (roll1) => {
-                addLog(`Sensor sweep rolled a ${roll1}.`, "player");
+            } else {
+                // 2. RESTORED: Check if the scan actually succeeded!
+                const isSuccess = !needsRoll || rollResult <= threshold;
                 
+                if (!isSuccess) {
+                    triggerOverlay(`SCAN FAILED`, "fail");
+                    addLog(`Scan failed. Rolled ${rollResult} (Needed ${threshold} or less).`, "system");
+                    handleTurnEnd();
+                    return;
+                }
+
+                // 3. Scan Succeeded! Reveal hexes.
                 const newSearches = selectedGroup.filter(selected => !friendlySearchedHexes.some(searched => searched.q === selected.q && searched.r === selected.r));
                 const detected = selectedGroup.find(hex => enemyFleets.some(e => e.q === hex.q && e.r === hex.r));
                 friendlySearchedHexes = [...friendlySearchedHexes, ...newSearches];
                 selectedGroup = [];
 
                 if (detected) {
-                    triggerOverlay("TARGET FOUND - AUTO-ENGAGING", "success");
-                    addLog("Target found! Auto-engaging...", "success");
-                    targetEnemy = detected;
-                    sourceFleet = fleetSelections.reduce((prev, curr) => {
-                        const d1 = (Math.abs(prev.q - detected.q) + Math.abs(prev.r - detected.r) + Math.abs((-prev.q - prev.r) - (-detected.q - detected.r))) / 2;
-                        const d2 = (Math.abs(curr.q - detected.q) + Math.abs(curr.r - detected.r) + Math.abs((-curr.q - curr.r) - (-detected.q - detected.r))) / 2;
-                        return d2 < d1 ? curr : prev;
-                    });
+                    triggerOverlay("TARGET FOUND", "success");
+                    addLog("Target found! Awaiting fire mission parameters.", "success");
                     
-                    setTimeout(() => resolveAttack(), 2000); 
+                    targetEnemy = detected;
+                    sourceFleet = null; // Forces the player to click a ship on the map!
                 } else {
                     triggerOverlay("AREA CLEAR", "success");
                     addLog("Scan complete. Area clear.", "system");
                     handleTurnEnd();
                 }
+            }
+        };
+
+        // 4. Decide whether to roll dice or Auto-Succeed (Focus Mode)
+        if (needsRoll) {
+            addLog(`Initiating ${targetingMode.toUpperCase()} scan...`, "player");
+            rollUniversalDice("--SCANNING--", `SUCCESS ON ${threshold} OR LESS`, 1, (roll1) => {
+                addLog(`Sensor sweep rolled a ${roll1}.`, "player");
+                executeSearchLogic(roll1);
             });
+        } else {
+            triggerOverlay("FOCUS SCAN: AUTO-SUCCESS", "success");
+            addLog("Focus scan initiated. Bypassing sensors...", "player");
+            
+            // Wait 1 second so the player can read the overlay, then execute!
+            setTimeout(() => executeSearchLogic(0), 1000); 
         }
     }
 
@@ -603,59 +609,6 @@
         } 
     }
 
-    /* attack logic
-    function resolveAttack() {
-        if (!sourceFleet || !targetEnemy) return;
-
-        // Find the coordinates for the log
-        const targetCoord = `${String.fromCharCode(65 + targetEnemy.col)}-${targetEnemy.row + 1}`;
-        addLog(`[${sourceFleet.name}] firing on coordinates ${targetCoord}...`, "player");
-
-        rollUniversalDice("--FIRING WEAPONS--", 2, (roll1, roll2) => {
-            if ($isMultiplayer) {
-                $socket.emit('execute_strike', { 
-                    gameId: $gameId, 
-                    targetHex: { q: targetEnemy.q, r: targetEnemy.r },
-                    dieResult1 :roll1,
-                    dieResult2: roll2
-                });
-                targetEnemy = null;
-                sourceFleet = null;
-            } else {
-                let hits = 0;
-                if (roll1 >= requiredRoll) hits++;
-                if (roll2 >= requiredRoll) hits++;
-                
-                const enemyIndex = enemyFleets.findIndex(e => e.q === targetEnemy.q && e.r === targetEnemy.r);
-                
-                if (enemyIndex !== -1 && totalHits > 0){
-                    enemyFleets[enemyIndex].health -= totalHits;
-                    if(enemyFleets[enemyIndex].health <= 0) enemyFleets = enemyFleets.filter((_, i) => i !== enemyIndex);
-                    checkWinCondition(); 
-                }
-
-                let hitMsg = hits === 2 ? "CRITICAL STRIKE: 2 DMG" : (hits === 1 ? "TARGET HIT: 1 DMG" : "MISSED");
-                triggerOverlay(hitMsg, hits > 0 ? "success" : "fail");
-
-                setTimeout(() => {
-                    if (gameOver) return;
-                    // ENEMY COUNTER BATTERY: 1 Die, 3+ Traces Signal, Hand Turn Over
-                    rollUniversalDice("--ENEMY TRACING SIGNAL--", 1, (counterRoll) => {
-                        if (counterRoll >= 3) {
-                            enemySearchedHexes = [...enemySearchedHexes, { q: sourceFleet.q, r: sourceFleet.r }];
-                            triggerOverlay("WARNING: LOCATION COMPROMISED!", "fail");
-                            addLog("WARNING: Enemy traced your firing signal!", "enemy");
-                            setTimeout(() => handleTurnEnd(), 2000);
-                        } else {
-                            addLog("Enemy failed to trace your firing signal.", "system");
-                            handleTurnEnd();
-                        }
-                    });
-                }, 2000);
-            }
-        });
-    }
-    */
 
     function resolveAttack() {
         if (!sourceFleet || !targetEnemy) return;
@@ -663,25 +616,34 @@
         const targetCoord = `${String.fromCharCode(65 + targetEnemy.col)}-${targetEnemy.row + 1}`;
         addLog(`[${sourceFleet.name}] firing on coordinates ${targetCoord}...`, "player");
 
-        rollUniversalDice("--FIRING WEAPONS--", 2, (roll1, roll2) => {
+        // --- CACHE ALL VARIABLES FIRST ---
+        const cachedSource = sourceFleet;
+        const cachedTarget = targetEnemy;
+        const cachedRoll = requiredRoll; // <-- Cache the roll requirement!
+        
+        // --- INSTANT UI CLEAR ---
+        targetEnemy = null;
+        sourceFleet = null;
+
+        // Use cachedRoll for the text overlay
+        rollUniversalDice("--FIRING WEAPONS--", `SUCCESS ON ${cachedRoll} OR HIGHER`, 2, (roll1, roll2) => {
             
             addLog(`Firing solution rolled: ${roll1} and ${roll2}.`, "player"); 
 
             if ($isMultiplayer) {
                 $socket.emit('execute_strike', { 
                     gameId: $gameId, 
-                    targetHex: { q: targetEnemy.q, r: targetEnemy.r },
-                    dieResult1 :roll1,
+                    targetHex: { q: cachedTarget.q, r: cachedTarget.r },
+                    dieResult1: roll1,
                     dieResult2: roll2
                 });
-                targetEnemy = null;
-                sourceFleet = null;
             } else {
                 let hits = 0;
-                if (roll1 >= requiredRoll) hits++;
-                if (roll2 >= requiredRoll) hits++;
+                // Use cachedRoll for the math!
+                if (roll1 >= cachedRoll) hits++;
+                if (roll2 >= cachedRoll) hits++;
                 
-                const enemyIndex = enemyFleets.findIndex(e => e.q === targetEnemy.q && e.r === targetEnemy.r);
+                const enemyIndex = enemyFleets.findIndex(e => e.q === cachedTarget.q && e.r === cachedTarget.r);
                 
                 if (enemyIndex !== -1 && hits > 0){
                     enemyFleets[enemyIndex].health -= hits;
@@ -702,24 +664,27 @@
 
                 setTimeout(() => {
                     if (gameOver) return;
-                    rollUniversalDice("--ENEMY TRACING SIGNAL--", 1, (counterRoll) => {
+                    
+                    rollUniversalDice("--ENEMY TRACING SIGNAL--", "SUCCESS ON 3 OR HIGHER", 1, (counterRoll) => {
                         
                         addLog(`Enemy trace attempt rolled a ${counterRoll}.`, "enemy"); 
 
                         if (counterRoll >= 3) {
-                            enemySearchedHexes = [...enemySearchedHexes, { q: sourceFleet.q, r: sourceFleet.r }];
+                            enemySearchedHexes = [...enemySearchedHexes, { q: cachedSource.q, r: cachedSource.r }];
                             triggerOverlay("WARNING: LOCATION COMPROMISED!", "fail");
                             addLog("WARNING: Enemy traced your firing signal!", "enemy");
-                            setTimeout(() => handleTurnEnd(), 2000);
                         } else {
+                            triggerOverlay("ENEMY TRACE FAILED", "success");
                             addLog("Enemy failed to trace your firing signal.", "system");
-                            handleTurnEnd();
                         }
+                        
+                        setTimeout(() => handleTurnEnd(), 2000);
                     });
                 }, 2000);
             }
         });
     }
+
     function endAiTurn() {
         currentTurn += 1;
         checkWinCondition();
@@ -855,29 +820,28 @@
                     endEnemyTurn();
                 } 
                 else if (command === "ISR") {
-                    const scanType = parts[1]; 
-
+                    const scanType = parts[1];
                     let scannedHexes = parts.slice(2).map(posStr => {
                         const offset = HexUtils.parsePos(posStr);
                         return offset ? gridHexes.find(h => h.col === offset.col && h.row === offset.row) : null;
                     }).filter(Boolean);
-                    
-                    const targetOffset = HexUtils.parsePos(parts[2]);
-                    const centerHex = targetOffset ? gridHexes.find(h => h.col === targetOffset.col && h.row === targetOffset.row) : null;
-
 
                     if (scannedHexes.length === 0) {
                         scannedHexes = parts.slice(2).map(posStr => {
                             const offset = HexUtils.parsePos(posStr);
                             return offset ? gridHexes.find(h => h.col === offset.col && h.row === offset.row) : null;
-                        }).filter(Boolean); 
+                        }).filter(Boolean);
                     }
 
-                    rollUniversalDice(`--ENEMY SCANNING (${scanType.toUpperCase()})--`, 1, (aiScanRoll) => {
-                        
-                        addLog(`Enemy rolled a ${aiScanRoll}.`, "enemy");
+                    const needsRoll = scanType !== 'focus';
 
-                        if (aiScanRoll <= 3) {
+                    // 1. Wrap the AI's execution in a helper function
+                    const executeAIScanLogic = (aiScanRoll) => {
+                        
+                        // 2. Check if the scan succeeded (Auto-success for focus, 3 or less for others)
+                        const isSuccess = !needsRoll || aiScanRoll <= 3;
+
+                        if (isSuccess) {
                             enemySearchedHexes = [...enemySearchedHexes, ...scannedHexes];
                             const detectedFriendly = scannedHexes.find(hex => fleetSelections.some(f => f.q === hex.q && f.r === hex.r));
 
@@ -888,9 +852,8 @@
                                 addLog(`WARNING: Enemy scan detected your fleet!`, 'enemy');
 
                                 setTimeout(() => {
-                                    rollUniversalDice("--INCOMING--", 2, (r1, r2) => {
+                                    rollUniversalDice("--INCOMING--", "SUCCESS ON 3 OR HIGHER", 2, (r1, r2) => {
                                         const targetCoord = `${String.fromCharCode(65 + detectedFriendly.col)}-${detectedFriendly.row + 1}`;
-                                        
                                         addLog(`Enemy firing on ${targetCoord}. Rolled: ${r1} and ${r2}.`, "enemy"); 
 
                                         let hits = 0;
@@ -912,7 +875,7 @@
                                         setTimeout(() => {
                                             if(gameOver || enemyFleets.length === 0) return endEnemyTurn();
                                             
-                                            rollUniversalDice("--TRACING ENEMY SIGNAL--", 1, (counterRoll) => {
+                                            rollUniversalDice("--TRACING ENEMY SIGNAL--", "SUCCESS ON 3 OR HIGHER", 1, (counterRoll) => {
                                                 addLog(`Counter-trace attempt rolled a ${counterRoll}.`, "player"); 
 
                                                 if (counterRoll >= 3) {
@@ -924,7 +887,7 @@
                                                     triggerOverlay("SIGNAL TRACE FAILED!", "fail");
                                                     addLog(`Enemy fired on ${targetCoord}. Trace failed.`, "system");
                                                 }
-                                                endEnemyTurn(); 
+                                                endEnemyTurn();
                                             });
                                         }, 2000);
                                     });
@@ -943,11 +906,26 @@
                                 endEnemyTurn();
                             }
                         } else {
+                            // AI Failed its scan roll!
                             triggerOverlay(`ENEMY SCAN FAILED!`, "success");
                             addLog(`Enemy scan failed.`, "system"); 
                             endEnemyTurn();
                         }
-                    });
+                    };
+
+                    // 3. Decide whether to roll dice or Auto-Succeed
+                    if (needsRoll) {
+                        rollUniversalDice(`--ENEMY SCANNING (${scanType.toUpperCase()})--`, "SUCCESS ON 3 OR LESS", 1, (aiScanRoll) => {
+                            addLog(`Enemy rolled a ${aiScanRoll}.`, "enemy");
+                            executeAIScanLogic(aiScanRoll);
+                        });
+                    } else {
+                        triggerOverlay("ENEMY FOCUS SCAN", "fail"); // Red overlay for incoming enemy action
+                        addLog("Enemy initiated a precise focus scan...", "enemy");
+                        
+                        // Wait 1 second so the player can see the warning before it resolves
+                        setTimeout(() => executeAIScanLogic(0), 1000);
+                    }
                 }
             } catch (error) {
                 console.error("AI Crash:", error);
@@ -1002,8 +980,8 @@
         bind:rotation
         bind:targetEnemy
         bind:sourceFleet
-        {fleetSelections} 
-        {selectedGroup} 
+        bind:selectedGroup   
+        {fleetSelections}
         {attackRange}
         {requiredRoll}
         {isMyTurn}
@@ -1190,14 +1168,34 @@
     {#if globalDice.show}
         <div class="dice-popup-overlay" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.6); display: flex; justify-content: center; align-items: center; z-index: 10000; backdrop-filter: blur(2px);">
             <div class="dice-box {globalDice.isStopping ? 'is-stopping' : ''}" style="background: #0a0f1e; border: 2px solid {globalDice.isStopping ? '#22c55e' : '#3b82f6'}; padding: 40px; text-align: center; box-shadow: 0 0 30px {globalDice.isStopping ? 'rgba(34,197,94,0.4)' : 'rgba(59,130,246,0.4)'}; clip-path: polygon(10% 0, 100% 0, 100% 90%, 90% 100%, 0 100%, 0 10%);">
-                <span style="font-family: 'Chakra Petch'; color: #abbbd1; letter-spacing: 3px;">{globalDice.text}</span>
+                
+                <div style="font-family: 'Chakra Petch'; color: #abbbd1; letter-spacing: 3px; font-size: 1.2rem;">
+                    {globalDice.text}
+                </div>
+                
+                {#if globalDice.subtext}
+                    <div style="font-family: 'Chakra Petch'; color: #eab308; font-size: 1rem; margin-top: 5px; font-weight: bold; letter-spacing: 1px;">
+                        {globalDice.subtext}
+                    </div>
+                {/if}
+
                 <div style="display: flex; gap: 20px; justify-content: center; margin: 20px 0;">
-                    <div style="width: 100px; height: 100px; background: #000; border: 2px solid currentColor; display: flex; align-items: center; justify-content: center; font-size: 4rem; font-weight: bold; color: {globalDice.isStopping ? '#22c55e' : '#3b82f6'}; font-family: 'Chakra Petch';">{globalDice.val1}</div>
+                    <div style="width: 100px; height: 100px; background: #000; border: 2px solid currentColor; display: flex; align-items: center; justify-content: center; font-size: 4rem; font-weight: bold; color: {globalDice.isStopping ? '#22c55e' : '#3b82f6'}; font-family: 'Chakra Petch';">
+                        {globalDice.val1}
+                    </div>
                     {#if globalDice.val2 !== null}
-                        <div style="width: 100px; height: 100px; background: #000; border: 2px solid currentColor; display: flex; align-items: center; justify-content: center; font-size: 4rem; font-weight: bold; color: {globalDice.isStopping ? '#22c55e' : '#3b82f6'}; font-family: 'Chakra Petch';">{globalDice.val2}</div>
+                        <div style="width: 100px; height: 100px; background: #000; border: 2px solid currentColor; display: flex; align-items: center; justify-content: center; font-size: 4rem; font-weight: bold; color: {globalDice.isStopping ? '#22c55e' : '#3b82f6'}; font-family: 'Chakra Petch';">
+                            {globalDice.val2}
+                        </div>
                     {/if}
                 </div>
-                {#if globalDice.isStopping}<div style="font-size: 0.8rem; color: #22c55e; letter-spacing: 5px; font-weight: bold;">RESULT LOCKED</div>{/if}
+                
+                {#if globalDice.isStopping}
+                    <div style="font-size: 0.8rem; color: #22c55e; letter-spacing: 5px; font-weight: bold;">
+                        RESULT LOCKED
+                    </div>
+                {/if}
+
             </div>
         </div>
     {/if}
