@@ -100,7 +100,11 @@
     try {
       statusMessage = 'New lobby created. Share this ID:'; // Set message for new lobby
       modalStep = 2;
-      const res = await fetch(`${PUBLIC_SERVER_URL}/create-lobby`, { method: 'POST' });
+      const res = await fetch(`${PUBLIC_SERVER_URL}/create-lobby`, { 
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode: 'multi' })
+      });
       const data = await res.json();
       lobbyCode = data.gameId;
 
@@ -127,6 +131,9 @@
    */
   async function autoJoin() {
     try {
+      statusMessage = 'Searching for available lobbies...';
+      modalStep = 2;
+
       // Attempt to find a lobby with an available slot (e.g., 1/2 players)
       const res = await fetch(`${PUBLIC_SERVER_URL}/find-lobby`);
       const data = await res.json();
@@ -134,17 +141,20 @@
       if (data.gameId) {
         lobbyCode = data.gameId;
         gameId.set(lobbyCode);
+        statusMessage = `Match found! Joining lobby: ${lobbyCode}`;
         $socket.emit('join_game', { gameId: lobbyCode, playerName: nickname });
-        statusMessage = 'Joined existing lobby. Your game ID is:'; // Set message for found lobby
-        modalStep = 2; // Transition to the waiting/ready state
       } else {
-        // No available lobbies found, fallback to creating one
-        await goToCreate(); // goToCreate will set its own statusMessage
+        statusMessage = 'No active lobbies found.';
+        setTimeout(() => {
+            modalStep = 1; // Redirect back to the selection screen
+        }, 1500);
       }
     } catch (e) {
       console.error("Failed to find or create lobby", e);
       statusMessage = 'Failed to connect. Please try again.'; // Generic error message
-      modalStep = 2; // Still show modal with error
+      setTimeout(() => {
+          modalStep = 1;
+      }, 1500);
     }
   }
   
@@ -158,7 +168,7 @@
     $socket.emit('join_game', {gameId: lobbyCode, playerName: nickname});
     //$socket.onAny((eventName, ...args) => {
     //alert(`[SOCKET INBOUND] Event: ${eventName} and ${args}`);
-    statusMessage = 'Attempting to join lobby...';
+    statusMessage = `Attempting to join lobby: ${lobbyCode}`;
     modalStep = 2; // Show the lobby code and status
     }
   
