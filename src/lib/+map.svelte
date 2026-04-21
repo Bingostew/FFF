@@ -33,6 +33,7 @@
     let fleetSelections = $state([]);
     let rotation = $state(0);
     let selectedFleetToMove = $state(null);
+    let isPlacementLocked = $state(false);
     let warning = $state({ show: false, x: 0, y: 0, text: '', id: 0 });
     
     // AI Memory for Hunt & Seek logic
@@ -216,6 +217,7 @@
             $socket.on('game_start', ({ activePlayer }) => {
                 activePlayerId.set(activePlayer);
                 isConfirmed = true; 
+                isPlacementLocked = true;
                 selectedGroup = [];
                 targetingMode = 'focus';
             });
@@ -412,8 +414,12 @@
         const isSpecial = specialTiles.some(t => t.col === hex.col && t.row === hex.row);
         if (isSpecial) { showWarning(event.clientX, event.clientY, isConfirmed ? "Cannot select land" : "Cannot place fleet on land"); return; }
 
+        if (isPlacementLocked && !isConfirmed) {
+            return;
+        }
+
         // --- PLACEMENT LOGIC ---
-        if (!isConfirmed) {
+        if (!isPlacementLocked) {
             const tacticalNames = [$playerName + " I", $playerName + " II"] 
             const index = fleetSelections.findIndex(h => h.q === hex.q && h.r === hex.r);
             if (index > -1) {
@@ -516,7 +522,7 @@
     function confirmFleets() {
         if (fleetSelections.length === 2) {
             addLog("All fleets are positioned!", "system");
-            
+            isPlacementLocked = true;
             if ($isMultiplayer) {
                 const fleetPositions = { alpha: { q: fleetSelections[0].q, r: fleetSelections[0].r }, beta: { q: fleetSelections[1].q, r: fleetSelections[1].r } };
                 $socket.emit('place_fleets', { gameId: $gameId, fleetPositions });

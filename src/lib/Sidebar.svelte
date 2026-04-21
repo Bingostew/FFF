@@ -8,7 +8,8 @@
     import { socket, gameId, activePlayerId } from '$lib/gameStore';   
     // Used for API calls to server
     let isSubmitted = $state(false);
-
+    let isClicked = $state(false);
+    
     // Standard JS props (using defaults to prevent crashes)
     let { 
         targetingMode = $bindable(), 
@@ -47,8 +48,9 @@
 
             <button 
                 class="button" 
+                class:confirmed={isClicked}
                 disabled={fleetSelections.length !== 2}
-                onclick={() => onConfirm()} 
+                onclick={() => {onConfirm(); isClicked=true;}} 
                 onmouseenter={() => $isHovering = true} 
                 onmouseleave={() => $isHovering = false}
             >
@@ -306,4 +308,9 @@
         100% { transform: scale(1); opacity: 1; }
     }
 
+    .confirmed {
+        border-color: #10b981 !important;
+        color: #10b981 !important;
+        background: rgba(16, 185, 129, 0.2) !important;
+    }
 </style>
