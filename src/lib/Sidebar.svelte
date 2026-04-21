@@ -21,7 +21,7 @@
         onSearch,
         onTurnEnd,
         onScanResult,
-        selectedGroup = [],
+        selectedGroup = $bindable([]),
         targetEnemy = $bindable(null),
         attackRange = null,
         requiredRoll = null,
@@ -60,18 +60,14 @@
                 <h3 class="panel-header">TARGETING</h3>
                
                 <div class="button-group">
-                    <button 
-                        class:active={targetingMode === 'focus'} 
-                        onclick={() => targetingMode = 'focus'}
-                    >
+                    <button class:active={targetingMode === 'focus'} 
+                        onclick={() => { targetingMode = 'focus'; selectedGroup = []; }}>
                         <span class="btn-text">FOCUS</span>
-                        <span class="btn-sub">SINGLE CELL</span>
+                        <span class="btn-sub">SINGLE CELL (AUTO-SUCCESS)</span>
                     </button>
 
-                    <button 
-                        class:active={targetingMode === 'directional'} 
-                        onclick={() => targetingMode = 'directional'}
-                    >
+                    <button class:active={targetingMode === 'directional'} 
+                        onclick={() => { targetingMode = 'directional'; selectedGroup = []; }}>
                         <span class="btn-text">DIRECTIONAL</span>
                         <span class="btn-sub">
                             {#if rotation % 3 === 0} VERTICAL
@@ -82,19 +78,15 @@
                         <span class="btn-hint">[R-CLICK TO ROTATE]</span>
                     </button>
 
-                    <button 
-                        class:active={targetingMode === 'area'} 
-                        onclick={() => targetingMode = 'area'}
-                    >
+                    <button class:active={targetingMode === 'area'} 
+                        onclick={() => { targetingMode = 'area'; selectedGroup = []; }}>
                         <span class="btn-text">AREA</span>
                         <span class="btn-sub">4 ADJACENT CELLS</span>
                     </button>
 
-                    <button 
-                        class:active={targetingMode === 'move'} 
-                        onclick={() => targetingMode = 'move'}
-                        disabled={totalFuel <= 0}
-                    >
+                    <button class:active={targetingMode === 'move'} 
+                        onclick={() => { targetingMode = 'move'; selectedGroup = []; }}
+                        disabled={totalFuel <= 0}>
                         <span class="btn-text">MOVE</span>
                         <span class="btn-sub">{totalFuel > 0 ? "MOVE FLEET (COST: 1 FUEL)" : "NO FUEL REMAINING"}</span>
                     </button>
@@ -102,7 +94,9 @@
                     <button style="margin-top: 10px; border-color: #3b82f6; color: #3b82f6;"
                         onclick={() => onSearch()} disabled={!isMyTurn || selectedGroup.length === 0}>
                         <span class="btn-text">ACTIVATE SCAN</span>
-                        <span class="btn-sub">CONFIRM AND SEARCH</span>
+                        <span class="btn-sub">
+                            {targetingMode === 'focus' ? 'GUARANTEED SUCCESS (NO ROLL)' : 'CONFIRM AND ROLL DICE'}
+                        </span>
                     </button>
                 </div>
 
