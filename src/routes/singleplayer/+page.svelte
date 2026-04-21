@@ -4,8 +4,9 @@
     import HexMap from '$lib/+map.svelte';
     import { page } from '$app/state';
     import { onMount } from 'svelte';
-    import { PUBLIC_SERVER_URL } from '$env/static/public';
+    import { PUBLIC_SERVER_URL, PUBLIC_SERVER_PORT } from '$env/static/public';
 
+    const PORT = PUBLIC_SERVER_PORT;
     let customTiles = $state(null);
     let loading = $state(true);
 
@@ -14,10 +15,13 @@
         if (mapName) {
             try {
                 const fileName = mapName.endsWith('.json') ? mapName : `${mapName}.json`;
-                const res = await fetch(`${PUBLIC_SERVER_URL}/maps/${encodeURIComponent(fileName)}?t=${Date.now()}`);
+                const res = await fetch(`http://${window.location.hostname}:${PORT}/maps/${encodeURIComponent(fileName)}?t=${Date.now()}`);
                 if (res.ok) {
                     const data = await res.json();
                     customTiles = Array.isArray(data) ? data : data.tiles;
+                }
+                else {
+                    console.error("Failed to load custom map", e);
                 }
             } catch (e) {
                 console.error("Failed to load custom map", e);
