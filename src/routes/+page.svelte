@@ -11,6 +11,7 @@
   let showSingleplayerModal = $state(false);
   let nickname = $state('');
   let lobbyCode = $state('');
+  let statusMessage = $state(''); // New state variable for messages
   /** 0 = Name Input, 1 = Selection, 2 = Create Lobby, 3 = Join Lobby; multiplayer
    * 0 = Name Input, 1 = Start Game; Singleplayer
   */ 
@@ -46,6 +47,7 @@
       modalStep = 0;
       nickname = '';
       lobbyCode = '';
+      statusMessage = ''; // Reset status message
       }, 200);
       return
     }
@@ -96,6 +98,7 @@
    */
   async function goToCreate() {
     try {
+      statusMessage = 'New lobby created. Share this ID:'; // Set message for new lobby
       modalStep = 2;
       const res = await fetch(`${PUBLIC_SERVER_URL}/create-lobby`, { method: 'POST' });
       const data = await res.json();
@@ -104,6 +107,8 @@
       gameId.set(lobbyCode);
       $socket.emit('join_game', {gameId: lobbyCode, playerName: nickname});
     } catch (e) {
+      statusMessage = 'Failed to create lobby.'; // Error message
+      modalStep = 2; // Still show modal with error
       console.error("Failed to create lobby", e);
     }
   }
@@ -130,13 +135,16 @@
         lobbyCode = data.gameId;
         gameId.set(lobbyCode);
         $socket.emit('join_game', { gameId: lobbyCode, playerName: nickname });
+        statusMessage = 'Joined existing lobby. Your game ID is:'; // Set message for found lobby
         modalStep = 2; // Transition to the waiting/ready state
       } else {
         // No available lobbies found, fallback to creating one
-        await goToCreate();
+        await goToCreate(); // goToCreate will set its own statusMessage
       }
     } catch (e) {
-      await goToCreate(); // Fallback to creating a lobby on error
+      console.error("Failed to find or create lobby", e);
+      statusMessage = 'Failed to connect. Please try again.'; // Generic error message
+      modalStep = 2; // Still show modal with error
     }
   }
   
@@ -150,6 +158,8 @@
     $socket.emit('join_game', {gameId: lobbyCode, playerName: nickname});
     //$socket.onAny((eventName, ...args) => {
     //alert(`[SOCKET INBOUND] Event: ${eventName} and ${args}`);
+    statusMessage = 'Attempting to join lobby...';
+    modalStep = 2; // Show the lobby code and status
     }
   
   
@@ -394,7 +404,7 @@
                   </button>
               
               {:else if modalStep === 2}
-                  <h2>LOBBY READY</h2>
+                  <h2>{statusMessage || 'LOBBY READY'}</h2> <!-- Display status message -->
                   <p class="status-text">{lobbyCode}</p>
                   
                   <div class="button-group" role="group">
