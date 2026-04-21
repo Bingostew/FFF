@@ -405,6 +405,10 @@ module.exports = (io, lobbies) => {
             delete lobby.fleets[socketId];
             if (lobby.assets) delete lobby.assets[socketId];
 
+            if (Object.keys(lobby.players).length < 2) {
+                lobby.full = false;
+            }
+
             if (lobby.status === 'active' && Object.keys(lobby.players).length > 0) {
                 const winnerId = Object.keys(lobby.players)[0];
                 lobby.status = 'game_over';
@@ -446,6 +450,10 @@ module.exports = (io, lobbies) => {
             if (lobby.status !== 'waiting') {
                 socket.emit('error', 'Game has already started');
                 return;
+            }
+
+            if (Object.keys(lobby.players).length == 1) {
+                lobby.full = true;
             }
 
             socket.join(gameId);

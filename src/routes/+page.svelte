@@ -140,9 +140,8 @@
 
       if (data.gameId) {
         lobbyCode = data.gameId;
-        gameId.set(lobbyCode);
-        statusMessage = `Match found! Joining lobby: ${lobbyCode}`;
-        $socket.emit('join_game', { gameId: lobbyCode, playerName: nickname });
+        // Transition to the manual join screen with the found code pre-filled
+        modalStep = 3;
       } else {
         statusMessage = 'No active lobbies found.';
         setTimeout(() => {

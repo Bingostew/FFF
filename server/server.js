@@ -115,6 +115,7 @@ app.post('/create-lobby', (req, res) => {
     lobbies[gameId] = { 
         players: {}, // Using object keyed by socket.id
         status: 'waiting', 
+        full: false,
         turn: 1, // Tracks the current round number (starts at 1)
         activePlayer: null, // Tracks whose turn it is
         fleets: {}, // Secret fleet positions { socketId: { alpha: {q,r}, beta: {q,r} } }
@@ -134,7 +135,8 @@ app.get('/find-lobby', (req, res) => {
     const gameId = Object.keys(lobbies).find(id => {
         const lobby = lobbies[id];
         return (
-            lobby.status === 'waiting' && 
+            lobby.status === 'waiting' &&
+            !lobby.full && 
             Object.keys(lobby.players).length === 1 && 
             lobby.mode === 'multi'
         );
