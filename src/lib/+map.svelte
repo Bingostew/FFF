@@ -1,6 +1,9 @@
 <script>
     // @ts-nocheck
     import { onDestroy } from 'svelte';
+    import { scale } from 'svelte/transition';
+    import { backOut } from 'svelte/easing';
+    import { quintOut } from 'svelte/easing';
     import { defineHex, Grid, rectangle, Orientation, line } from 'honeycomb-grid';
     import { isHovering } from '$lib/store';
     import { socket, gameId, activePlayerId, playerName, isMultiplayer } from '$lib/gameStore';   
@@ -406,7 +409,6 @@
         if(targetEnemy){
             const friendlyFleet = fleetSelections.find(f => f.q === hex.q && f.r === hex.r);
             if(friendlyFleet){
-                sourceFleet = friendlyFleet; showWarning(event.clientX, event.clientY, `ATTACKER: ${sourceFleet.name}`);
             } else { showWarning(event.clientX, event.clientY, "Select a friendly fleet to engage!"); }
             return;
         }
@@ -1006,6 +1008,49 @@
             if (targetingMode === 'directional') { e.preventDefault(); rotation++; }
         }}
     >
+    {#if !isPlacementLocked}
+        <div class="deployment-tooltip">
+            <span class="tooltip-label">MISSION BRIEFING:</span>
+            PLACE 2 FLEETS ON WATER 
+            <span class="tooltip-counter" class:counter-ready={fleetSelections.length === 2}>
+                [{fleetSelections.length} / 2]
+            </span>
+        </div>
+    {:else if isConfirmed && !targetEnemy && isMyTurn}
+        <div class="deployment-tooltip">
+            <div class="tooltip-main">
+                <span class="tooltip-label">SELECTED ACTION:</span>
+                {#if targetingMode === 'focus'}FOCUS SCAN
+                {:else if targetingMode === 'directional'}DIRECTIONAL SCAN
+                {:else if targetingMode === 'area'}AREA SCAN
+                {:else if targetingMode === 'move'}FLEET MANEUVER
+                {:else}SELECT YOUR ACTION{/if}
+            </div>
+            
+            {#if targetingMode}
+                <div class="tooltip-sub">
+                    {#if targetingMode === 'focus'}
+                        <span>SELECT 3 NON-ADJACENT HEXES </span>
+                       <span class="roll-highlight">SUCCESS RATE: 100%</span>
+                    {:else if targetingMode === 'directional'}
+                        <span>SELECT A SWEEPING LINE OF HEXES. RIGHT CLICK TO ROTATE </span>
+                        <span class="roll-highlight">SUCCESS RATE: 66%</span>
+                    {:else if targetingMode === 'area'}
+                        <span>SELECT 4 ADJACENT HEXES </span>
+                        <span class="roll-highlight">SUCCESS RATE: 50%</span>
+                    {:else if targetingMode === 'move'}
+                        <span>REPOSITION SHIP TO ADJACENT HEX </span>
+                        <span class="roll-highlight">COST: 1 FUEL</span>
+                    {/if}
+                </div>
+            {/if}
+        </div>
+    {:else if targetEnemy && isMyTurn}
+        <div class="deployment-tooltip" style="border-color: #e24a4a;">
+            <span class="tooltip-label" style="color: #e24a4a;">MISSION BRIEFING:</span>
+            {sourceFleet ? "READY TO ENGAGE" : "SELECT ONE OF YOUR FLEET TO SEND STRIKE "}
+        </div>
+    {/if} 
         <svg viewBox="-10 -10 602 620" class="tactical-grid" preserveAspectRatio="xMidYMid meet">
             <defs>
                 <pattern id="water-pattern" x="0" y="0" width="200" height="200" patternUnits="userSpaceOnUse">
@@ -1119,13 +1164,21 @@
     </div>
 
     {#if overlay.show}
-    <div class="fullscreen-lock-overlay" class:overlay-success={overlay.mode === 'success'}>
-        <div class="failure-content">
-            <div class="glitch-text">{overlay.text}</div>
-            <div class="sub-text">{overlay.mode === 'success' ? 'COLLECTING DATA...' : 'RECALIBRATING SENSORS...'}</div>
-        </div>
+<div class="tactical-lock-mask">
+    <div 
+        class="tactical-card" 
+        class:is-success={overlay.mode === 'success'}
+        transition:scale={{ duration: 500, start: 0.2, opacity: 0, easing: backOut }}
+    >
+        <div class="hud-scanline"></div>
+        <div class="hud-brackets"></div>
+
+
+        <h1 class="glitch-text">{overlay.text}</h1>
+
     </div>
-    {/if}
+</div>
+{/if}
 
     {#if gameOver}
     <div class="fullscreen-lock-overlay" style="background: rgba(10, 15, 30, 0.95); flex-direction: column; animation: fadeInStay 0.5s forwards; opacity: 1;"> 
@@ -1367,5 +1420,111 @@
     @keyframes fadeInStay {
         0% { opacity: 0; transform: scale(1.05); }
         100% { opacity: 1; transform: scale(1); }
+    }
+
+    .deployment-tooltip {
+        position: absolute;
+        min-width: 450px;
+        max-width: 650px;
+        top: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: rgba(10, 15, 30, 0.9);
+        border: 1px solid #3b82f6;
+        padding: 10px 25px;
+        color: #fff;
+        font-family: 'Chakra Petch', sans-serif;
+        font-size: 1.1rem;
+        letter-spacing: 2px;
+        z-index: 100;
+        pointer-events: none;
+        box-shadow: 0 0 20px rgba(59, 130, 246, 0.3);
+        clip-path: polygon(15px 0, 100% 0, 100% calc(100% - 15px), calc(100% - 15px) 100%, 0 100%, 0 15px);
+    }
+
+    .tooltip-label {
+        color: #3b82f6;
+        font-weight: bold;
+        margin-right: 10px;
+    }
+
+    .tooltip-counter {
+        margin-left: 15px;
+        color: #abbbd1;
+        transition: color 0.3s ease;
+    }
+
+    .counter-ready {
+        color: #4ade80;
+        text-shadow: 0 0 10px rgba(74, 222, 128, 0.5);
+    }
+    .tooltip-main {
+        font-weight: bold;
+        margin-bottom: 4px;
+    }
+
+    .tooltip-sub {
+        font-size: 0.85rem;
+        flex-direction: column; 
+        gap: 5px;
+        color: #abbbd1;
+        letter-spacing: 1px;
+        border-top: 1px solid rgba(59, 130, 246, 0.3);
+        padding-top: 4px;
+        width: 100%;
+        text-transform: uppercase;
+    }
+
+    .roll-highlight {
+        color: #4ebd30; /* Tactical Blue */
+        font-weight: bold;
+        text-shadow: 0 0 8px rgba(59, 130, 246, 0.6);
+    }
+    /* 1. Reduce blur and background weight */
+    .tactical-lock-mask {
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 5, 10, 0.3); /* Lighter mask */
+        backdrop-filter: blur(2px);      /* Reduced from 6px */
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 9999;
+    }
+
+    /* 2. Success Color: Green */
+    .tactical-card.is-success {
+        border-color: rgba(74, 222, 128, 0.5); /* Green border */
+        box-shadow: 0 0 30px rgba(74, 222, 128, 0.15);
+    }
+
+
+    .is-success .glitch-text { 
+        color: #4ade80; 
+        text-shadow: 0 0 15px rgba(74, 222, 128, 0.4); 
+    }
+
+    .is-success .hud-brackets::before, 
+    .is-success .hud-brackets::after { 
+        border-color: #4ade80; 
+    }
+
+    /* 3. Fail Color: Red (Kept for contrast) */
+    .tactical-card:not(.is-success) {
+        border-color: rgba(226, 74, 74, 0.5);
+        box-shadow: 0 0 30px rgba(226, 74, 74, 0.15);
+    }
+
+    .glitch-text {
+        font-family: 'Chakra Petch', sans-serif;
+        font-size: 2.2rem;
+        font-weight: 900;
+        letter-spacing: 6px;
+        margin: 5px 0;
+    }
+
+    /* Ensure the expansion feels centered */
+    .tactical-card {
+        transform-origin: center;
     }
 </style>
