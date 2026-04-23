@@ -111,13 +111,15 @@ app.post('/save-map', (req, res) => {
 
 app.post('/create-lobby', (req, res) => {
     const gameId = uuidv4().substring(0, 6); // Shorter ID for easier sharing
-    const mode = (req.body && req.body.mode) ? req.body.mode : 'multi';
+    const mode = req.body?.mode || 'multi';
+    const isPublic = req.body?.isPublic || false;
     lobbies[gameId] = { 
         players: {}, // Using object keyed by socket.id
         status: 'waiting', 
         full: false,
         turn: 1, // Tracks the current round number (starts at 1)
         activePlayer: null, // Tracks whose turn it is
+        isPublic: isPublic,
         fleets: {}, // Secret fleet positions { socketId: { alpha: {q,r}, beta: {q,r} } }
         assets: {}, // Tracks assets like fuel, special weapons, etc.
         botMemory: { knownHits: [], firedShots: [] },
@@ -135,6 +137,7 @@ app.get('/find-lobby', (req, res) => {
     const gameId = Object.keys(lobbies).find(id => {
         const lobby = lobbies[id];
         return (
+            lobby.isPublic &&
             lobby.status === 'waiting' &&
             !lobby.full && 
             Object.keys(lobby.players).length === 1 && 
@@ -142,6 +145,18 @@ app.get('/find-lobby', (req, res) => {
         );
     });
     res.json({ gameId: gameId || null });
+});
+
+/**
+ * Dequeue/Delete: Remove a lobby if a player cancels matchmaking or leaves.
+ */
+app.post('/delete-lobby', (req, res) => {
+    const { gameId } = req.body;
+    if (lobbies[gameId]) {
+        delete lobbies[gameId];
+        return res.json({ success: true });
+    }
+    res.status(404).json({ success: false, error: 'Lobby not found' });
 });
 
 

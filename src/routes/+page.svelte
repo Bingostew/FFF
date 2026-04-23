@@ -12,6 +12,7 @@
   let nickname = $state('');
   let lobbyCode = $state('');
   let statusMessage = $state(''); // New state variable for messages
+  let isMatchmaking = $state(false); // Track if we are in the find-lobby queue
   /** 0 = Name Input, 1 = Selection, 2 = Create Lobby, 3 = Join Lobby; multiplayer
    * 0 = Name Input, 1 = Start Game; Singleplayer
   */ 
@@ -47,6 +48,7 @@
       modalStep = 0;
       nickname = '';
       lobbyCode = '';
+      isMatchmaking = false;
       statusMessage = ''; // Reset status message
       }, 200);
       return
@@ -96,14 +98,14 @@
   /**
    * Sends a POST request to the server to create a multiplayer lobby.
    */
-  async function goToCreate() {
+  async function goToCreate(publicMode = false) {
     try {
-      statusMessage = 'New lobby created. Share this ID:'; // Set message for new lobby
+      statusMessage = publicMode ? 'WAITING FOR OPPONENT...' : 'New lobby created. Share this ID:';
       modalStep = 2;
       const res = await fetch(`${PUBLIC_SERVER_URL}/create-lobby`, { 
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mode: 'multi' })
+        body: JSON.stringify({ mode: 'multi', isPublic: publicMode })
       });
       const data = await res.json();
       lobbyCode = data.gameId;
@@ -131,7 +133,8 @@
    */
   async function autoJoin() {
     try {
-      statusMessage = 'Searching for available lobbies...';
+      isMatchmaking = true;
+      statusMessage = 'ESTABLISHING SECURE CONNECTION...';
       modalStep = 2;
 
       // Attempt to find a lobby with an available slot (e.g., 1/2 players)
@@ -140,13 +143,11 @@
 
       if (data.gameId) {
         lobbyCode = data.gameId;
-        // Transition to the manual join screen with the found code pre-filled
-        modalStep = 3;
+        connect(); // Autojoin the found lobby
       } else {
-        statusMessage = 'No active lobbies found.';
-        setTimeout(() => {
-            modalStep = 1; // Redirect back to the selection screen
-        }, 1500);
+        // No lobby found, we become the first person in the "queue"
+        statusMessage = 'SEARCHING FOR COMMANDERS...';
+        await goToCreate(true); 
       }
     } catch (e) {
       console.error("Failed to find or create lobby", e);
@@ -177,6 +178,15 @@
    * Revert Modal Step by one. 
    */
   function goBack() {
+    if (modalStep === 2 && isMatchmaking) {
+      // Dequeue: remove the lobby we created for matchmaking
+      fetch(`${PUBLIC_SERVER_URL}/delete-lobby`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ gameId: lobbyCode })
+      });
+      isMatchmaking = false;
+    }
     if (modalStep > 1) modalStep = 1;
     else modalStep = 0;
   }
@@ -414,6 +424,10 @@
               
               {:else if modalStep === 2}
                   <h2>{statusMessage || 'LOBBY READY'}</h2> <!-- Display status message -->
+                  
+                  {#if isMatchmaking}
+                    <div class="tactical-spinner"></div>
+                  {/if}
                   <p class="status-text">{lobbyCode}</p>
                   
                   <div class="button-group" role="group">
@@ -557,6 +571,26 @@
         clip-path: polygon(
             20px 0, 100% 0, 
             100% calc(100% - 20px), calc(100% - 20px) 100%, 
+            0 100%, 0 20px
+        );
+    }
+
+    /* Waiting cursor/spinner for matchmaking */
+    .tactical-spinner {
+        width: 50px;
+        height: 50px;
+        border: 3px solid rgba(59, 130, 246, 0.3);
+        border-radius: 50%;
+        border-top-color: #3b82f6;
+        animation: spin 1s ease-in-out infinite;
+        margin: 1rem auto;
+    }
+
+    @keyframes spin {
+        to { transform: rotate(360deg); }
+    }
+
+    .modal-content h2 {
             0 100%, 0 20px
         );
     }
