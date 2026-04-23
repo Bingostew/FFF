@@ -110,6 +110,7 @@ app.post('/save-map', (req, res) => {
 
 
 app.post('/create-lobby', (req, res) => {
+    const { map } = req.body;
     const gameId = uuidv4().substring(0, 6); // Shorter ID for easier sharing
     const mode = req.body?.mode || 'multi';
     const isPublic = req.body?.isPublic || false;
@@ -125,7 +126,8 @@ app.post('/create-lobby', (req, res) => {
         botMemory: { knownHits: [], firedShots: [] },
         mode: mode,
         history: [], // Stores a log of all moves/strikes for replay or reconnection
-        fleetPlaced: {}
+        fleetPlaced: {},
+        map: map || null
     };
     res.json({ gameId, message: 'Lobby created!' });
 });

@@ -118,7 +118,7 @@ module.exports = (io, lobbies) => {
 
         return result;
     }
-    
+
     const switchTurn = (gameId) => {
         const lobby = lobbies[gameId];
         if (!lobby) return;
@@ -441,7 +441,8 @@ module.exports = (io, lobbies) => {
             } else {
                 io.to(gameId).emit('room_update', {
                     players: lobby.players,
-                    status: lobby.status
+                    status: lobby.status,
+                    map: lobby.map
                 });
             }
 
@@ -489,7 +490,8 @@ module.exports = (io, lobbies) => {
             
             io.to(gameId).emit('room_update', {
                 players: lobby.players,
-                status: lobby.status
+                status: lobby.status,
+                map: lobby.map
             });
 
             if (lobby.mode === 'single' && !lobby.players[BOT_ID]) {
@@ -580,9 +582,89 @@ module.exports = (io, lobbies) => {
         });
 
 
-        socket.on('execute_strike', ({ gameId, targetHex, dieResult }) => {
-            handleStrike(gameId, socket.id, targetHex, dieResult, (msg) => socket.emit('error', msg));
+        // Handle the "Finish" - Strike Logic
+        socket.on('execute_strike', ({ gameId, targetHex, dieResult1, dieResult2 }) => {
+            const lobby = lobbies[gameId];
+
+
+            // Calculate the shortest distance from a living friendly fleet to the target hex
+            const attackerFleets = lobby.fleets[socket.id];
+            const distances = [];
+            if (attackerFleets.alpha && attackerFleets.alpha.hp > 0) {
+                distances.push(calculateHexDistance(attackerFleets.alpha, targetHex));
+            }
+
+            if (attackerFleets.beta && attackerFleets.beta.hp > 0) {
+                distances.push(calculateHexDistance(attackerFleets.beta, targetHex));
+            }
+
+            const shortestDistance = distances.length > 0 ? Math.min(...distances) : Infinity;
+
+            // Find the opponent
+            const opponentId = Object.keys(lobby.players).find(id => id !== socket.id);
+            if (!opponentId) {
+                // This can happen if the opponent disconnects at the exact moment of a strike.
+                console.log(`Strike by ${socket.id} in game ${gameId} has no opponent.`);
+                return;
+            }
+            const opponentFleets = lobby.fleets[opponentId];
+
+            let hits = 0;
+            let fleetKey = null;
+            let destroyed = false;
+
+            if (dieResult1 >= shortestDistance) hits++;
+            if (dieResult2 >= shortestDistance) hits++;
+
+            for (let i = 0; i < hits; i++) {
+                fleetKey = resolveStrikeHit(targetHex, opponentFleets);
+                
+                if (fleetKey) {
+                    destroyed = opponentFleets[fleetKey].isDestroyed;
+                }
+            }
+
+            // 2. Broadcast result to the room
+            io.to(gameId).emit('strike_result', {
+                attacker: socket.id,
+                hit: hits,
+                targetHex: targetHex,
+                fleetKey: fleetKey,
+                hpRemaining: hits > 0 ? opponentFleets[fleetKey].hp : null,
+                isDestroyed: destroyed,
+                distance: shortestDistance
+            });
+
+            lobby.history.push({
+                action: 'strike',
+                playerId: socket.id,
+                targetHex: targetHex,
+                hit: hits,
+                fleetKey: fleetKey,
+                distance: shortestDistance,
+                timestamp: Date.now()
+            });
+
+            // 3. Check for Total Victory
+            // If all fleets for the opponent have 0 HP, the attacker wins
+            const allDestroyed = Object.values(opponentFleets).every(f => f.hp <= 0);
+            if (allDestroyed) {
+                lobby.status = 'game_over';
+                io.to(gameId).emit('game_over', { 
+                    winner: lobby.players[socket.id].name,
+                    winnerId: socket.id 
+                });
+            } 
+            // If the Bot is assigned to go first, trigger it!
+          //  if (firstPlayerId === BOT_ID) {
+            //    setTimeout(() => processBotTurn(gameId), 2000);
+           // }
+            
         });
+
+    //    socket.on('execute_strike', ({ gameId, targetHex, dieResult }) => {
+      //      handleStrike(gameId, socket.id, targetHex, dieResult, (msg) => socket.emit('error', msg));
+       // });
 
         socket.on('leave_game', ({ gameId }) => {
             socket.leave(gameId);
@@ -598,6 +680,24 @@ module.exports = (io, lobbies) => {
             handlePlayerLeave(socket.id);
         });
 
+        socket.on('counter', ({gameId, counterResult}) => {
+            const lobby = lobbies[gameId];
+            if (!lobby){
+                console.error(`Lobby ${gameId} not found!`);
+                return;
+            }
+
+            const isSuccess = counterResult >= 3;
+
+            io.to(gameId).emit('counter_result', {
+                success: isSuccess
+            });
+
+            console.log("ASTFASTF");
+
+            switchTurn(gameId);
+        });
+
         socket.on('focus', ({gameId,Positions}) => {
             const lobby = lobbies[gameId];
             let revealPos = [];
@@ -608,12 +708,6 @@ module.exports = (io, lobbies) => {
             const opponentId = Object.keys(lobby.players).find(id => id !== socket.id);
             const opponentFleets = lobby.fleets[opponentId];
             const player = lobby.players[socket.id];
-
-            if (checkForActionConditions(lobby, socket) === false) {
-                return;
-            }
-
-            console.log("check");
 
             for (const key in opponentFleets) {
                 const fleet = opponentFleets[key];
@@ -642,7 +736,7 @@ module.exports = (io, lobbies) => {
                 io.to(gameId).emit('focus_result', {
                     playerName: player.name,
                     revealPos: null,
-                    postitions:Positions,
+                    positions:Positions,
                     rollSuccess: true
 
                 });
@@ -657,9 +751,6 @@ module.exports = (io, lobbies) => {
             const opponentId = Object.keys(lobby.players).find(id => id !== socket.id);
             const opponentFleets = lobby.fleets[opponentId];
 
-            if (checkForActionConditions(lobby, socket) === false) {
-                return;
-            }
             for (const key in opponentFleets) {
                 const fleet = opponentFleets[key];
                 if (!fleet.isDestroyed) {
@@ -715,9 +806,6 @@ module.exports = (io, lobbies) => {
             const opponentId = Object.keys(lobby.players).find(id => id !== socket.id);
             const opponentFleets = lobby.fleets[opponentId];
 
-            if (checkForActionConditions(lobby, socket) === false) {
-                return;
-            }
             for (const key in opponentFleets) {
                 const fleet = opponentFleets[key];
                 if (!fleet.isDestroyed) {
@@ -747,18 +835,20 @@ module.exports = (io, lobbies) => {
                 switchTurn(gameId);
 
             }
-            else if ((revealPos.length > 0) && (dieResult <= 3)) {
+            else if ((revealPos.length > 0)) {
                 io.to(gameId).emit('area_result', {
                     playerName: player.name,
                     revealPos: revealPos,
-                    positions: Positions
+                    positions: Positions,
+                    rollSuccess: true
                 });
             }
             else {
                 io.to(gameId).emit('area_result', {
                     playerName: player.name,
                     revealPos: null,
-                    positions: Positions
+                    positions: Positions,
+                    rollSuccess: true
                 });
                 switchTurn(gameId);
             }

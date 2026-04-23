@@ -1,7 +1,7 @@
 // main.js
 import readline from 'readline';
 import { F3Game } from '../src/lib/game/F3Game.js';
-import MCTS from './MCTS.js';
+import MCTS from '../src/lib/game/MCTS.js';
 
 // Setup Command Line Input
 const rl = readline.createInterface({

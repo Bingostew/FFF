@@ -2,6 +2,7 @@
     // @ts-nocheck
     import { defineHex, Grid, rectangle, Orientation } from 'honeycomb-grid';
     import { isHovering } from '$lib/store';
+    import { PUBLIC_SERVER_URL, PUBLIC_SERVER_PORT } from '$env/static/public';
 
     // Grid Setup (Same dimensions as your game map)
     const Tile = defineHex({ dimensions: 50, origin: 'topLeft', orientation: Orientation.FLAT, offset: 1 });
@@ -14,6 +15,9 @@
     let mapName = $state('MyMap');
     let showLoadMapModal = $state(false);
     let mapList = $state([]);
+    const URL = PUBLIC_SERVER_URL;
+    const PORT = PUBLIC_SERVER_PORT;
+
 
     // Available terrain types based on your assets
     const terrainTypes = [
@@ -77,7 +81,7 @@
                 tiles: JSON.parse(exportedData)
             };
 
-            const res = await fetch(`http://${window.location.hostname}:8000/save-map`, {
+            const res = await fetch(`http://${window.location.hostname}:${PORT}/save-map`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
@@ -97,7 +101,7 @@
 
     async function openLoadMapModal() {
         try {
-            const res = await fetch(`http://${window.location.hostname}:8000/list-maps`);
+            const res = await fetch(`http://${window.location.hostname}:${PORT}/list-maps`);
             mapList = await res.json();
         } catch (e) {
             mapList = [];
@@ -108,7 +112,7 @@
 
     async function loadMap(mapFile) {
         try {
-            const res = await fetch(`http://${window.location.hostname}:8000/maps/${encodeURIComponent(mapFile)}?t=` + Date.now());
+            const res = await fetch(`http://${window.location.hostname}:${PORT}/maps/${encodeURIComponent(mapFile)}?t=` + Date.now());
             if (!res.ok) throw new Error('Map file not found on server.');
             let data = await res.json();
 
@@ -145,7 +149,7 @@
         <div class="terrain-palette">
             {#each terrainTypes as terrain}
                 <button 
-                    class:active={selectedTerrain === terrain}
+                    class:active={selectedTerrain.name === terrain.name}
                     onclick={() => selectedTerrain = terrain}
                     onmouseenter={() => $isHovering = true}
                     onmouseleave={() => $isHovering = false}
@@ -251,7 +255,7 @@
 
   .sidebar {
     width: 350px;
-    padding: 20px;
+    padding: 10vh 20px 20px;
     background: rgba(20, 20, 30, 0.95);
     border-right: 2px solid #3b82f6;
     display: flex;
@@ -295,7 +299,7 @@
     border: 1px solid #555;
     color: #abbbd1;
     padding: 10px;
-    cursor: pointer;
+    cursor: none;
     font-family: inherit;
     font-size: 1rem;
     transition: all 0.2s;
@@ -341,6 +345,7 @@
     font-family: 'Chakra Petch', sans-serif;
     margin-bottom: 5px;
     outline: none;
+    cursor: none;
   }
 
   textarea {
@@ -353,6 +358,7 @@
     padding: 10px;
     resize: none;
     outline: none;
+    cursor: none;
   }
 
   .action-btn {
@@ -360,9 +366,9 @@
     color: black;
     border: none;
     padding: 12px;
-    font-weight: bold;
+    font-weight: 700;
     font-family: 'Chakra Petch', sans-serif;
-    cursor: pointer;
+    cursor: none;
     transition: all 0.2s;
   }
 
@@ -399,7 +405,7 @@
 
   .hex-cell polygon {
     transition: stroke 0.1s, stroke-width 0.1s, fill-opacity 0.2s;
-    cursor: pointer;
+    cursor: none;
   }
   
   .hex-cell:hover polygon {
@@ -478,8 +484,8 @@
     border: 1px solid #abbbd1;
     color: #abbbd1;
     padding: 0.5rem 2rem;
-    font-size: 2vh;
-    cursor: pointer;
+    font-size: 2.5vh;
+    cursor: none;
     transition: all 0.3s;
   }
 
@@ -498,8 +504,10 @@
     text-align: center;
     font-size: 0.9rem;
     transition: color 0.2s;
+    cursor: none;
   }
   .back-link:hover {
     color: #3b82f6;
+    cursor: none;
   }
 </style>

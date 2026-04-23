@@ -8,21 +8,21 @@
     import { socket, gameId, activePlayerId } from '$lib/gameStore';   
     // Used for API calls to server
     let isSubmitted = $state(false);
-
+    let isClicked = $state(false);
+    
     // Standard JS props (using defaults to prevent crashes)
     let { 
         targetingMode = $bindable(), 
         isConfirmed = $bindable(), 
         rotation = $bindable(),
         sourceFleet = $bindable(),
-        isMultiplayer = $bindable(),
         fleetSelections = [], 
         onConfirm,
         isMyTurn = true,
         onSearch,
         onTurnEnd,
         onScanResult,
-        selectedGroup = [],
+        selectedGroup = $bindable([]),
         targetEnemy = $bindable(null),
         attackRange = null,
         requiredRoll = null,
@@ -48,8 +48,9 @@
 
             <button 
                 class="button" 
+                class:confirmed={isClicked}
                 disabled={fleetSelections.length !== 2}
-                onclick={() => onConfirm()} 
+                onclick={() => {onConfirm(); isClicked=true;}} 
                 onmouseenter={() => $isHovering = true} 
                 onmouseleave={() => $isHovering = false}
             >
@@ -61,18 +62,14 @@
                 <h3 class="panel-header">TARGETING</h3>
                
                 <div class="button-group">
-                    <button 
-                        class:active={targetingMode === 'focus'} 
-                        onclick={() => targetingMode = 'focus'}
-                    >
+                    <button class:active={targetingMode === 'focus'} 
+                        onclick={() => { targetingMode = 'focus'; selectedGroup = []; }}>
                         <span class="btn-text">FOCUS</span>
-                        <span class="btn-sub">SINGLE CELL</span>
+                        <span class="btn-sub">SINGLE CELL (AUTO-SUCCESS)</span>
                     </button>
 
-                    <button 
-                        class:active={targetingMode === 'directional'} 
-                        onclick={() => targetingMode = 'directional'}
-                    >
+                    <button class:active={targetingMode === 'directional'} 
+                        onclick={() => { targetingMode = 'directional'; selectedGroup = []; }}>
                         <span class="btn-text">DIRECTIONAL</span>
                         <span class="btn-sub">
                             {#if rotation % 3 === 0} VERTICAL
@@ -83,19 +80,15 @@
                         <span class="btn-hint">[R-CLICK TO ROTATE]</span>
                     </button>
 
-                    <button 
-                        class:active={targetingMode === 'area'} 
-                        onclick={() => targetingMode = 'area'}
-                    >
+                    <button class:active={targetingMode === 'area'} 
+                        onclick={() => { targetingMode = 'area'; selectedGroup = []; }}>
                         <span class="btn-text">AREA</span>
                         <span class="btn-sub">4 ADJACENT CELLS</span>
                     </button>
 
-                    <button 
-                        class:active={targetingMode === 'move'} 
-                        onclick={() => targetingMode = 'move'}
-                        disabled={totalFuel <= 0}
-                    >
+                    <button class:active={targetingMode === 'move'} 
+                        onclick={() => { targetingMode = 'move'; selectedGroup = []; }}
+                        disabled={totalFuel <= 0}>
                         <span class="btn-text">MOVE</span>
                         <span class="btn-sub">{totalFuel > 0 ? "MOVE FLEET (COST: 1 FUEL)" : "NO FUEL REMAINING"}</span>
                     </button>
@@ -103,14 +96,16 @@
                     <button style="margin-top: 10px; border-color: #3b82f6; color: #3b82f6;"
                         onclick={() => onSearch()} disabled={!isMyTurn || selectedGroup.length === 0}>
                         <span class="btn-text">ACTIVATE SCAN</span>
-                        <span class="btn-sub">CONFIRM AND SEARCH</span>
+                        <span class="btn-sub">
+                            {targetingMode === 'focus' ? 'GUARANTEED SUCCESS (NO ROLL)' : 'CONFIRM AND ROLL DICE'}
+                        </span>
                     </button>
                 </div>
 
             {:else}
                 {#if isMyTurn}
                     <h3 class="panel-header" style="color: #e24a4a; border-color: #e24a4a;">FIRE MISSION</h3>
-                
+                    
                     {#if !sourceFleet}
                         <div class="status-panel" style="border-color: #e24a4a; animation: pulse 2s infinite;">
                             <span style="color: #e24a4a; font-weight: bold;">SELECT SOURCE FLEET</span>
@@ -150,8 +145,24 @@
                             <span class="btn-text" style="font-size: 0.8rem; text-align: center;">ABORT MISSION</span>
                         </button>
                     </div>
-                {/if}
-            {/if}
+
+                {:else}
+                    <h3 class="panel-header" style="color: #abbbd1; opacity: 0.5;">SENSORS JAMMED</h3>
+                    
+                    <div class="status-panel" style="border-color: #e24a4a; background: rgba(226, 74, 74, 0.1);">
+                        <span style="color: #e24a4a; font-weight: bold; animation: pulse 1s infinite;">
+                            ⚠️ INCOMING FIRE DETECTED
+                        </span>
+                    </div>
+                    
+                    <div class="attack-stats" style="border-style: dashed; opacity: 0.6;">
+                        <p class="btn-sub" style="text-align: center;">
+                            An enemy fleet has established a target lock on your position. 
+                            Awaiting resolution of hostile action...
+            </p>
+        </div>
+    {/if}
+{/if}
         {/if}
     </div>
 {/if}
@@ -297,4 +308,9 @@
         100% { transform: scale(1); opacity: 1; }
     }
 
+    .confirmed {
+        border-color: #10b981 !important;
+        color: #10b981 !important;
+        background: rgba(16, 185, 129, 0.2) !important;
+    }
 </style>
