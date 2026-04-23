@@ -12,6 +12,33 @@
   let nickname = $state('');
   let lobbyCode = $state('');
   let statusMessage = $state(''); // New state variable for messages
+
+  // --- AUDIO STATE ---
+  let bgAudio = $state(null);
+  let isMuted = $state(false);
+
+  function initBackgroundMusic() {
+    if (!bgAudio) {
+      bgAudio = new Audio('/01. Pirates of the Caribbean Online Theme.mp3'); // Path to your file in the static/ folder
+      bgAudio.loop = true;
+      bgAudio.volume = 0.4;
+    }
+    if (!isMuted) bgAudio.play().catch(err => console.log("Autoplay blocked until interaction", err));
+  }
+
+  function stopBackgroundMusic() {
+    if (bgAudio) {
+      bgAudio.pause();
+      bgAudio.currentTime = 0;
+      bgAudio = null;
+    }
+  }
+
+  function toggleMute() {
+    isMuted = !isMuted;
+    if (bgAudio) bgAudio.muted = isMuted;
+  }
+
   let isMatchmaking = $state(false); // Track if we are in the find-lobby queue
   /** 0 = Name Input, 1 = Selection, 2 = Create Lobby, 3 = Join Lobby; multiplayer
    * 0 = Name Input, 1 = Start Game; Singleplayer
@@ -59,6 +86,7 @@
     if ($socket) {
       const handleRoomUpdate = ({ players }) => {
         if (Object.keys(players).length === 2) {
+          stopBackgroundMusic();
           goto("/multiplayer");
         }
       };
@@ -91,7 +119,10 @@
 
   /** Confirms the nickname for the player*/
   function confirmName() {
-    if (nickname.trim().length > 0) modalStep = 1;
+    if (nickname.trim().length > 0) {
+      modalStep = 1;
+      initBackgroundMusic();
+    }
   }
 
   /*****************BACKEND METHODS******************/
@@ -124,6 +155,7 @@
    * ease of singleplayer testing. However server may not be needed for singleplayer. 
    */
   function goToGame() {
+    stopBackgroundMusic();
     goto('/singleplayer');
   }
 
@@ -496,11 +528,39 @@
   <img src="/cna.png" alt="cna" class="cna-img" />
   <img src="/CS.png" alt="CS" class="CS-img" />
   <img src="/tacticalmap.jpg" alt="map" class="map-img" />
+
+  <!-- Audio Toggle Button -->
+  <button 
+    class="audio-toggle" 
+    onclick={toggleMute}
+  >
+    {isMuted ? 'MUTED' : 'SOUND ON'}
+  </button>
 </div>
 
 <!--PAGE HTML STYLES-->
 <style>
     /*MODALS*/
+    .audio-toggle {
+        position: absolute;
+        bottom: 20px;
+        right: 20px;
+        background: rgba(10, 15, 30, 0.8);
+        border: 1px solid #3b82f6;
+        color: #3b82f6;
+        padding: 5px 15px;
+        font-family: 'Chakra Petch', sans-serif;
+        font-size: 0.8rem;
+        cursor: pointer;
+        z-index: 10;
+        transition: all 0.3s;
+    }
+
+    .audio-toggle:hover {
+        background: #3b82f6;
+        color: #000;
+    }
+
     /*Modal layout, provides a vertical look to the modal*/
     .vertical-stack { 
         display: flex; 
