@@ -3,7 +3,7 @@
 <script>
   import { isHovering } from '$lib/store';
   import { goto } from '$app/navigation';
-  import { initSocket, gameId, socket } from '$lib/gameStore';
+  import { initSocket, gameId, socket, playerName, isMultiplayer } from '$lib/gameStore';
   import { PUBLIC_SERVER_URL } from '$env/static/public';
   import { onMount } from 'svelte';
 
@@ -11,10 +11,15 @@
   let showSingleplayerModal = $state(false);
   let nickname = $state('');
   let lobbyCode = $state('');
+  let dotCount = $state(0);
+  let serverError = $state('');
+  let dots = $derived('.'.repeat(dotCount));
   /** 0 = Name Input, 1 = Selection, 2 = Create Lobby, 3 = Join Lobby; multiplayer
    * 0 = Name Input, 1 = Start Game; Singleplayer
   */ 
   let modalStep = $state(0);
+  let mapList = $state([]);
+  let selectedMap = $state('');
 
   onMount(() => {
       initSocket();
@@ -46,24 +51,43 @@
       modalStep = 0;
       nickname = '';
       lobbyCode = '';
+      selectedMap = '';
       }, 200);
       return
     }
   }
 
   $effect(() => {
-    if ($socket) {
-      const handleRoomUpdate = ({ players }) => {
+    if (!$socket) return;
+
+    const handleRoomUpdate = ({ players, map }) => {
         if (Object.keys(players).length === 2) {
-          goto("/multiplayer");
+          let url = "/multiplayer";
+          if (map) url += `?map=${encodeURIComponent(map)}`;
+          goto(url);
         }
       };
 
-      $socket.on("room_update", handleRoomUpdate);
+    const handleError = (msg) => {
+      serverError = msg;
+    };
 
-      return () => {
-        $socket.off("room_update", handleRoomUpdate);
-      };
+    $socket.on("room_update", handleRoomUpdate);
+    $socket.on("error", handleError);
+   return () => {
+      $socket.off("room_update", handleRoomUpdate);
+      $socket.off("error", handleError);
+    };
+  });
+
+  $effect(() => {
+    if (modalStep === 2) {
+      const interval = setInterval(() => {
+        dotCount = (dotCount + 1) % 4;
+      }, 500);
+      return () => clearInterval(interval);
+    } else {
+      dotCount = 0; 
     }
   });
 
@@ -87,8 +111,11 @@
 
   /** Confirms the nickname for the player*/
   function confirmName() {
-    if (nickname.trim().length > 0) modalStep = 1;
-  }
+    if (nickname.trim().length > 0){
+        modalStep = 1;
+        playerName.set(nickname);
+        }
+    }
 
   /*****************BACKEND METHODS******************/
   /**
@@ -96,8 +123,14 @@
    */
   async function goToCreate() {
     try {
+      isMultiplayer.set(true);
       modalStep = 2;
-      const res = await fetch(`${PUBLIC_SERVER_URL}/create-lobby`, { method: 'POST' });
+      const payload = selectedMap ? { map: selectedMap.replace('.json', '') } : {};
+      const res = await fetch(`${PUBLIC_SERVER_URL}/create-lobby`, { 
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
       const data = await res.json();
       lobbyCode = data.gameId;
 
@@ -108,12 +141,28 @@
     }
   }
 
+  async function fetchMaps() {
+    try {
+      const res = await fetch(`${PUBLIC_SERVER_URL}/list-maps`);
+      if (res.ok) {
+        mapList = await res.json();
+        modalStep = 4; // Map selection step
+      }
+    } catch (e) {
+      console.error("Failed to fetch maps", e);
+    }
+  }
+
   /**
    * Helps for TESTING. Navigates to the singleplayer page, method made for
    * ease of singleplayer testing. However server may not be needed for singleplayer. 
    */
   function goToGame() {
-    goto('/singleplayer');
+    let url = '/singleplayer';
+    if (selectedMap) {
+      url += `?map=${encodeURIComponent(selectedMap.replace('.json', ''))}`;
+    }
+    goto(url);
   }
 
   /**
@@ -121,6 +170,7 @@
    */
   function goToJoin() {
     modalStep = 3;
+    serverError = '';
   }
   
   /**
@@ -128,6 +178,7 @@
    * lobby. 
    */
   function connect(){
+    isMultiplayer.set(true);
     gameId.set(lobbyCode);
 
     $socket.emit('join_game', {gameId: lobbyCode, playerName: nickname});
@@ -235,7 +286,7 @@
                   
                   <input 
                       type="text" 
-                      placeholder="ENTER NAME..." 
+                      placeholder="ENTER SHIP NAME..." 
                       bind:value={nickname} 
                       class="tactical-input"
                       maxlength="18"
@@ -267,22 +318,57 @@
                   </div>
 
               {:else if modalStep === 1}
-                  <h2>WELCOME, <span class="highlight">{nickname}</span></h2>
+                  <h2>WELCOME</h2>
                   
                   <div class="vertical-stack" role="group">
                       <button 
                           class="action-btn wide" 
-                          onclick={() => { goToGame(); $isHovering = false; }}
+                          onclick={() => { selectedMap = ''; goToGame(); $isHovering = false; }}
                           onmouseenter={() => $isHovering = true}
                           onmouseleave={() => $isHovering = false}
                       >
-                          START GAME
+                          START (DEFAULT MAP)
+                      </button>
+                      <button 
+                          class="action-btn wide" 
+                          onclick={() => { fetchMaps(); $isHovering = false; }}
+                          onmouseenter={() => $isHovering = true}
+                          onmouseleave={() => $isHovering = false}
+                      >
+                          CHOOSE CUSTOM MAP
                       </button>
                   </div>
                   
                   <button 
                       class="close-btn" 
                       onclick={() => { goBack(); $isHovering = false; }} 
+                      onmouseenter={() => $isHovering = true}
+                      onmouseleave={() => $isHovering = false}
+                  >
+                      &lt; BACK
+                  </button>
+
+              {:else if modalStep === 4}
+                  <h2>SELECT OPERATION AREA</h2>
+                  <div class="map-list-container">
+                      {#if mapList.length > 0}
+                          {#each mapList as map}
+                              <button 
+                                  class="action-btn wide map-btn" 
+                                  onclick={() => { selectedMap = map; goToGame(); $isHovering = false; }}
+                                  onmouseenter={() => $isHovering = true}
+                                  onmouseleave={() => $isHovering = false}
+                              >
+                                  {map.replace('.json', '')}
+                              </button>
+                          {/each}
+                      {:else}
+                          <p class="status-text" style="font-size: 1rem;">NO CUSTOM MAPS DETECTED</p>
+                      {/if}
+                  </div>
+                  <button 
+                      class="close-btn" 
+                      onclick={() => { modalStep = 1; $isHovering = false; }} 
                       onmouseenter={() => $isHovering = true}
                       onmouseleave={() => $isHovering = false}
                   >
@@ -336,16 +422,25 @@
                   </div>
 
               {:else if modalStep === 1}
-                  <h2>WELCOME, <span class="highlight">{nickname}</span></h2>
+                  <h2>WELCOME</h2>
                   
                   <div class="vertical-stack" role="group">
                       <button 
                           class="action-btn wide" 
-                          onclick={() => { goToCreate(); $isHovering = false; }}
+                          onclick={() => { selectedMap = ''; goToCreate(); $isHovering = false; }}
                           onmouseenter={() => $isHovering = true}
                           onmouseleave={() => $isHovering = false}
                       >
-                          CREATE LOBBY
+                          CREATE (DEFAULT MAP)
+                      </button>
+                      
+                      <button 
+                          class="action-btn wide" 
+                          onclick={() => { fetchMaps(); $isHovering = false; }}
+                          onmouseenter={() => $isHovering = true}
+                          onmouseleave={() => $isHovering = false}
+                      >
+                          CHOOSE CUSTOM MAP
                       </button>
                       
                       <button 
@@ -367,9 +462,40 @@
                       &lt; BACK
                   </button>
               
+              {:else if modalStep === 4}
+                  <h2>SELECT OPERATION AREA</h2>
+                  <div class="map-list-container">
+                      {#if mapList.length > 0}
+                          {#each mapList as map}
+                              <button 
+                                  class="action-btn wide map-btn" 
+                                  onclick={() => { selectedMap = map; goToCreate(); $isHovering = false; }}
+                                  onmouseenter={() => $isHovering = true}
+                                  onmouseleave={() => $isHovering = false}
+                              >
+                                  {map.replace('.json', '')}
+                              </button>
+                          {/each}
+                      {:else}
+                          <p class="status-text" style="font-size: 1rem;">NO CUSTOM MAPS DETECTED</p>
+                      {/if}
+                  </div>
+                  <button 
+                      class="close-btn" 
+                      onclick={() => { modalStep = 1; $isHovering = false; }} 
+                      onmouseenter={() => $isHovering = true}
+                      onmouseleave={() => $isHovering = false}
+                  >
+                      &lt; BACK
+                  </button>
+              
               {:else if modalStep === 2}
                   <h2>LOBBY CREATED</h2>
                   <p class="status-text">{lobbyCode}</p>
+                  
+                  <p class="waiting-msg">
+                    WAITING FOR OPPONENT<span class="dots">{dots}</span>
+                  </p>
                   
                   <div class="button-group" role="group">
                       <button 
@@ -380,15 +506,6 @@
                           onmouseleave={() => $isHovering = false}
                       >
                           CANCEL
-                      </button>
-                      
-                      <button 
-                          class="close-btn" 
-                          onclick={() => { goBack(); $isHovering = false; }}
-                          onmouseenter={() => $isHovering = true}
-                          onmouseleave={() => $isHovering = false}
-                      >
-                          BACK
                       </button>
                   </div>
               
@@ -405,7 +522,12 @@
                       autocomplete="off"
                       autocorrect="off"
                       autocapitalize="off"
+                      oninput={() => serverError = ''}
                   />
+
+                  {#if serverError}
+                    <p class="error-text">{serverError}</p>
+                {/if}
                   
                   <div class="button-group" role="group">
                       <button 
@@ -442,6 +564,22 @@
 <!--PAGE HTML STYLES-->
 <style>
     /*MODALS*/
+    .map-list-container {
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        align-items: center;
+        margin-top: 1rem;
+        max-height: 30vh;
+        overflow-y: auto;
+    }
+
+    .map-btn {
+        font-size: clamp(0.8rem, 1.5vh, 1rem) !important;
+        padding: 0.8rem !important;
+    }
+
     /*Modal layout, provides a vertical look to the modal*/
     .vertical-stack { 
         display: flex; 
@@ -693,5 +831,37 @@
         z-index: -1;
         opacity: 0.35; 
         pointer-events: none;
+    }
+
+    .waiting-msg {
+        color: #3b82f6;
+        font-family: 'Chakra Petch', sans-serif;
+        font-size: 1rem;
+        letter-spacing: 2px;
+        margin-bottom: 1rem;
+        font-weight: bold;
+    }
+
+    .dots {
+        display: inline-block;
+        width: 30px; 
+        text-align: left;
+    }
+
+    .error-text {
+        color: #e24a4a;
+        font-family: 'Chakra Petch', sans-serif;
+        font-size: 0.9rem;
+        font-weight: bold;
+        margin-top: -1.5rem; 
+        margin-bottom: 1.5rem;
+        text-transform: uppercase;
+        animation: shake 0.4s ease-in-out;
+    }
+
+    @keyframes shake {
+        0%, 100% { transform: translateX(0); }
+        25% { transform: translateX(-5px); }
+        75% { transform: translateX(5px); }
     }
 </style>
