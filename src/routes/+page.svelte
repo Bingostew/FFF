@@ -19,7 +19,7 @@
 
   function initBackgroundMusic() {
     if (!bgAudio) {
-      bgAudio = new Audio('/01. Pirates of the Caribbean Online Theme.mp3'); // Path to your file in the static/ folder
+      bgAudio = new Audio('pirates.mp3'); // Path to your file in the static/ folder
       bgAudio.loop = true;
       bgAudio.volume = 0.4;
     }

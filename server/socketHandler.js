@@ -98,6 +98,27 @@ module.exports = (io, lobbies) => {
     }
 
 
+    function checkForActionConditions(lobby, socket){
+        let result = true;
+
+        if (!lobby ) {
+            socket.emit('error', 'Game does not exist');
+            result = false;
+        }
+
+        else if (lobby.status !== 'active') {
+            socket.emit('error', 'Game is not active');
+            result = false;
+        }
+
+        else if (lobby.activePlayer !== socket.id) {
+            socket.emit('error', 'It is not your turn.');
+            result = false;
+        }
+
+        return result;
+    }
+    
     const switchTurn = (gameId) => {
         const lobby = lobbies[gameId];
         if (!lobby) return;
