@@ -1,5 +1,21 @@
 <script>
     import HexMap from '$lib/+map.svelte';
+    import { socket } from '$lib/gameStore';
+
+    // Trigger explosion sound effects on successful hits
+    $effect(() => {
+        if ($socket) {
+            const handleStrikeResult = (data) => {
+                if (data.hit) {
+                    const sfx = new Audio('/explosion.wav');
+                    sfx.volume = 0.6;
+                    sfx.play().catch(e => console.log("SFX play prevented:", e));
+                }
+            };
+            $socket.on('strike_result', handleStrikeResult);
+            return () => $socket.off('strike_result', handleStrikeResult);
+        }
+    });
 </script>
 
 <div class="page-content">
