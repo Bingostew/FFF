@@ -88,6 +88,14 @@
         { col: 4, row: 3, img: 'peak.jpg' }, { col: 5, row: 2, img: 'mountain.jpg' }
     ]);
 
+    let showHelp = $state(false); // Tracks the help modal visibility
+
+    function toggleHelp() {
+        showHelp = !showHelp;
+        if (showHelp) {
+            addLog("Accessing tactical manual...", "system");
+        }
+    }
 
     function loadCustomMap(event) {
         const file = event.target.files[0];
@@ -489,13 +497,14 @@
     function handlePlayerSearch(die=0) {
         if (isMultiplayer) {
             if (selectedGroup.length === 0) return false;
+            const targetCoords = selectedGroup.map(h => `${String.fromCharCode(65 + h.col)}-${h.row + 1}`).join(', ');
             const rawPos = selectedGroup;
             const formattedPositions = {};
             rawPos.forEach((h, index) => { 
                 formattedPositions[index] = { q: h.q, r: h.r }; 
             });
 
-            addLog(`Initiating ${targetingMode.toUpperCase()} scan...`, "player");
+            addLog(`Initiating ${targetingMode.toUpperCase()} scan on [${targetCoords}]...`, "player");
             if (die > 0) addLog(`Sensor sweep rolled a ${die}.`, "player");
             
             const eventName = `${targetingMode}`; 
@@ -509,8 +518,8 @@
             selectedGroup = []; 
         } else {
             if (selectedGroup.length === 0) return false;
-
-            addLog(`Initiating ${targetingMode.toUpperCase()} scan...`, "player");
+            const targetCoords = selectedGroup.map(h => `${String.fromCharCode(65 + h.col)}-${h.row + 1}`).join(', ');
+            addLog(`Initiating ${targetingMode.toUpperCase()} scan on [${targetCoords}]...`, "player");
             
             rollUniversalDice("--SCANNING--", 1, (roll1) => {
                 addLog(`Sensor sweep rolled a ${roll1}.`, "player");
@@ -1156,6 +1165,15 @@
     />
 </div>
 
+<button 
+        class="help-trigger" 
+        onclick={toggleHelp}
+        onmouseenter={() => $isHovering = true} 
+        onmouseleave={() => $isHovering = false}
+    >
+        [?] MANUAL
+    </button>
+
 <style>
     .layout-container {     
         display: flex; 
@@ -1307,4 +1325,6 @@
         0% { opacity: 0; transform: scale(1.05); }
         100% { opacity: 1; transform: scale(1); }
     }
+
 </style>
+
