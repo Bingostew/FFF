@@ -38,7 +38,8 @@
     let selectedFleetToMove = $state(null);
     let isPlacementLocked = $state(false);
     let warning = $state({ show: false, x: 0, y: 0, text: '', id: 0 });
-    
+    let alertData = $state(null); 
+
     // AI Memory for Hunt & Seek logic
     let aiMemory = $state({
         knownTargets: [],     // Hexes where we know a ship is sitting
@@ -704,9 +705,11 @@
     let turnTimeout;
 
     function triggerOverlay(message, mode = 'fail'){
-        clearTimeout(overlayTimeout);
-        overlay = {show: true, text:message, mode};
-        setTimeout(() => { overlay.show = false; }, 2000);
+        alertData = { message: message, mode };
+    
+        setTimeout(() => {
+            alertData = null;
+        }, 4000);
     }
 
     // Board state sent to AI brain
@@ -1008,18 +1011,32 @@
             if (targetingMode === 'directional') { e.preventDefault(); rotation++; }
         }}
     >
-    {#if !isPlacementLocked}
-        <div class="deployment-tooltip">
-            <span class="tooltip-label">MISSION BRIEFING:</span>
-            PLACE 2 FLEETS ON WATER 
-            <span class="tooltip-counter" class:counter-ready={fleetSelections.length === 2}>
-                [{fleetSelections.length} / 2]
-            </span>
-        </div>
-    {:else if isConfirmed && !targetEnemy && isMyTurn}
-        <div class="deployment-tooltip">
+    <div 
+    class="deployment-tooltip" 
+    class:alert-success={alertData?.mode === 'success'}
+    class:alert-fail={alertData?.mode === 'fail'}
+    class:mission-red={targetEnemy && isMyTurn && !alertData}
+    >
+        {#if alertData}
+            <span class="tooltip-label" in:fly={{ y: -10 }}>SYSTEM ALERT</span>
+            <div class="tooltip-main alert-text" in:scale={{ start: 0.9 }}>
+                {alertData.message}
+            </div>
+            <div class="tooltip-sub" in:fade>
+                <span>{alertData.mode === 'success' ? 'SUCCESS!' : 'FAILURE!'}</span>
+            </div>
+        {:else if !isPlacementLocked}
+            <span class="tooltip-label">MISSION BRIEFING</span>
+            <div class="tooltip-main">PLACE 2 FLEETS ON WATER</div>
+            <div class="tooltip-sub">
+                <span class="tooltip-counter" class:counter-ready={fleetSelections.length === 2}>
+                    UNITS DEPLOYED: [{fleetSelections.length} / 2]
+                </span>
+            </div>
+
+        {:else if isConfirmed && !targetEnemy && isMyTurn}
+            <span class="tooltip-label">SELECTED ACTION</span>
             <div class="tooltip-main">
-                <span class="tooltip-label">SELECTED ACTION:</span>
                 {#if targetingMode === 'focus'}FOCUS SCAN
                 {:else if targetingMode === 'directional'}DIRECTIONAL SCAN
                 {:else if targetingMode === 'area'}AREA SCAN
@@ -1027,31 +1044,46 @@
                 {:else}SELECT YOUR ACTION{/if}
             </div>
             
-            {#if targetingMode}
-                <div class="tooltip-sub">
-                    {#if targetingMode === 'focus'}
-                        <span>SELECT 3 NON-ADJACENT HEXES </span>
-                       <span class="roll-highlight">SUCCESS RATE: 100%</span>
-                    {:else if targetingMode === 'directional'}
-                        <span>SELECT A SWEEPING LINE OF HEXES. RIGHT CLICK TO ROTATE </span>
-                        <span class="roll-highlight">SUCCESS RATE: 66%</span>
-                    {:else if targetingMode === 'area'}
-                        <span>SELECT 4 ADJACENT HEXES </span>
-                        <span class="roll-highlight">SUCCESS RATE: 50%</span>
-                    {:else if targetingMode === 'move'}
-                        <span>REPOSITION SHIP TO ADJACENT HEX </span>
-                        <span class="roll-highlight">COST: 1 FUEL</span>
-                    {/if}
-                </div>
-            {/if}
-        </div>
-    {:else if targetEnemy && isMyTurn}
-        <div class="deployment-tooltip" style="border-color: #e24a4a;">
-            <span class="tooltip-label" style="color: #e24a4a;">MISSION BRIEFING:</span>
-            {sourceFleet ? "READY TO ENGAGE" : "SELECT ONE OF YOUR FLEET TO SEND STRIKE "}
-        </div>
-    {/if} 
-        <svg viewBox="-10 -10 602 620" class="tactical-grid" preserveAspectRatio="xMidYMid meet">
+            <div class="tooltip-sub">
+                {#if targetingMode === 'focus'}
+                    <span>SELECT 3 NON-ADJACENT HEXES</span>
+                    <span class="roll-highlight">SUCCESS RATE: 100%</span>
+                {:else if targetingMode === 'directional'}
+                    <span>SELECT A SWEEPING LINE OF HEXES. RIGHT CLICK TO ROTATE</span>
+                    <span class="roll-highlight">SUCCESS RATE: 66%</span>
+                {:else if targetingMode === 'area'}
+                    <span>SELECT 4 ADJACENT HEXES</span>
+                    <span class="roll-highlight">SUCCESS RATE: 50%</span>
+                {:else if targetingMode === 'move'}
+                    <span>REPOSITION SHIP TO ADJACENT HEX</span>
+                    <span class="roll-highlight">COST: 1 FUEL</span>
+                {:else}
+                    <span>AWAITING TACTICAL INPUT...</span>
+                {/if}
+            </div>
+
+        {:else if targetEnemy && isMyTurn}
+            <span class="tooltip-label" style="color: #e24a4a;">STRIKE PROTOCOL</span>
+            <div class="tooltip-main">
+                {sourceFleet ? "READY TO ENGAGE" : "SELECT A SHIP TO INITIATE STRIKE"}
+            </div>
+            <div class="tooltip-sub">
+                <span>TARGET ACQUIRED</span>
+                <span class="roll-highlight">{sourceFleet ? "CALCULATING VECTOR..." : "WAITING FOR SOURCE"}</span>
+            </div>
+
+        {:else}
+            <span class="tooltip-label">SYSTEM STATUS</span>
+            <div class="tooltip-main">
+                {!isConfirmed ? "AWAITING OPPONENT" : "ENEMY TURN IN PROGRESS"}
+            </div>
+            <div class="tooltip-sub">
+                <span>MONITORING TACTICAL GRID</span>
+                <span class="roll-highlight">ENCRYPTED LINK ACTIVE</span>
+            </div>
+        {/if}
+    </div>
+        <svg  viewBox="-10 -10 602 620" class="tactical-grid" preserveAspectRatio="xMidYMid meet">
             <defs>
                 <pattern id="water-pattern" x="0" y="0" width="200" height="200" patternUnits="userSpaceOnUse">
                     <image href="/water2.jpg" x="0" y="0" width="200" height="200" preserveAspectRatio="xMidYMid slice"/>
@@ -1287,22 +1319,95 @@
         transition: all 0.4s ease;
     }
 
-    .map-area { 
-        flex: 1;
-        display: flex; 
-        justify-content: center; 
-        align-items: center; 
-        position: relative; 
-        padding: 1vw; 
-        min-width: 0; 
-        min-height: 0;
+    .map-area {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        display: flex;
+        flex-direction: column; 
+        align-items: center;
+        container-type: inline-size;
+        justify-content: flex-start;
+        overflow: hidden;
     }
     
-    .tactical-grid { 
-        width: 100%; 
-        height: 100%; 
-        filter: drop-shadow(0 0 20px rgba(0,0,0,0.5)); 
+    .deployment-tooltip {
+        position: relative !important; 
+        top: 0 !important;
+        left: 0 !important;
+        transform: none !important;
+        width: 95cqi;
+        max-width: 650px;
+        min-height: 70px; 
+        padding: 8px 20px; 
+        margin: 5px 0;    
+        flex-shrink: 0;
+        gap: 2px;
+        
+        background: rgba(10, 15, 30, 0.9);
+        backdrop-filter: blur(8px);
+        border: 1px solid rgba(59, 130, 246, 0.3);
+        border-left: 4px solid #3b82f6;
+        padding: 15px 20px;
+        
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center; /* Centers the three layers vertically */
+        z-index: 10;
+        clip-path: polygon(15px 0, 100% 0, 100% calc(100% - 15px), calc(100% - 15px) 100%, 0 100%, 0 15px);
     }
+
+    .tooltip-label {
+        color: #3b82f6;
+        font-size: 0.65rem;
+        margin-bottom: 0px;
+        font-weight: bold;
+        letter-spacing: 3px;
+        text-transform: uppercase;
+    }
+
+    .tooltip-main {
+        color: #fff;
+        font-family: 'Chakra Petch', sans-serif;
+        font-weight: 800;
+        font-size: clamp(0.6rem, 4cqi, 1rem);
+        letter-spacing: 1px;
+        text-transform: uppercase;
+    }
+
+    .tooltip-sub {
+        width: 100%;
+        display: flex;
+        justify-content: space-between; /* Puts description left, stats right */
+        align-items: center;
+        
+        border-top: 1px solid rgba(59, 130, 246, 0.2);
+        margin-top: 4px;
+        padding-top: 4px;
+        
+        font-size: clamp(0.4rem, 2cqi, 0.6rem);
+        color: #abbbd1;
+        letter-spacing: 1px;
+    }
+
+    .roll-highlight {
+        color: #3b82f6;
+        font-weight: bold;
+        background: rgba(59, 130, 246, 0.1);
+        padding: 1px 6px;
+        border-radius: 2px;
+    }
+
+    /* Fire Mission Red State */
+    .mission-red {
+        border-left-color: #e24a4a !important;
+        border-color: rgba(226, 74, 74, 0.4);
+        background: rgba(25, 10, 10, 0.95) !important;
+    }
+
+    .mission-red .tooltip-main { color: #e24a4a; }
+    .mission-red .roll-highlight { color: #e24a4a; background: rgba(226, 74, 74, 0.1); }
 
     .cursor-warning {
         position: fixed; 
@@ -1369,6 +1474,12 @@
         pointer-events: all;
         animation: fadeInOut 2s forwards;
         cursor: none; 
+    }
+
+    .deployment-tooltip.mission-red {
+        border-left-color: #e24a4a;
+        border-right: 1px solid rgba(226, 74, 74, 0.3);
+        background: rgba(20, 10, 10, 0.9);
     }
 
     .glitch-text {
@@ -1523,8 +1634,51 @@
         margin: 5px 0;
     }
 
-    /* Ensure the expansion feels centered */
     .tactical-card {
         transform-origin: center;
     }
+
+    svg {
+        flex-grow: 1; 
+        width: 100%;
+        height: auto;
+        display: block;
+    }
+
+    /* Success Alert: Tactical Green Pulse */
+    .alert-success {
+        border-color: #4ade80 !important;
+        border-left-color: #4ade80 !important;
+        box-shadow: 0 0 20px rgba(74, 222, 128, 0.3);
+        animation: success-pulse 1s ease-out;
+    }
+
+    @keyframes success-pulse {
+        0% { transform: scale(1); }
+        50% { transform: scale(1.02); background: rgba(20, 40, 20, 0.95); }
+        100% { transform: scale(1); }
+    }
+
+    /* Failure Alert: Red Glitch/Shake */
+    .alert-fail {
+        border-color: #e24a4a !important;
+        border-left-color: #e24a4a !important;
+        box-shadow: 0 0 20px rgba(226, 74, 74, 0.3);
+        animation: fail-shake 1s cubic-bezier(.36,.07,.19,.97) both;
+    }
+
+    @keyframes fail-shake {
+        10%, 90% { transform: translate3d(-1px, 0, 0); }
+        20%, 80% { transform: translate3d(2px, 0, 0); }
+        30%, 50%, 70% { transform: translate3d(-4px, 0, 0); }
+        40%, 60% { transform: translate3d(4px, 0, 0); }
+    }
+
+    /* Alert Text Styling */
+    .alert-success .alert-text { color: #4ade80; text-shadow: 0 0 10px rgba(74, 222, 128, 0.5); }
+    .alert-fail .alert-text { color: #e24a4a; text-shadow: 0 0 10px rgba(226, 74, 74, 0.5); }
+
+    /* Ensure the sub-text highlight matches the alert type */
+    .alert-success .roll-highlight { color: #4ade80; background: rgba(74, 222, 128, 0.1); }
+    .alert-fail .roll-highlight { color: #e24a4a; background: rgba(226, 74, 74, 0.1); }
 </style>
