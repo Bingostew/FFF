@@ -1,22 +1,25 @@
-# 1. Use the official Node.js Alpine image for version 24
-FROM node:24-alpine
+# 1. Use the standard Node 24 image
+FROM node:24
 
-# 2. Set the working directory inside the container
+# 2. Set the working directory
 WORKDIR /app
 
-# 3. Copy package.json and package-lock.json first
+# 3. Copy ONLY the package files first
 COPY package*.json ./
 
-# 4. Install your dependencies
-RUN npm install
+# 4. The Trusted Corporate Bypass: Use the Yarn/Cloudflare registry
+RUN npm config set registry https://registry.yarnpkg.com
+RUN npm config set strict-ssl false -g
+ENV NODE_TLS_REJECT_UNAUTHORIZED=0
 
-# 5. Copy the rest of your application's source code
-# (This grabs your server, static, and src folders)
+# 5. Install dependencies natively in Linux
+RUN npm install --no-package-lock
+
+# 6. Copy the rest of your code (This will copy your .env file too!)
 COPY . .
 
-# 6. Expose the port your application uses 
-# (Change 3000 if your server listens on a different port)
-EXPOSE 3000
+# 7. Expose the ports (8001 for your backend, 5173 for Vite)
+EXPOSE 8001 5173
 
-# 7. Define the command to start your game server
-CMD ["npm", "start"]
+# 8. Start the server and Vite directly
+CMD ["sh", "-c", "node server/server.js & node node_modules/vite/bin/vite.js dev --host"]
