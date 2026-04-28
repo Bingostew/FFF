@@ -65,16 +65,16 @@
                     <button class:active={targetingMode === 'focus'} 
                         onclick={() => { targetingMode = 'focus'; selectedGroup = []; }}>
                         <span class="btn-text">FOCUS</span>
-                        <span class="btn-sub">SINGLE CELL (AUTO-SUCCESS)</span>
+                        <span class="btn-sub">3 NON-ADJACENT CELLS</span>
                     </button>
 
                     <button class:active={targetingMode === 'directional'} 
                         onclick={() => { targetingMode = 'directional'; selectedGroup = []; }}>
                         <span class="btn-text">DIRECTIONAL</span>
                         <span class="btn-sub">
-                            {#if rotation % 3 === 0} VERTICAL
-                            {:else if rotation % 3 === 1} SLANT RIGHT
-                            {:else} SLANT LEFT
+                            {#if rotation % 3 === 0} 3 VERTICAL CELLS
+                            {:else if rotation % 3 === 1} 3 SLANT RIGHT CELLS
+                            {:else} 3 SLANT LEFT CELLS
                             {/if}
                         </span>
                         <span class="btn-hint">[R-CLICK TO ROTATE]</span>
@@ -90,14 +90,14 @@
                         onclick={() => { targetingMode = 'move'; selectedGroup = []; }}
                         disabled={totalFuel <= 0}>
                         <span class="btn-text">MOVE</span>
-                        <span class="btn-sub">{totalFuel > 0 ? "MOVE FLEET (COST: 1 FUEL)" : "NO FUEL REMAINING"}</span>
+                        <span class="btn-sub">{totalFuel > 0 ? "MOVE FLEET" : "NO FUEL REMAINING"}</span>
                     </button>
 
                     <button style="margin-top: 10px; border-color: #3b82f6; color: #3b82f6;"
                         onclick={() => onSearch()} disabled={!isMyTurn || selectedGroup.length === 0}>
                         <span class="btn-text">ACTIVATE SCAN</span>
                         <span class="btn-sub">
-                            {targetingMode === 'focus' ? 'GUARANTEED SUCCESS (NO ROLL)' : 'CONFIRM AND ROLL DICE'}
+                            Confirm
                         </span>
                     </button>
                 </div>
@@ -136,14 +136,7 @@
                         >
                             <span class="btn-text">ENGAGE</span>
                             <span class="btn-sub">{sourceFleet ? "EXECUTE ATTACK VECTOR" : "WAITING FOR SOURCE..."}</span>
-                        </button>
-
-                        <button 
-                            class="cancel-btn"
-                            onclick={() => { targetEnemy = null; sourceFleet = null; }}
-                        >
-                            <span class="btn-text" style="font-size: 0.8rem; text-align: center;">ABORT MISSION</span>
-                        </button>
+                        </button>                 
                     </div>
 
                 {:else}
@@ -274,7 +267,9 @@
 
     .stat-row {
         display: flex;
-        justify-content: space-between;
+        text-align: center;
+        flex-direction: column; 
+        align-items: center;   
         font-family: 'Chakra Petch', sans-serif;
         font-size: 0.9rem;
         color: #abbbd1;

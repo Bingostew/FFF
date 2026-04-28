@@ -1,6 +1,10 @@
 <script>
     // @ts-nocheck
     import { onDestroy } from 'svelte';
+    import { scale } from 'svelte/transition';
+    import { fade, fly } from 'svelte/transition';
+    import { backOut } from 'svelte/easing';
+    import { quintOut } from 'svelte/easing';
     import { defineHex, Grid, rectangle, Orientation, line } from 'honeycomb-grid';
     import { isHovering } from '$lib/store';
     import { socket, gameId, activePlayerId, playerName, isMultiplayer } from '$lib/gameStore';   
@@ -35,7 +39,8 @@
     let selectedFleetToMove = $state(null);
     let isPlacementLocked = $state(false);
     let warning = $state({ show: false, x: 0, y: 0, text: '', id: 0 });
-    
+    let alertData = $state(null); 
+
     // AI Memory for Hunt & Seek logic
     let aiMemory = $state({
         knownTargets: [],     // Hexes where we know a ship is sitting
@@ -195,7 +200,7 @@
                 setTimeout(() => {
                     globalDice.show = false;
                     callback(final1, final2);
-                }, 2000); 
+                }, 2500); 
             }
         }
         animate();
@@ -403,10 +408,12 @@
 
         const coordStr = `${String.fromCharCode(65 + hex.col)}-${hex.row + 1}`; // e.g., "A-1"
 
+        console.log("hiii" + targetEnemy);
         if(targetEnemy){
             const friendlyFleet = fleetSelections.find(f => f.q === hex.q && f.r === hex.r);
+
             if(friendlyFleet){
-                sourceFleet = friendlyFleet; showWarning(event.clientX, event.clientY, `ATTACKER: ${sourceFleet.name}`);
+                sourceFleet = friendlyFleet; 
             } else { showWarning(event.clientX, event.clientY, "Select a friendly fleet to engage!"); }
             return;
         }
@@ -702,9 +709,11 @@
     let turnTimeout;
 
     function triggerOverlay(message, mode = 'fail'){
-        clearTimeout(overlayTimeout);
-        overlay = {show: true, text:message, mode};
-        setTimeout(() => { overlay.show = false; }, 2000);
+        alertData = { message: message, mode };
+    
+        setTimeout(() => {
+            alertData = null;
+        }, 4000);
     }
 
     // Board state sent to AI brain
@@ -1006,7 +1015,79 @@
             if (targetingMode === 'directional') { e.preventDefault(); rotation++; }
         }}
     >
-        <svg viewBox="-10 -10 602 620" class="tactical-grid" preserveAspectRatio="xMidYMid meet">
+    <div 
+    class="deployment-tooltip" 
+    class:alert-success={alertData?.mode === 'success'}
+    class:alert-fail={alertData?.mode === 'fail'}
+    class:mission-red={targetEnemy && isMyTurn && !alertData}
+    >
+        {#if alertData}
+            <span class="tooltip-label" in:fly={{ y: -10 }}>SYSTEM ALERT</span>
+            <div class="tooltip-main alert-text" in:scale={{ start: 0.9 }}>
+                {alertData.message}
+            </div>
+            <div class="tooltip-sub" in:fade>
+                <span>{alertData.mode === 'success' ? 'GOOD WORK!' : 'YIKES!'}</span>
+            </div>
+        {:else if !isPlacementLocked}
+            <span class="tooltip-label">MISSION BRIEFING</span>
+            <div class="tooltip-main">PLACE 2 FLEETS ON WATER</div>
+            <div class="tooltip-sub">
+                <span class="tooltip-counter" class:counter-ready={fleetSelections.length === 2}>
+                    UNITS DEPLOYED: [{fleetSelections.length} / 2]
+                </span>
+            </div>
+
+        {:else if isConfirmed && !targetEnemy && isMyTurn}
+            <span class="tooltip-label">SELECTED ACTION</span>
+            <div class="tooltip-main">
+                {#if targetingMode === 'focus'}FOCUS SCAN
+                {:else if targetingMode === 'directional'}DIRECTIONAL SCAN
+                {:else if targetingMode === 'area'}AREA SCAN
+                {:else if targetingMode === 'move'}FLEET MANEUVER
+                {:else}SELECT YOUR ACTION{/if}
+            </div>
+            
+            <div class="tooltip-sub">
+                {#if targetingMode === 'focus'}
+                    <span>SELECT 3 NON-ADJACENT HEXES</span>
+                    <span class="roll-highlight">SUCCESS RATE: 100%</span>
+                {:else if targetingMode === 'directional'}
+                    <span>SELECT A SWEEPING LINE OF HEXES. RIGHT CLICK TO ROTATE</span>
+                    <span class="roll-highlight">SUCCESS RATE: 66%</span>
+                {:else if targetingMode === 'area'}
+                    <span>SELECT 4 ADJACENT HEXES</span>
+                    <span class="roll-highlight">SUCCESS RATE: 50%</span>
+                {:else if targetingMode === 'move'}
+                    <span>REPOSITION SHIP TO ADJACENT HEX</span>
+                    <span class="roll-highlight">COST: 1 FUEL</span>
+                {:else}
+                    <span>AWAITING TACTICAL INPUT...</span>
+                {/if}
+            </div>
+
+        {:else if targetEnemy && isMyTurn}
+            <span class="tooltip-label" style="color: #e24a4a;">STRIKE PROTOCOL</span>
+            <div class="tooltip-main">
+                {sourceFleet ? "READY TO ENGAGE" : "SELECT A SHIP TO INITIATE STRIKE"}
+            </div>
+            <div class="tooltip-sub">
+                <span>TARGET ACQUIRED</span>
+                <span class="roll-highlight">{sourceFleet ? "CALCULATING VECTOR..." : "WAITING FOR SOURCE"}</span>
+            </div>
+
+        {:else}
+            <span class="tooltip-label">SYSTEM STATUS</span>
+            <div class="tooltip-main">
+                {!isConfirmed ? "AWAITING OPPONENT" : "ENEMY TURN IN PROGRESS"}
+            </div>
+            <div class="tooltip-sub">
+                <span>MONITORING TACTICAL GRID</span>
+                <span class="roll-highlight">ENCRYPTED LINK ACTIVE</span>
+            </div>
+        {/if}
+    </div>
+        <svg  viewBox="-10 -10 602 620" class="tactical-grid" preserveAspectRatio="xMidYMid meet">
             <defs>
                 <pattern id="water-pattern" x="0" y="0" width="200" height="200" patternUnits="userSpaceOnUse">
                     <image href="/water2.jpg" x="0" y="0" width="200" height="200" preserveAspectRatio="xMidYMid slice"/>
@@ -1022,6 +1103,7 @@
             </defs>
 
             <g transform="translate(30, 40)"> 
+                
                 {#each grid as hex}
                     {@const isEnemyFleet = enemyFleets.some(e => e.q === hex.q && e.r === hex.r)}
                     {@const config = specialTiles.find(t => t.col === hex.col && t.row === hex.row)}
@@ -1032,11 +1114,13 @@
                     {@const pointsStr = hex.corners.map(({ x, y }) => `${x},${y}`).join(' ')}
                     
                     <g 
-                        class="hex-cell" role="button" tabindex="0" onclick={(e) => handleHexClick(e, hex)}
+                        class="hex-cell" role="button" tabindex="0" onclick={(e) => handleHexClick(e, hex)}             
+                        class:clickable={isMyTurn && (targetingMode || targetEnemy)}
                         onmouseenter={() => { hoveredHex = hex; $isHovering = true; }}
                         onmouseleave={() => { hoveredHex = null; $isHovering = false; }}
                         onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && handleHexClick(e, hex)}
                         style="cursor: none; outline: none;"
+                        
                     >
                         <polygon points={pointsStr} fill={config ? `url(#pattern-${hex.col}-${hex.row})` : "url(#water-pattern)"} stroke="black" stroke-width="0.5"/>
                         
@@ -1119,13 +1203,21 @@
     </div>
 
     {#if overlay.show}
-    <div class="fullscreen-lock-overlay" class:overlay-success={overlay.mode === 'success'}>
-        <div class="failure-content">
-            <div class="glitch-text">{overlay.text}</div>
-            <div class="sub-text">{overlay.mode === 'success' ? 'COLLECTING DATA...' : 'RECALIBRATING SENSORS...'}</div>
-        </div>
+<div class="tactical-lock-mask">
+    <div 
+        class="tactical-card" 
+        class:is-success={overlay.mode === 'success'}
+        transition:scale={{ duration: 500, start: 0.2, opacity: 0, easing: backOut }}
+    >
+        <div class="hud-scanline"></div>
+        <div class="hud-brackets"></div>
+
+
+        <h1 class="glitch-text">{overlay.text}</h1>
+
     </div>
-    {/if}
+</div>
+{/if}
 
     {#if gameOver}
     <div class="fullscreen-lock-overlay" style="background: rgba(10, 15, 30, 0.95); flex-direction: column; animation: fadeInStay 0.5s forwards; opacity: 1;"> 
@@ -1173,7 +1265,13 @@
 
     {#if globalDice.show}
         <div class="dice-popup-overlay" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.6); display: flex; justify-content: center; align-items: center; z-index: 10000; backdrop-filter: blur(2px);">
-            <div class="dice-box {globalDice.isStopping ? 'is-stopping' : ''}" style="background: #0a0f1e; border: 2px solid {globalDice.isStopping ? '#22c55e' : '#3b82f6'}; padding: 40px; text-align: center; box-shadow: 0 0 30px {globalDice.isStopping ? 'rgba(34,197,94,0.4)' : 'rgba(59,130,246,0.4)'}; clip-path: polygon(10% 0, 100% 0, 100% 90%, 90% 100%, 0 100%, 0 10%);">
+            <div class="dice-box {globalDice.isStopping ? 'is-stopping' : ''}" 
+                style="background: #0a0f1e; 
+                    border: 2px solid #3b82f6; 
+                    padding: 40px; 
+                    text-align: center; 
+                    box-shadow: 0 0 30px rgba(59, 130, 246, 0.4); 
+                    clip-path: polygon(10% 0, 100% 0, 100% 90%, 90% 100%, 0 100%, 0 10%);">
                 
                 <div style="font-family: 'Chakra Petch'; color: #abbbd1; letter-spacing: 3px; font-size: 1.2rem;">
                     {globalDice.text}
@@ -1186,18 +1284,18 @@
                 {/if}
 
                 <div style="display: flex; gap: 20px; justify-content: center; margin: 20px 0;">
-                    <div style="width: 100px; height: 100px; background: #000; border: 2px solid currentColor; display: flex; align-items: center; justify-content: center; font-size: 4rem; font-weight: bold; color: {globalDice.isStopping ? '#22c55e' : '#3b82f6'}; font-family: 'Chakra Petch';">
+                    <div style="width: 100px; height: 100px; background: #000; border: 2px solid currentColor; display: flex; align-items: center; justify-content: center; font-size: 4rem; font-weight: bold; color: {globalDice.isStopping ? '#3b82f6' : '#3b82f6'}; font-family: 'Chakra Petch';">
                         {globalDice.val1}
                     </div>
                     {#if globalDice.val2 !== null}
-                        <div style="width: 100px; height: 100px; background: #000; border: 2px solid currentColor; display: flex; align-items: center; justify-content: center; font-size: 4rem; font-weight: bold; color: {globalDice.isStopping ? '#22c55e' : '#3b82f6'}; font-family: 'Chakra Petch';">
+                        <div style="width: 100px; height: 100px; background: #000; border: 2px solid currentColor; display: flex; align-items: center; justify-content: center; font-size: 4rem; font-weight: bold; color: {globalDice.isStopping ? '#3b82f6' : '#3b82f6'}; font-family: 'Chakra Petch';">
                             {globalDice.val2}
                         </div>
                     {/if}
                 </div>
                 
                 {#if globalDice.isStopping}
-                    <div style="font-size: 0.8rem; color: #22c55e; letter-spacing: 5px; font-weight: bold;">
+                    <div style="font-size: 0.8rem; color: #3b82f6; letter-spacing: 5px; font-weight: bold;">
                         RESULT LOCKED
                     </div>
                 {/if}
@@ -1234,22 +1332,96 @@
         transition: all 0.4s ease;
     }
 
-    .map-area { 
-        flex: 1;
-        display: flex; 
-        justify-content: center; 
-        align-items: center; 
-        position: relative; 
-        padding: 1vw; 
-        min-width: 0; 
-        min-height: 0;
+    .map-area {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        display: flex;
+        flex-direction: column; 
+        align-items: center;
+        container-type: inline-size;
+        justify-content: flex-start;
+        overflow: hidden;
     }
     
-    .tactical-grid { 
-        width: 100%; 
-        height: 100%; 
-        filter: drop-shadow(0 0 20px rgba(0,0,0,0.5)); 
+    .deployment-tooltip {
+        position: relative !important; 
+        top: 0 !important;
+        left: 0 !important;
+        transform: none !important;
+        width: 95cqi;
+        max-width: 650px;
+        min-height: 70px; 
+        padding: 8px 20px; 
+        margin: 5px 0;    
+        flex-shrink: 0;
+        gap: 2px;
+        
+        background: rgba(10, 15, 30, 0.9);
+        backdrop-filter: blur(8px);
+        border: 1px solid rgba(59, 130, 246, 0.3);
+        border-left: 4px solid #3b82f6;
+        padding: 15px 20px;
+        
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center; 
+        z-index: 10;
+        clip-path: polygon(15px 0, 100% 0, 100% calc(100% - 15px), calc(100% - 15px) 100%, 0 100%, 0 15px);
+        pointer-events: none;
     }
+
+    .tooltip-label {
+        color: #3b82f6;
+        font-size: 0.65rem;
+        margin-bottom: 0px;
+        font-weight: bold;
+        letter-spacing: 3px;
+        text-transform: uppercase;
+    }
+
+    .tooltip-main {
+        color: #fff;
+        font-family: 'Chakra Petch', sans-serif;
+        font-weight: 800;
+        font-size: clamp(0.6rem, 4cqi, 1rem);
+        letter-spacing: 1px;
+        text-transform: uppercase;
+    }
+
+    .tooltip-sub {
+        width: 100%;
+        display: flex;
+        justify-content: space-between; /* Puts description left, stats right */
+        align-items: center;
+        
+        border-top: 1px solid rgba(59, 130, 246, 0.2);
+        margin-top: 4px;
+        padding-top: 4px;
+        
+        font-size: clamp(0.4rem, 2cqi, 0.6rem);
+        color: #abbbd1;
+        letter-spacing: 1px;
+    }
+
+    .roll-highlight {
+        color: #3b82f6;
+        font-weight: bold;
+        background: rgba(59, 130, 246, 0.1);
+        padding: 1px 6px;
+        border-radius: 2px;
+    }
+
+    /* Fire Mission Red State */
+    .mission-red {
+        border-left-color: #e24a4a !important;
+        border-color: rgba(226, 74, 74, 0.4);
+        background: rgba(25, 10, 10, 0.95) !important;
+    }
+
+    .mission-red .tooltip-main { color: #e24a4a; }
+    .mission-red .roll-highlight { color: #e24a4a; background: rgba(226, 74, 74, 0.1); }
 
     .cursor-warning {
         position: fixed; 
@@ -1318,6 +1490,12 @@
         cursor: none; 
     }
 
+    .deployment-tooltip.mission-red {
+        border-left-color: #e24a4a;
+        border-right: 1px solid rgba(226, 74, 74, 0.3);
+        background: rgba(20, 10, 10, 0.9);
+    }
+
     .glitch-text {
         font-size: 4rem;
         font-weight: 900;
@@ -1368,4 +1546,157 @@
         0% { opacity: 0; transform: scale(1.05); }
         100% { opacity: 1; transform: scale(1); }
     }
+
+    .deployment-tooltip {
+        position: absolute;
+        min-width: 450px;
+        max-width: 650px;
+        top: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: rgba(10, 15, 30, 0.9);
+        border: 1px solid #3b82f6;
+        padding: 10px 25px;
+        color: #fff;
+        font-family: 'Chakra Petch', sans-serif;
+        font-size: 1.1rem;
+        letter-spacing: 2px;
+        z-index: 100;
+        pointer-events: none;
+        box-shadow: 0 0 20px rgba(59, 130, 246, 0.3);
+        clip-path: polygon(15px 0, 100% 0, 100% calc(100% - 15px), calc(100% - 15px) 100%, 0 100%, 0 15px);
+    }
+
+    .tooltip-label {
+        color: #3b82f6;
+        font-weight: bold;
+        margin-right: 10px;
+    }
+
+    .tooltip-counter {
+        margin-left: 15px;
+        color: #abbbd1;
+        transition: color 0.3s ease;
+    }
+
+    .counter-ready {
+        color: #4ade80;
+        text-shadow: 0 0 10px rgba(74, 222, 128, 0.5);
+    }
+    .tooltip-main {
+        font-weight: bold;
+        margin-bottom: 4px;
+    }
+
+    .tooltip-sub {
+        font-size: 0.85rem;
+        flex-direction: column; 
+        gap: 5px;
+        color: #abbbd1;
+        letter-spacing: 1px;
+        border-top: 1px solid rgba(59, 130, 246, 0.3);
+        padding-top: 4px;
+        width: 100%;
+        text-transform: uppercase;
+    }
+
+    .roll-highlight {
+        color: #4ebd30; /* Tactical Blue */
+        font-weight: bold;
+        text-shadow: 0 0 8px rgba(59, 130, 246, 0.6);
+    }
+    /* 1. Reduce blur and background weight */
+    .tactical-lock-mask {
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 5, 10, 0.3); /* Lighter mask */
+        backdrop-filter: blur(2px);      /* Reduced from 6px */
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 9999;
+    }
+
+    /* 2. Success Color: Green */
+    .tactical-card.is-success {
+        border-color: rgba(74, 222, 128, 0.5); /* Green border */
+        box-shadow: 0 0 30px rgba(74, 222, 128, 0.15);
+    }
+
+
+    .is-success .glitch-text { 
+        color: #4ade80; 
+        text-shadow: 0 0 15px rgba(74, 222, 128, 0.4); 
+    }
+
+    .is-success .hud-brackets::before, 
+    .is-success .hud-brackets::after { 
+        border-color: #4ade80; 
+    }
+
+    /* 3. Fail Color: Red (Kept for contrast) */
+    .tactical-card:not(.is-success) {
+        border-color: rgba(226, 74, 74, 0.5);
+        box-shadow: 0 0 30px rgba(226, 74, 74, 0.15);
+    }
+
+    .glitch-text {
+        font-family: 'Chakra Petch', sans-serif;
+        font-size: 2.2rem;
+        font-weight: 900;
+        letter-spacing: 6px;
+        margin: 5px 0;
+    }
+
+    .tactical-card {
+        transform-origin: center;
+    }
+
+    svg {
+        flex-grow: 1; 
+        width: 100%;
+        height: auto;
+        display: block;
+    }
+
+    /* Success Alert: Tactical Green Pulse */
+    .alert-success {
+        border-color: #4ade80 !important;
+        border-left-color: #4ade80 !important;
+        box-shadow: 0 0 20px rgba(74, 222, 128, 0.3);
+        animation: success-pulse 1s ease-out;
+    }
+
+    @keyframes success-pulse {
+        0% { transform: scale(1); }
+        50% { transform: scale(1.02); background: rgba(20, 40, 20, 0.95); }
+        100% { transform: scale(1); }
+    }
+
+    /* Failure Alert: Red Glitch/Shake */
+    .alert-fail {
+        border-color: #e24a4a !important;
+        border-left-color: #e24a4a !important;
+        box-shadow: 0 0 25px rgba(226, 74, 74, 0.4);
+        animation: fail-pulse 1.2s ease-in-out;
+    }
+
+    @keyframes fail-pulse {
+    0% { transform: scale(1); filter: brightness(1); }
+    50% { 
+        transform: scale(1.01); 
+        filter: brightness(1.5); 
+        background: rgba(60, 20, 20, 0.95); /* Deep red glow */
+        box-shadow: 0 0 40px rgba(226, 74, 74, 0.6);
+    }
+    100% { transform: scale(1); filter: brightness(1); }
+    }
+
+    /* Alert Text Styling */
+    .alert-success .alert-text { color: #4ade80; text-shadow: 0 0 10px rgba(74, 222, 128, 0.5); }
+    .alert-fail .alert-text { color: #e24a4a; text-shadow: 0 0 10px rgba(226, 74, 74, 0.5); }
+
+    /* Ensure the sub-text highlight matches the alert type */
+    .alert-success .roll-highlight { color: #4ade80; background: rgba(74, 222, 128, 0.1); }
+    .alert-fail .roll-highlight { color: #e24a4a; background: rgba(226, 74, 74, 0.1); }
 </style>
