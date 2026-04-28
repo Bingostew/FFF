@@ -2,6 +2,7 @@
     // @ts-nocheck
     import { onDestroy } from 'svelte';
     import { scale } from 'svelte/transition';
+    import { fade, fly } from 'svelte/transition';
     import { backOut } from 'svelte/easing';
     import { quintOut } from 'svelte/easing';
     import { defineHex, Grid, rectangle, Orientation, line } from 'honeycomb-grid';
@@ -199,7 +200,7 @@
                 setTimeout(() => {
                     globalDice.show = false;
                     callback(final1, final2);
-                }, 2000); 
+                }, 2500); 
             }
         }
         animate();
@@ -407,9 +408,12 @@
 
         const coordStr = `${String.fromCharCode(65 + hex.col)}-${hex.row + 1}`; // e.g., "A-1"
 
+        console.log("hiii" + targetEnemy);
         if(targetEnemy){
             const friendlyFleet = fleetSelections.find(f => f.q === hex.q && f.r === hex.r);
+
             if(friendlyFleet){
+                sourceFleet = friendlyFleet; 
             } else { showWarning(event.clientX, event.clientY, "Select a friendly fleet to engage!"); }
             return;
         }
@@ -1023,7 +1027,7 @@
                 {alertData.message}
             </div>
             <div class="tooltip-sub" in:fade>
-                <span>{alertData.mode === 'success' ? 'SUCCESS!' : 'FAILURE!'}</span>
+                <span>{alertData.mode === 'success' ? 'GOOD WORK!' : 'YIKES!'}</span>
             </div>
         {:else if !isPlacementLocked}
             <span class="tooltip-label">MISSION BRIEFING</span>
@@ -1099,6 +1103,7 @@
             </defs>
 
             <g transform="translate(30, 40)"> 
+                
                 {#each grid as hex}
                     {@const isEnemyFleet = enemyFleets.some(e => e.q === hex.q && e.r === hex.r)}
                     {@const config = specialTiles.find(t => t.col === hex.col && t.row === hex.row)}
@@ -1109,11 +1114,13 @@
                     {@const pointsStr = hex.corners.map(({ x, y }) => `${x},${y}`).join(' ')}
                     
                     <g 
-                        class="hex-cell" role="button" tabindex="0" onclick={(e) => handleHexClick(e, hex)}
+                        class="hex-cell" role="button" tabindex="0" onclick={(e) => handleHexClick(e, hex)}             
+                        class:clickable={isMyTurn && (targetingMode || targetEnemy)}
                         onmouseenter={() => { hoveredHex = hex; $isHovering = true; }}
                         onmouseleave={() => { hoveredHex = null; $isHovering = false; }}
                         onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && handleHexClick(e, hex)}
                         style="cursor: none; outline: none;"
+                        
                     >
                         <polygon points={pointsStr} fill={config ? `url(#pattern-${hex.col}-${hex.row})` : "url(#water-pattern)"} stroke="black" stroke-width="0.5"/>
                         
@@ -1258,7 +1265,13 @@
 
     {#if globalDice.show}
         <div class="dice-popup-overlay" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.6); display: flex; justify-content: center; align-items: center; z-index: 10000; backdrop-filter: blur(2px);">
-            <div class="dice-box {globalDice.isStopping ? 'is-stopping' : ''}" style="background: #0a0f1e; border: 2px solid {globalDice.isStopping ? '#22c55e' : '#3b82f6'}; padding: 40px; text-align: center; box-shadow: 0 0 30px {globalDice.isStopping ? 'rgba(34,197,94,0.4)' : 'rgba(59,130,246,0.4)'}; clip-path: polygon(10% 0, 100% 0, 100% 90%, 90% 100%, 0 100%, 0 10%);">
+            <div class="dice-box {globalDice.isStopping ? 'is-stopping' : ''}" 
+                style="background: #0a0f1e; 
+                    border: 2px solid #3b82f6; 
+                    padding: 40px; 
+                    text-align: center; 
+                    box-shadow: 0 0 30px rgba(59, 130, 246, 0.4); 
+                    clip-path: polygon(10% 0, 100% 0, 100% 90%, 90% 100%, 0 100%, 0 10%);">
                 
                 <div style="font-family: 'Chakra Petch'; color: #abbbd1; letter-spacing: 3px; font-size: 1.2rem;">
                     {globalDice.text}
@@ -1271,18 +1284,18 @@
                 {/if}
 
                 <div style="display: flex; gap: 20px; justify-content: center; margin: 20px 0;">
-                    <div style="width: 100px; height: 100px; background: #000; border: 2px solid currentColor; display: flex; align-items: center; justify-content: center; font-size: 4rem; font-weight: bold; color: {globalDice.isStopping ? '#22c55e' : '#3b82f6'}; font-family: 'Chakra Petch';">
+                    <div style="width: 100px; height: 100px; background: #000; border: 2px solid currentColor; display: flex; align-items: center; justify-content: center; font-size: 4rem; font-weight: bold; color: {globalDice.isStopping ? '#3b82f6' : '#3b82f6'}; font-family: 'Chakra Petch';">
                         {globalDice.val1}
                     </div>
                     {#if globalDice.val2 !== null}
-                        <div style="width: 100px; height: 100px; background: #000; border: 2px solid currentColor; display: flex; align-items: center; justify-content: center; font-size: 4rem; font-weight: bold; color: {globalDice.isStopping ? '#22c55e' : '#3b82f6'}; font-family: 'Chakra Petch';">
+                        <div style="width: 100px; height: 100px; background: #000; border: 2px solid currentColor; display: flex; align-items: center; justify-content: center; font-size: 4rem; font-weight: bold; color: {globalDice.isStopping ? '#3b82f6' : '#3b82f6'}; font-family: 'Chakra Petch';">
                             {globalDice.val2}
                         </div>
                     {/if}
                 </div>
                 
                 {#if globalDice.isStopping}
-                    <div style="font-size: 0.8rem; color: #22c55e; letter-spacing: 5px; font-weight: bold;">
+                    <div style="font-size: 0.8rem; color: #3b82f6; letter-spacing: 5px; font-weight: bold;">
                         RESULT LOCKED
                     </div>
                 {/if}
@@ -1353,9 +1366,10 @@
         display: flex;
         flex-direction: column;
         align-items: center;
-        justify-content: center; /* Centers the three layers vertically */
+        justify-content: center; 
         z-index: 10;
         clip-path: polygon(15px 0, 100% 0, 100% calc(100% - 15px), calc(100% - 15px) 100%, 0 100%, 0 15px);
+        pointer-events: none;
     }
 
     .tooltip-label {
@@ -1663,15 +1677,19 @@
     .alert-fail {
         border-color: #e24a4a !important;
         border-left-color: #e24a4a !important;
-        box-shadow: 0 0 20px rgba(226, 74, 74, 0.3);
-        animation: fail-shake 1s cubic-bezier(.36,.07,.19,.97) both;
+        box-shadow: 0 0 25px rgba(226, 74, 74, 0.4);
+        animation: fail-pulse 1.2s ease-in-out;
     }
 
-    @keyframes fail-shake {
-        10%, 90% { transform: translate3d(-1px, 0, 0); }
-        20%, 80% { transform: translate3d(2px, 0, 0); }
-        30%, 50%, 70% { transform: translate3d(-4px, 0, 0); }
-        40%, 60% { transform: translate3d(4px, 0, 0); }
+    @keyframes fail-pulse {
+    0% { transform: scale(1); filter: brightness(1); }
+    50% { 
+        transform: scale(1.01); 
+        filter: brightness(1.5); 
+        background: rgba(60, 20, 20, 0.95); /* Deep red glow */
+        box-shadow: 0 0 40px rgba(226, 74, 74, 0.6);
+    }
+    100% { transform: scale(1); filter: brightness(1); }
     }
 
     /* Alert Text Styling */

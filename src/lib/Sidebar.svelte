@@ -97,7 +97,7 @@
                         onclick={() => onSearch()} disabled={!isMyTurn || selectedGroup.length === 0}>
                         <span class="btn-text">ACTIVATE SCAN</span>
                         <span class="btn-sub">
-                            {targetingMode === 'focus' ? 'GUARANTEED SUCCESS (NO ROLL)' : 'CONFIRM AND ROLL DICE'}
+                            Confirm
                         </span>
                     </button>
                 </div>
@@ -267,7 +267,9 @@
 
     .stat-row {
         display: flex;
-        justify-content: space-between;
+        text-align: center;
+        flex-direction: column; 
+        align-items: center;   
         font-family: 'Chakra Petch', sans-serif;
         font-size: 0.9rem;
         color: #abbbd1;
