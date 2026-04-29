@@ -98,6 +98,27 @@ module.exports = (io, lobbies) => {
     }
 
 
+    function checkForActionConditions(lobby, socket){
+        let result = true;
+
+        if (!lobby ) {
+            socket.emit('error', 'Game does not exist');
+            result = false;
+        }
+
+        else if (lobby.status !== 'active') {
+            socket.emit('error', 'Game is not active');
+            result = false;
+        }
+
+        else if (lobby.activePlayer !== socket.id) {
+            socket.emit('error', 'It is not your turn.');
+            result = false;
+        }
+
+        return result;
+    }
+
     const switchTurn = (gameId) => {
         const lobby = lobbies[gameId];
         if (!lobby) return;
@@ -405,6 +426,10 @@ module.exports = (io, lobbies) => {
             delete lobby.fleets[socketId];
             if (lobby.assets) delete lobby.assets[socketId];
 
+            if (Object.keys(lobby.players).length < 2) {
+                lobby.full = false;
+            }
+
             if (lobby.status === 'active' && Object.keys(lobby.players).length > 0) {
                 const winnerId = Object.keys(lobby.players)[0];
                 lobby.status = 'game_over';
@@ -447,6 +472,10 @@ module.exports = (io, lobbies) => {
             if (lobby.status !== 'waiting') {
                 socket.emit('error', 'Game has already started');
                 return;
+            }
+
+            if (Object.keys(lobby.players).length == 1) {
+                lobby.full = true;
             }
 
             socket.join(gameId);
@@ -554,13 +583,16 @@ module.exports = (io, lobbies) => {
 
 
         // Handle the "Finish" - Strike Logic
-        socket.on('execute_strike', ({ gameId, targetHex, dieResult1, dieResult2 }) => {
+        socket.on('execute_strike', ({ gameId, sourceFleet, targetHex, dieResult1, dieResult2 }) => {
             const lobby = lobbies[gameId];
 
 
             // Calculate the shortest distance from a living friendly fleet to the target hex
             const attackerFleets = lobby.fleets[socket.id];
+            const firingFleet = attackerFleets[sourceFleet];
+            console.log("fire" + firingFleet)
             const distances = [];
+
             if (attackerFleets.alpha && attackerFleets.alpha.hp > 0) {
                 distances.push(calculateHexDistance(attackerFleets.alpha, targetHex));
             }
@@ -570,6 +602,7 @@ module.exports = (io, lobbies) => {
             }
 
             const shortestDistance = distances.length > 0 ? Math.min(...distances) : Infinity;
+            lobby.lastAttackerPos = { q: firingFleet.q, r: firingFleet.r };
 
             // Find the opponent
             const opponentId = Object.keys(lobby.players).find(id => id !== socket.id);
@@ -659,12 +692,12 @@ module.exports = (io, lobbies) => {
             }
 
             const isSuccess = counterResult >= 3;
+            console.log("sad" + lobby.lastAttackerPos);
 
             io.to(gameId).emit('counter_result', {
-                success: isSuccess
+                success: isSuccess,
+                attackerPos : isSuccess ? lobby.lastAttackerPos : null
             });
-
-            console.log("ASTFASTF");
 
             switchTurn(gameId);
         });

@@ -11,6 +11,35 @@
   let showSingleplayerModal = $state(false);
   let nickname = $state('');
   let lobbyCode = $state('');
+  let statusMessage = $state(''); // New state variable for messages
+
+  // --- AUDIO STATE ---
+  let bgAudio = $state(null);
+  let isMuted = $state(false);
+
+  function initBackgroundMusic() {
+    if (!bgAudio) {
+      bgAudio = new Audio('pirates.mp3'); // Path to your file in the static/ folder
+      bgAudio.loop = true;
+      bgAudio.volume = 0.4;
+    }
+    if (!isMuted) bgAudio.play().catch(err => console.log("Autoplay blocked until interaction", err));
+  }
+
+  function stopBackgroundMusic() {
+    if (bgAudio) {
+      bgAudio.pause();
+      bgAudio.currentTime = 0;
+      bgAudio = null;
+    }
+  }
+
+  function toggleMute() {
+    isMuted = !isMuted;
+    if (bgAudio) bgAudio.muted = isMuted;
+  }
+
+  let isMatchmaking = $state(false); // Track if we are in the find-lobby queue
   let dotCount = $state(0);
   let serverError = $state('');
   let dots = $derived('.'.repeat(dotCount));
@@ -52,6 +81,8 @@
       modalStep = 0;
       nickname = '';
       lobbyCode = '';
+      isMatchmaking = false;
+      statusMessage = ''; // Reset status message
       selectedMap = '';
       }, 200);
       return
@@ -63,6 +94,8 @@
 
     const handleRoomUpdate = ({ players, map }) => {
         if (Object.keys(players).length === 2) {
+          stopBackgroundMusic();
+          goto("/multiplayer");
           let url = "/multiplayer";
           if (map) url += `?map=${encodeURIComponent(map)}`;
           goto(url);
@@ -112,25 +145,26 @@
 
   /** Confirms the nickname for the player*/
   function confirmName() {
-    if (nickname.trim().length > 0){
-        modalStep = 1;
+    if (nickname.trim().length > 0) {
+      modalStep = 1;
+      initBackgroundMusic();
         playerName.set(nickname);
-        }
+
     }
+  }
 
   /*****************BACKEND METHODS******************/
   /**
    * Sends a POST request to the server to create a multiplayer lobby.
    */
-  async function goToCreate() {
+  async function goToCreate(publicMode = false) {
     try {
-      isMultiplayer.set(true);
+      statusMessage = publicMode ? 'WAITING FOR OPPONENT...' : 'New lobby created. Share this ID:';
       modalStep = 2;
-      const payload = selectedMap ? { map: selectedMap.replace('.json', '') } : {};
       const res = await fetch(`${PUBLIC_SERVER_URL}/create-lobby`, { 
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+        body: JSON.stringify({ mode: 'multi', isPublic: publicMode })
       });
       const data = await res.json();
       lobbyCode = data.gameId;
@@ -138,12 +172,16 @@
       gameId.set(lobbyCode);
       $socket.emit('join_game', {gameId: lobbyCode, playerName: nickname});
     } catch (e) {
+      statusMessage = 'Failed to create lobby.'; // Error message
+      modalStep = 2; // Still show modal with error
       console.error("Failed to create lobby", e);
     }
   }
 
-  async function fetchMaps() {
+  async function fetchMaps(multiplayer) {
     try {
+      isMultiplayer.set(multiplayer);
+      console.log("sdfasdf" + $isMultiplayer);
       const res = await fetch(`http://${window.location.hostname}:${PORT}/list-maps`);
       if (res.ok) {
         mapList = await res.json();
@@ -159,6 +197,8 @@
    * ease of singleplayer testing. However server may not be needed for singleplayer. 
    */
   function goToGame() {
+    isMultiplayer.set(false);
+    stopBackgroundMusic();
     let url = '/singleplayer';
     if (selectedMap) {
       url += `?map=${encodeURIComponent(selectedMap.replace('.json', ''))}`;
@@ -167,8 +207,37 @@
   }
 
   /**
-   * Changes the modal to 3 in order to support multiplayer join lobby functionality. 
+   * Automatically finds an available lobby or creates one if none exist.
+   * This connects two users without requiring manual code entry.
    */
+  async function autoJoin() {
+    try {
+      isMultiplayer.set(true);
+      isMatchmaking = true;
+      statusMessage = 'ESTABLISHING SECURE CONNECTION...';
+      modalStep = 2;
+
+      // Attempt to find a lobby with an available slot (e.g., 1/2 players)
+      const res = await fetch(`${PUBLIC_SERVER_URL}/find-lobby`);
+      const data = await res.json();
+
+      if (data.gameId) {
+        lobbyCode = data.gameId;
+        connect(); // Autojoin the found lobby
+      } else {
+        // No lobby found, we become the first person in the "queue"
+        statusMessage = 'SEARCHING FOR COMMANDERS...';
+        await goToCreate(true); 
+      }
+    } catch (e) {
+      console.error("Failed to find or create lobby", e);
+      statusMessage = 'Failed to connect. Please try again.'; // Generic error message
+      setTimeout(() => {
+          modalStep = 1;
+      }, 1500);
+    }
+    }
+
   function goToJoin() {
     modalStep = 3;
     serverError = '';
@@ -185,6 +254,8 @@
     $socket.emit('join_game', {gameId: lobbyCode, playerName: nickname});
     //$socket.onAny((eventName, ...args) => {
     //alert(`[SOCKET INBOUND] Event: ${eventName} and ${args}`);
+    statusMessage = `Attempting to join lobby: ${lobbyCode}`;
+    modalStep = 2; // Show the lobby code and status
     }
   
   
@@ -193,6 +264,15 @@
    * Revert Modal Step by one. 
    */
   function goBack() {
+    if (modalStep === 2 && isMatchmaking) {
+      // Dequeue: remove the lobby we created for matchmaking
+      fetch(`${PUBLIC_SERVER_URL}/delete-lobby`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ gameId: lobbyCode })
+      });
+      isMatchmaking = false;
+    }
     if (modalStep > 1) modalStep = 1;
     else modalStep = 0;
   }
@@ -332,7 +412,7 @@
                       </button>
                       <button 
                           class="action-btn wide" 
-                          onclick={() => { fetchMaps(); $isHovering = false; }}
+                          onclick={() => { fetchMaps(false); $isHovering = false; }}
                           onmouseenter={() => $isHovering = true}
                           onmouseleave={() => $isHovering = false}
                       >
@@ -426,31 +506,33 @@
                   <h2>WELCOME</h2>
                   
                   <div class="vertical-stack" role="group">
+                      
                       <button 
                           class="action-btn wide" 
-                          onclick={() => { selectedMap = ''; goToCreate(); $isHovering = false; }}
+
+                          onclick={() => { fetchMaps(true); $isHovering = false; }}
                           onmouseenter={() => $isHovering = true}
                           onmouseleave={() => $isHovering = false}
                       >
-                          CREATE (DEFAULT MAP)
+                          CREATE LOBBY
                       </button>
                       
                       <button 
                           class="action-btn wide" 
-                          onclick={() => { fetchMaps(); $isHovering = false; }}
-                          onmouseenter={() => $isHovering = true}
-                          onmouseleave={() => $isHovering = false}
-                      >
-                          CHOOSE CUSTOM MAP
-                      </button>
-                      
-                      <button 
-                          class="action-btn wide" 
-                          onclick={() => { goToJoin(); $isHovering = false; }}
+                          onclick={() => { modalStep = 3; $isHovering = false; }}
                           onmouseenter={() => $isHovering = true}
                           onmouseleave={() => $isHovering = false}
                       >
                           JOIN LOBBY
+                      </button>
+
+                      <button 
+                          class="action-btn wide" 
+                          onclick={() => { autoJoin(); $isHovering = false; }}
+                          onmouseenter={() => $isHovering = true}
+                          onmouseleave={() => $isHovering = false}
+                      >
+                          FIND LOBBY
                       </button>
                   </div>
                   
@@ -491,7 +573,11 @@
                   </button>
               
               {:else if modalStep === 2}
-                  <h2>LOBBY CREATED</h2>
+                  <h2>{statusMessage || 'LOBBY READY'}</h2> <!-- Display status message -->
+                  
+                  {#if isMatchmaking}
+                    <div class="tactical-spinner"></div>
+                  {/if}
                   <p class="status-text">{lobbyCode}</p>
                   
                   <p class="waiting-msg">
@@ -560,11 +646,38 @@
   <img src="/cna.png" alt="cna" class="cna-img" />
   <img src="/CS.png" alt="CS" class="CS-img" />
   <img src="/tacticalmap.jpg" alt="map" class="map-img" />
+
+  <!-- Audio Toggle Button -->
+  <button 
+    class="audio-toggle" 
+    onclick={toggleMute}
+  >
+    {isMuted ? 'MUTED' : 'SOUND ON'}
+  </button>
 </div>
 
 <!--PAGE HTML STYLES-->
 <style>
     /*MODALS*/
+    .audio-toggle {
+        position: absolute;
+        bottom: 20px;
+        right: 20px;
+        background: rgba(10, 15, 30, 0.8);
+        border: 1px solid #3b82f6;
+        color: #3b82f6;
+        padding: 5px 15px;
+        font-family: 'Chakra Petch', sans-serif;
+        font-size: 0.8rem;
+        cursor: pointer;
+        z-index: 10;
+        transition: all 0.3s;
+    }
+
+    .audio-toggle:hover {
+        background: #3b82f6;
+        color: #000;
+    }
     .map-list-container {
         width: 100%;
         display: flex;
@@ -651,6 +764,26 @@
         clip-path: polygon(
             20px 0, 100% 0, 
             100% calc(100% - 20px), calc(100% - 20px) 100%, 
+            0 100%, 0 20px
+        );
+    }
+
+    /* Waiting cursor/spinner for matchmaking */
+    .tactical-spinner {
+        width: 50px;
+        height: 50px;
+        border: 3px solid rgba(59, 130, 246, 0.3);
+        border-radius: 50%;
+        border-top-color: #3b82f6;
+        animation: spin 1s ease-in-out infinite;
+        margin: 1rem auto;
+    }
+
+    @keyframes spin {
+        to { transform: rotate(360deg); }
+    }
+
+    .modal-content h2 {
             0 100%, 0 20px
         );
     }

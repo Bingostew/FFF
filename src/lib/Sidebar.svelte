@@ -188,10 +188,10 @@
     .panel-header {
         font-family: 'Chakra Petch', sans-serif; 
         color: #abbbd1; 
-        font-size: clamp(1.2rem, 3vh, 1.8rem);
+        font-size: clamp(0.6rem, 3vh, 1rem);
         border-bottom: 1px solid rgba(171, 187, 209, 0.3); 
         padding-bottom: 10px; 
-        letter-spacing: 2px;
+        letter-spacing: 1px;
     }
     
     /*Focus, Directional, Area, Activate*/

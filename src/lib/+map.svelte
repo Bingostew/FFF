@@ -280,12 +280,12 @@
                 }
             });
 
-            $socket.on("counter_result", ({success}) => {
+            $socket.on("counter_result", ({success, attackerPos}) => {
                 
                 console.log("COUNTTEERRRR RESULTTTTTT");
                 if(isMyTurn){
                     if (success) {
-                        enemySearchedHexes = [...enemySearchedHexes, { q: sourceFleet.q, r: sourceFleet.r }];
+                        enemySearchedHexes = [...enemySearchedHexes, { q: attackerPos.q, r: attackerPos.r }];
                         triggerOverlay("WARNING: LOCATION COMPROMISED!", "fail");
                         addLog("WARNING: Enemy traced your firing signal!", "enemy");
                         setTimeout(() => handleTurnEnd(), 2000);
@@ -294,10 +294,8 @@
                     }
                 }
                 else{
-                    console.log("not my turn");
                     if (success) {
-                        const attacker = enemyFleets[Math.floor(Math.random() * enemyFleets.length)];
-                        friendlySearchedHexes = [...friendlySearchedHexes, { q: attacker.q, r: attacker.r }];
+                        friendlySearchedHexes = [...friendlySearchedHexes, { q: attackerPos.q, r: attackerPos.r }];     
                         triggerOverlay("ENEMY SIGNAL TRACED!", "success");
                     } else {
                         triggerOverlay("SIGNAL TRACE FAILED!", "fail");
@@ -408,7 +406,6 @@
 
         const coordStr = `${String.fromCharCode(65 + hex.col)}-${hex.row + 1}`; // e.g., "A-1"
 
-        console.log("hiii" + targetEnemy);
         if(targetEnemy){
             const friendlyFleet = fleetSelections.find(f => f.q === hex.q && f.r === hex.r);
 
@@ -531,6 +528,7 @@
             addLog("All fleets are positioned!", "system");
             isPlacementLocked = true;
             if ($isMultiplayer) {
+                console.log("wooooo");
                 const fleetPositions = { alpha: { q: fleetSelections[0].q, r: fleetSelections[0].r }, beta: { q: fleetSelections[1].q, r: fleetSelections[1].r } };
                 $socket.emit('place_fleets', { gameId: $gameId, fleetPositions });
                 $socket.once('fleets_placed_confirmation', () => { $socket.emit('ready_check', {gameId: $gameId}); });
@@ -626,6 +624,9 @@
     function resolveAttack() {
         if (!sourceFleet || !targetEnemy) return;
 
+        const fleetIndex = fleetSelections.findIndex(f => f.id === sourceFleet.id);
+        const fleetKey = fleetIndex === 0 ? 'alpha' : 'beta';
+
         const targetCoord = `${String.fromCharCode(65 + targetEnemy.col)}-${targetEnemy.row + 1}`;
         addLog(`[${sourceFleet.name}] firing on coordinates ${targetCoord}...`, "player");
 
@@ -646,6 +647,7 @@
             if ($isMultiplayer) {
                 $socket.emit('execute_strike', { 
                     gameId: $gameId, 
+                    sourceFleet: fleetKey,
                     targetHex: { q: cachedTarget.q, r: cachedTarget.r },
                     dieResult1: roll1,
                     dieResult2: roll2
