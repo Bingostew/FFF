@@ -178,8 +178,10 @@
     }
   }
 
-  async function fetchMaps() {
+  async function fetchMaps(multiplayer) {
     try {
+      isMultiplayer.set(multiplayer);
+      console.log("sdfasdf" + $isMultiplayer);
       const res = await fetch(`http://${window.location.hostname}:${PORT}/list-maps`);
       if (res.ok) {
         mapList = await res.json();
@@ -195,6 +197,7 @@
    * ease of singleplayer testing. However server may not be needed for singleplayer. 
    */
   function goToGame() {
+    isMultiplayer.set(false);
     stopBackgroundMusic();
     let url = '/singleplayer';
     if (selectedMap) {
@@ -209,6 +212,7 @@
    */
   async function autoJoin() {
     try {
+      isMultiplayer.set(true);
       isMatchmaking = true;
       statusMessage = 'ESTABLISHING SECURE CONNECTION...';
       modalStep = 2;
@@ -408,7 +412,7 @@
                       </button>
                       <button 
                           class="action-btn wide" 
-                          onclick={() => { fetchMaps(); $isHovering = false; }}
+                          onclick={() => { fetchMaps(false); $isHovering = false; }}
                           onmouseenter={() => $isHovering = true}
                           onmouseleave={() => $isHovering = false}
                       >
@@ -502,22 +506,15 @@
                   <h2>WELCOME</h2>
                   
                   <div class="vertical-stack" role="group">
-                      <button 
-                          class="action-btn wide" 
-                          onclick={() => { selectedMap = ''; goToCreate(); $isHovering = false; }}
-                          onmouseenter={() => $isHovering = true}
-                          onmouseleave={() => $isHovering = false}
-                      >
-                          CREATE (DEFAULT MAP)
-                      </button>
                       
                       <button 
                           class="action-btn wide" 
-                          onclick={() => { fetchMaps(); $isHovering = false; }}
+
+                          onclick={() => { fetchMaps(true); $isHovering = false; }}
                           onmouseenter={() => $isHovering = true}
                           onmouseleave={() => $isHovering = false}
                       >
-                          CHOOSE CUSTOM MAP
+                          CREATE LOBBY
                       </button>
                       
                       <button 

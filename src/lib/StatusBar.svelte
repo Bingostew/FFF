@@ -209,7 +209,7 @@
     /*HEALTH and FUEL*/ 
     .stat-label {
         font-family: 'Chakra Petch', sans-serif;
-        font-size: clamp(0.9rem, 3vh, 1.2rem);
+        font-size: clamp(0.4rem, 3vh, 0.8rem);
         color: #abbbd1;
         letter-spacing: 2px;
         font-weight: 700;
